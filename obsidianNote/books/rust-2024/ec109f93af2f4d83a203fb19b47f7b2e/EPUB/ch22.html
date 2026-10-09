@@ -1,0 +1,1063 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch22.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 22. Macros">
+        <div class="chapter" id="macros">
+<h1><span class="label">Chapter 22. </span>Macros</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id2465"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the twenty-second chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>A <em>cento</em> (from the Latin for “patchwork”) is a poem made up entirely of lines quoted from another poet.</p>
+
+<p data-type="attribution">Matt Madden</p>
+</blockquote>
+
+<p>Rust supports <em>macros<a contenteditable="false" data-primary="macros" data-type="indexterm" id="ix_macros_ch21"/></em>, a way to extend<a contenteditable="false" data-primary="macros" data-secondary="expansion" data-type="indexterm" id="id2466"/> the language in ways that go beyond what you can do with functions alone. For example, we’ve seen the <code>assert_eq!</code> macro<a contenteditable="false" data-primary="assert_eq! macro" data-type="indexterm" id="id2467"/>, which is handy for tests:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-0">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">gcd</code><code class="p">(</code><code class="mi">6</code><code class="p">,</code><code class="w"> </code><code class="mi">10</code><code class="p">),</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This could have been written as a generic function, but the <code>assert_eq!</code> macro does several things that functions can’t do. One is that when an assertion fails, <code>assert_eq!</code> prints an error message using a format string that the user can provide by passing extra arguments to the macro. Functions in Rust can’t take a variable number of arguments. Macros can, because the way they work is completely different.</p>
+
+<p>Macros are a kind of shorthand. During compilation, before types are checked and long before any machine code is generated, each macro call is <em>expanded</em>—that is, it’s replaced with some Rust code. The preceding macro call expands to something roughly like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-1">
+<code class="k">match</code><code class="w"> </code><code class="p">(</code><code class="o">&amp;</code><code class="n">gcd</code><code class="p">(</code><code class="mi">6</code><code class="p">,</code><code class="w"> </code><code class="mi">10</code><code class="p">),</code><code class="w"> </code><code class="o">&amp;</code><code class="mi">2</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="n">left_val</code><code class="p">,</code><code class="w"> </code><code class="n">right_val</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="p">(</code><code class="o">*</code><code class="n">left_val</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="o">*</code><code class="n">right_val</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">panic!</code><code class="p">(</code><code class="w"/>
+<code class="w">                </code><code class="s">"assertion `left == right` failed\</code>
+<code class="s">                </code><code class="se">\n</code><code class="s">  left: {left_val:?}\</code>
+<code class="s">                </code><code class="se">\n</code><code class="s"> right: {right_val:?}"</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p><code>panic!</code> is also a macro<a contenteditable="false" data-primary="panic! macro" data-type="indexterm" id="id2468"/>, which itself expands to yet more Rust code (not shown here). That code uses two other macros, <code>file!()</code> and <code>line!()</code>. Once every macro call in the crate is fully expanded, Rust moves on to the next phase of compilation.</p>
+
+<p>At run time, an assertion failure would look like this (and would indicate a bug in the <code>gcd()</code> function, since <code>2</code> is the correct answer):</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">thread 'main' panicked at gcd.rs:7:5:</code>
+<code class="go">assertion `left == right` failed</code>
+<code class="go">  left: 17</code>
+<code class="go"> right: 2</code>
+</pre>
+
+<p>If you’re coming<a contenteditable="false" data-primary="C++" data-secondary="macros" data-type="indexterm" id="id2469"/> from C‍++, you may have had some bad experiences with macros. Rust macros take a different approach, similar to Scheme’s <code>syntax-rules</code>. Compared to C‍++ macros, Rust macros are better integrated with the rest of the language and therefore less error prone. Macro calls are always marked with an exclamation point, so they stand out when you’re reading code, and they can’t be called accidentally when you meant to call a function. Rust macros never insert unmatched brackets or parentheses. And Rust macros come with pattern matching, making it easier to write macros that are both maintainable and appealing to use.</p>
+
+<p>In this chapter, we’ll show how to write macros using several simple examples. But like much of Rust, macros reward deep understanding, so we’ll walk through the design of a more complicated macro that lets us embed JSON literals directly in our programs.</p>
+
+<section data-type="sect1" data-pdf-bookmark="Macro Basics"><div class="sect1" id="macro-basics">
+<h1>Macro Basics</h1>
+
+<p><a data-type="xref" href="#assert_eq_macro_fig">Figure 22-1</a> shows part of the source code for the <code>assert_eq!</code> macro<a contenteditable="false" data-primary="assert_eq! macro" data-type="indexterm" id="ix_assert_eq"/>.</p>
+
+<p><code>macro_rules!</code> is the main<a contenteditable="false" data-primary="macro_rules!" data-type="indexterm" id="id2470"/> way to define macros in Rust. Note that there is no <code>!</code> after <code>assert_eq</code> in this macro definition: the <code>!</code> is only included when calling a macro, not when defining it.</p>
+
+<p>Not all macros are defined this way: a few, like <code>file!</code>, <code>line!</code>, and <code>macro_rules!</code> itself, are built into the compiler, and we’ll talk about another approach, called procedural macros, at the end of this chapter. But for the most part, we’ll focus on <code>macro_rules!</code>, which is (so far) the easiest way to write your own.</p>
+
+<p>A macro defined with <code>macro_rules!</code> works entirely by pattern matching. The body of a macro is just a series of rules:<a contenteditable="false" data-primary="=&gt; symbol" data-secondary="in macros" data-type="indexterm" id="id2471"/></p>
+
+<pre data-type="programlisting">
+( <em>pattern1</em> ) =&gt; ( <em>template1</em> );
+
+( <em>pattern2</em> ) =&gt; ( <em>template2</em> );
+
+...
+</pre>
+
+<figure><div id="assert_eq_macro_fig" class="figure"><img alt="listing of assert_eq! macro with pattern and template labeled" src="assets/pru3_2201.png" width="600" height="325"/>
+<h6><span class="label">Figure 22-1. </span>The <code>assert_eq!</code> macro</h6>
+</div></figure>
+
+<p>The version of <code>assert_eq!</code> in <a data-type="xref" href="#assert_eq_macro_fig">Figure 22-1</a> has just one pattern and one template.</p>
+
+<p>Incidentally, you can use square brackets or curly braces instead of parentheses around the pattern or the template; it makes no difference to Rust. Likewise, when you call a macro, these are all equivalent:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-2">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">gcd</code><code class="p">(</code><code class="mi">6</code><code class="p">,</code><code class="w"> </code><code class="mi">10</code><code class="p">),</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">[</code><code class="n">gcd</code><code class="p">(</code><code class="mi">6</code><code class="p">,</code><code class="w"> </code><code class="mi">10</code><code class="p">),</code><code class="w"> </code><code class="mi">2</code><code class="p">];</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">{</code><code class="n">gcd</code><code class="p">(</code><code class="mi">6</code><code class="p">,</code><code class="w"> </code><code class="mi">10</code><code class="p">),</code><code class="w"> </code><code class="mi">2</code><code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The only difference is that semicolons are usually optional after curly braces. By convention, we use parentheses when calling <code>assert_eq!</code>, square brackets for <code>vec!</code>, and curly braces for <code>macro_rules!</code>.</p>
+
+<p>Now that we’ve shown a simple example of a macro’s expansion and the definition that generated it, we can get into the details necessary to put this to work:</p>
+
+<ul>
+	<li>
+	<p>We’ll explain exactly how Rust goes about finding and expanding macro definitions in your program.</p>
+	</li>
+	<li>
+	<p>We’ll point out some subtleties inherent in the process of generating code from macro templates.</p>
+	</li>
+	<li>
+	<p>Finally, we’ll show how macros handle repeating patterns, such as the list of expressions in a <code>vec![]</code><a contenteditable="false" data-startref="ix_assert_eq" data-type="indexterm" id="id2472"/>.</p>
+	</li>
+</ul>
+
+<section data-type="sect2" data-pdf-bookmark="Basics of Macro Expansion"><div class="sect2" id="basics-of-macro-expansion">
+<h2>Basics of Macro Expansion</h2>
+
+<p>Rust<a contenteditable="false" data-primary="macros" data-secondary="expansion" data-type="indexterm" id="ix_macros_expand"/> expands macros very early during compilation. The compiler reads your source code from beginning to end, defining and expanding macros as it goes. You can’t call a macro before it is defined, because Rust expands each macro call before it even looks at the rest of the program. (By contrast, functions and other items don’t have to be in any particular order. It’s OK to call a function that won’t be defined until later in the crate.)</p>
+
+<p>When Rust expands an <code>assert_eq!</code> macro call, what happens is a lot like evaluating a <code>match</code> expression. Rust first matches the arguments against the pattern, as shown in <a data-type="xref" href="#expanding_macro_part_1">Figure 22-2</a>.</p>
+
+<figure><div id="expanding_macro_part_1" class="figure"><img alt="(Illustration of matching the arguments 'gcd(6, 10), 2' with the pattern '$left:expr , $right:expr'.)" src="assets/pru3_2202.png" width="587" height="326"/>
+<h6><span class="label">Figure 22-2. </span>Expanding a macro, part 1: pattern-matching the arguments</h6>
+</div></figure>
+
+<p>Macro patterns are a mini-language within Rust. They’re essentially regular expressions<a contenteditable="false" data-primary="regular expressions (regex)" data-secondary="macros versus" data-type="indexterm" id="id2473"/> for matching code. But where regular expressions operate on characters, patterns operate on <em>tokens<a contenteditable="false" data-primary="tokens, macro patterns" data-type="indexterm" id="id2474"/></em>—the numbers, names, punctuation marks, and so forth that are the building blocks of Rust programs. This means you can use comments and whitespace freely in macro patterns to make them as readable as possible. Comments and whitespace aren’t tokens, so they don’t affect matching.</p>
+
+<p>Another important difference between regular expressions and macro patterns is that parentheses, brackets, and braces always occur in matched pairs in Rust. This is checked before macros are expanded, not only in macro patterns but throughout the language.</p>
+
+<p>In this example, our pattern contains<a contenteditable="false" data-primary="code fragments, macros" data-type="indexterm" id="ix_code_fragment"/> the <em>fragment</em> <code>$left:expr</code>, which tells Rust to match an expression (in this case, <code>gcd(6, 10)</code>) and assign it the name <code>$left</code>. Rust then matches the comma in the pattern with the comma following <code>gcd</code>’s arguments. Just like regular expressions, patterns have only a few special characters that trigger interesting matching behavior; everything else, like this comma, has to match verbatim or else matching fails. Lastly, Rust matches the expression <code>2</code> and gives it the name <code>$right</code>.</p>
+
+<p>Both code fragments in this pattern are of type <code>expr</code>: they expect expressions. We’ll see other types of code fragments in <a data-type="xref" href="#fragment-types">“Fragment Types”</a>.</p>
+
+<p>Since this pattern matched all of the arguments, Rust expands the corresponding<a contenteditable="false" data-primary="templates, macro" data-type="indexterm" id="id2475"/> <em>template</em> (<a data-type="xref" href="#expanding_macro_part_2">Figure 22-3</a>).</p>
+
+<figure><div id="expanding_macro_part_2" class="figure"><img alt="(Image showing the template and where code fragments are plugged in.)" src="assets/pru3_2203.png" width="600" height="254"/>
+<h6><span class="label">Figure 22-3. </span>Expanding a macro, part 2: filling in the template</h6>
+</div></figure>
+
+<p>Rust replaces <code>$left</code> and <code>$right</code> with the code fragments it found during matching.</p>
+
+<p>It’s a common mistake to include the fragment type in the output template: writing <code>$left:expr</code> rather than just <code>$left</code>. Rust does not immediately detect this kind of error. It sees <code>$left</code> as a substitution, and then it treats <code>:expr</code> just like everything else in the template: tokens to be included in the macro’s output. So the errors won’t happen until you <em>call</em> the macro; then it will generate bogus output that won’t compile. If you get error messages like <code>cannot find type `expr` in this scope</code> and <code>help: maybe you meant to use a path separator here</code> when using a new macro, check it for this mistake. (<a data-type="xref" href="#debugging-macros">“Debugging Macros”</a> offers more general advice for situations like this.)</p>
+
+<p>Macro templates aren’t much different from any of a dozen template languages commonly used in web programming. The only difference—and it’s a significant one—is that the output is Rust code<a contenteditable="false" data-startref="ix_macros_expand" data-type="indexterm" id="id2476"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Unintended Consequences"><div class="sect2" id="unintended-consequences">
+<h2>Unintended Consequences</h2>
+
+<p>Plugging<a contenteditable="false" data-primary="macros" data-secondary="unintended consequences" data-type="indexterm" id="ix_macros_unintended"/> fragments of code into templates is subtly different from regular code that works with values. These differences aren’t always obvious at first. The macro we’ve been looking at, <code>assert_eq!</code>, contains some slightly strange bits of code for reasons that say a lot about macro programming. Let’s look at two funny bits in particular.</p>
+
+<p>First, why does this macro create the variables <code>left_val</code> and <code>right_val</code>? Is there some reason we can’t simplify the template to look like this?</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-3">
+<code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="p">(</code><code class="cp">$left</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="cp">$right</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">panic!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="s">"assertion `left == right` failed</code><code class="se">\n</code><code class="s">  left: {:?}</code><code class="se">\n</code><code class="s"> right: {:?}"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="cp">$left</code><code class="p">,</code><code class="w"> </code><code class="cp">$right</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>To answer this question, try mentally expanding the macro call <code>assert_eq!(letters.pop(), Some('z'))</code>. What would the output be? Naturally, Rust would plug the matched expressions into the template in multiple places. It seems like a bad idea to evaluate the expressions all over again when building the error message, though, and not just because it would take twice as long: since <code>letters.pop()</code> removes a value from a vector, it’ll produce a different value the second time we call it! That’s why the real macro computes <code>$left</code> and <code>$right</code> only once and stores their values.</p>
+
+<p>Moving on to the second question: why does this macro borrow references to the values of <code>$left</code> and <code>$right</code>? Why not just store the values in variables, like this?</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-4">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">bad_assert_eq</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="cp">$left</code><code class="p">:</code><code class="nc">expr</code><code class="p">,</code><code class="w"> </code><code class="cp">$right</code><code class="p">:</code><code class="nc">expr</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="p">(</code><code class="cp">$left</code><code class="p">,</code><code class="w"> </code><code class="cp">$right</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="p">(</code><code class="n">left_val</code><code class="p">,</code><code class="w"> </code><code class="n">right_val</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="p">(</code><code class="n">left_val</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">right_val</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                    </code><code class="fm">panic!</code><code class="p">(</code><code class="s">"assertion failed"</code><code class="w"> </code><code class="cm">/* ... */</code><code class="p">);</code><code class="w"/>
+<code class="w">                </code><code class="p">}</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>For the particular case we’ve been considering, where the macro arguments are integers, this would work fine. But if the caller passed, say, a <code>String</code> variable as <code>$left</code> or <code>$right</code>, this code would move the value out of the variable!</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-5">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"a rose"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">bad_assert_eq</code><code class="o">!</code><code class="p">(</code><code class="n">s</code><code class="p">,</code><code class="w"> </code><code class="s">"a rose"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"confirmed: {s} is a rose"</code><code class="p">);</code><code class="w">  </code><code class="c1">// error: use of moved value "s"</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Since we don’t want assertions to move values, the macro borrows references instead.</p>
+
+<p>(You may have wondered why the macro uses <code>match</code> rather than <code>let</code> to define the variables. We wondered too. It turns out there’s no particular reason for this. <code>let</code> would have been equivalent.)</p>
+
+<p>In short, macros can do surprising things. If strange things happen around a macro you’ve written, it’s a good bet that the macro is to blame.</p>
+
+<p>One bug that you <em>won’t</em> see is this classic C‍++ macro bug:</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-macros-6">
+<code class="c1">// buggy C++ macro to add 1 to a number</code>
+<code class="cp">#define ADD_ONE(n)  n + 1</code>
+</pre>
+
+<p>For reasons familiar<a contenteditable="false" data-primary="C++" data-secondary="macros" data-type="indexterm" id="id2477"/> to most C‍++ programmers, and not worth explaining fully here, unremarkable code like <code>ADD_ONE(1) * 10</code> or <code>ADD_ONE(1 &lt;&lt; 4)</code> produces very surprising results with this macro. To fix it, you’d add more parentheses to the macro definition. This isn’t necessary in Rust, because Rust macros are better integrated with the language. Rust knows when it’s handling expressions, so it effectively adds parentheses whenever it pastes one expression into another<a contenteditable="false" data-startref="ix_macros_unintended" data-type="indexterm" id="id2478"/><a contenteditable="false" data-startref="ix_code_fragment" data-type="indexterm" id="id2479"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Repetition"><div class="sect2" id="repetition">
+<h2>Repetition</h2>
+
+<p>The standard <code>vec!</code> macro<a contenteditable="false" data-primary="vec! macro" data-type="indexterm" id="ix_vec_macro"/><a contenteditable="false" data-primary="macros" data-secondary="repetition" data-type="indexterm" id="ix_macros_repetition"/> comes in three forms:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-vec-repetition">
+<code class="c1">// New empty Vec</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">unicorns</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[];</code><code class="w"/>
+
+<code class="c1">// Repeat a value N times</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">buffer</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">0_</code><code class="k">u8</code><code class="p">;</code><code class="w"> </code><code class="mi">1000</code><code class="p">];</code><code class="w"/>
+
+<code class="c1">// A list of values, separated by commas</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">noodles</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"udon"</code><code class="p">,</code><code class="w"> </code><code class="s">"ramen"</code><code class="p">,</code><code class="w"> </code><code class="s">"soba"</code><code class="p">];</code><code class="w"/>
+</pre>
+
+<p>It can be implemented like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-vec-definition">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">vec</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">()</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="p">::</code><code class="n">std</code><code class="p">::</code><code class="n">vec</code><code class="p">::</code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="cp">$elem</code><code class="p">:</code><code class="nc">expr</code><code class="w"> </code><code class="p">;</code><code class="w"> </code><code class="cp">$n</code><code class="p">:</code><code class="nc">expr</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="p">::</code><code class="n">std</code><code class="p">::</code><code class="n">vec</code><code class="p">::</code><code class="n">from_elem</code><code class="p">(</code><code class="cp">$elem</code><code class="p">,</code><code class="w"> </code><code class="cp">$n</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$x</code><code class="p">:</code><code class="nc">expr</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">&lt;</code><code class="p">[</code><code class="n">_</code><code class="p">]</code><code class="o">&gt;</code><code class="p">::</code><code class="n">into_vec</code><code class="p">(</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">([</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$x</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">]))</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>There are three rules here. Whenever Rust encounters a call to this macro, it will try each rule in turn. If no rule matches, it’s an error.</p>
+
+<p>The first rule in the macro has an empty pattern, so it matches only macro calls with no arguments: <code>vec![]</code>. These expand to a regular function call to <code>Vec::new()</code>.</p>
+
+<p>The second rule handles uses like <code>vec![0u8; 1000]</code>. It happens that there is a standard (but undocumented) function, <code>std::vec::from_elem</code>, that does exactly what’s needed here, so this rule is also straightforward.</p>
+
+<p>The third rule handles <code>vec!["udon", "ramen", "soba"]</code>. The first part of the pattern, <code>$( $x:expr ),*</code>, uses a feature we haven’t seen before: repetition. It matches 0 or more expressions, separated by commas. More generally, the syntax <code>$( PATTERN ),*</code> is used to match any comma-separated list, where each item in the list matches <code>PATTERN</code>.</p>
+
+<p>The <code>*</code> here has the same meaning as in regular expressions (“0 or more”) although admittedly regexps do not have a special <code>,*</code> repeater. You can also use <code>+</code> to require at least one match, or <code>?</code> for zero or one match. Other tokens can be used as separators in place of the comma. For example, <code>$( PATTERN );*</code> would match a semicolon-separated list. <a data-type="xref" href="#table2101">Table 22-1</a> gives the full suite of repetition patterns.</p>
+
+<table class="tallrow" id="table2101">
+	<caption><span class="label">Table 22-1. </span>Repetition patterns</caption>
+	<thead>
+		<tr class="header">
+			<th style="text-align: left;">Pattern</th>
+			<th style="text-align: left;">Meaning</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td style="text-align: left;"><code>$( ... )*</code></td>
+			<td style="text-align: left;">Match 0 or more times with no separator</td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>$( ... ),*</code></td>
+			<td style="text-align: left;">Match 0 or more times, separated by commas</td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>$( ... )<var>separator</var>*</code></td>
+			<td style="text-align: left;">Match 0 or more times, separated by some other token</td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>$( ... )+</code></td>
+			<td style="text-align: left;">Match 1 or more times with no separator</td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>$( ... ),+</code></td>
+			<td style="text-align: left;">Match 1 or more times, separated by commas</td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>$( ... )<var>separator</var>+</code></td>
+			<td style="text-align: left;">Match 1 or more times, separated by some other token</td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>$( ... )?</code></td>
+			<td style="text-align: left;">Match 0 or 1 times</td>
+		</tr>
+	</tbody>
+</table>
+
+<p>The code fragment <code>$x</code> is not just a single expression but a list of expressions. The template for this rule uses repetition syntax too:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-vec-from-array">
+<code class="o">&lt;</code><code class="p">[</code><code class="n">_</code><code class="p">]</code><code class="o">&gt;</code><code class="p">::</code><code class="n">into_vec</code><code class="p">(</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">([</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$x</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">]))</code><code class="w"/>
+</pre>
+
+<p>Again, there are standard methods that do exactly what we need. This code creates a boxed array and then uses the <code>[T]::into_vec</code> method to convert the boxed array to a vector.</p>
+
+<p>The first bit, <code>&lt;[_]&gt;</code>, is an unusual way to write the type “slice of something,” while expecting Rust to infer the element type. Types whose names are plain identifiers can be used in expressions without any fuss, but types like <code>fn()</code>, <code>&amp;str</code>, or <code>[_]</code> must be wrapped in angle brackets.</p>
+
+<p>Repetition comes in at the end of the template, where we have <code>$($x),*</code>. This <code>$(...),*</code> is the same syntax we saw in the pattern. It iterates over the list of expressions that we matched for <code>$x</code> and inserts them all into the template, separated by commas.</p>
+
+<p>In this case, the repeated output looks just like the input. But that doesn’t have to be the case. We could have written the rule like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-vec-alt-from-elements">
+<code class="p">(</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$x</code><code class="p">:</code><code class="nc">expr</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">v</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="cp">$(</code><code class="w"> </code><code class="n">v</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="cp">$x</code><code class="p">);</code><code class="w"> </code><code class="p">)</code><code class="o">*</code><code class="w"/>
+<code class="w">        </code><code class="n">v</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>Here, the part of the template that reads <code>$( v.push($x); )*</code> inserts a call to <code>v.push()</code> for each expression in <code>$x</code>. A macro arm can expand to a sequence of expressions, but here we need just a single expression, so we wrap the assembly of the vector in a block<a contenteditable="false" data-startref="ix_macros_repetition" data-type="indexterm" id="id2480"/><a contenteditable="false" data-startref="ix_vec_macro" data-type="indexterm" id="id2481"/>.</p>
+
+<p>Our <code>vec</code> macro has one minor bug, though. Unlike virtually everything else in the language, patterns using <code>$( ... ),*</code> do not automatically accept the optional trailing comma<a contenteditable="false" data-primary="comma, optional trailing" data-type="indexterm" id="id2482"/> in <code>vec![1, 2,]</code>. Users expect this to work in macros. We can support it by adding <code>$( , )?</code> to the end of the third pattern, like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-vec-with-optional-comma">
+<code class="p">(</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$x</code><code class="p">:</code><code class="nc">expr</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="p">,</code><code class="w"> </code><code class="p">)</code><code class="o">?</code><code class="w"> </code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Built-In Macros"><div class="sect1" id="built-in-macros">
+<h1>Built-In Macros</h1>
+
+<p>The Rust<a contenteditable="false" data-primary="macros" data-secondary="built-in" data-type="indexterm" id="ix_macros_builtin"/> compiler supplies several macros that are helpful when you’re defining your own macros. None of these could be implemented using <code>macro_rules!</code> alone. They’re hardcoded in <code>rustc</code>:</p>
+
+<dl>
+	<dt><code>file!()</code>, <code>line!()</code>, <code>column!()</code></dt>
+	<dd>
+	<p><code>file!()</code> expands<a contenteditable="false" data-primary="column! macro" data-type="indexterm" id="id2483"/><a contenteditable="false" data-primary="file! macro" data-type="indexterm" id="id2484"/><a contenteditable="false" data-primary="line! macro" data-type="indexterm" id="id2485"/> to a string literal: the current filename. <code>line!()</code> and <code>column!()</code> expand to <code>u32</code> literals giving the current line and column (counting from 1).</p>
+
+	<p>If one macro calls another, which calls another, all in different files, and the last macro calls <code>file!()</code>, <code>line!()</code>, or <code>column!()</code>, it will expand to indicate the location of the <em>first</em> macro call.</p>
+	</dd>
+	<dt>module_path!()</dt>
+	<dd>
+	<p>This expands to a string, the Rust path to the current module, such as <code>"fernlib::fronds"</code>, as opposed to the file path <code>"/home/fernando/fernlib/src/fronds.rs"</code>.</p>
+	</dd>
+	<dt><code>stringify!(...tokens...)</code></dt>
+	<dd>
+	<p>Expands<a contenteditable="false" data-primary="stringify! macro" data-type="indexterm" id="id2486"/> to a string literal containing the given tokens. The <code>assert!</code> macro uses this to generate an error message that includes the code of the assertion.</p>
+
+	<p>Macro calls in the argument are <em>not</em> expanded: <code>stringify!(line!())</code> expands to the string <code>"line!()"</code>.</p>
+
+	<p>Rust constructs the string from the tokens, so there are no line breaks or comments in the string.</p>
+	</dd>
+	<dt><code>concat!(str0, str1, ...)</code></dt>
+	<dd>
+	<p>Expands<a contenteditable="false" data-primary="concat! macro" data-type="indexterm" id="id2487"/> to a single string literal made by concatenating its arguments.</p>
+	</dd>
+	<dt><code>compile_error!(message)</code></dt>
+	<dd>
+	<p>Stops compilation with the given error message.</p>
+
+	<p>One of the disadvantages of macros is that when user code calls a macro incorrectly, the compiler doesn’t have enough information to report a useful error. Rust often says something like “error: no rules expected <code>,</code>“. A macro can help by including a pattern that matches common user errors and produces a <code>compiler_error!</code> with a custom message.</p>
+	</dd>
+</dl>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Debugging Macros"><div class="sect1" id="debugging-macros">
+<h1>Debugging Macros</h1>
+
+<p>Debugging<a contenteditable="false" data-primary="macros" data-secondary="debugging" data-type="indexterm" id="ix_macro_debug"/><a contenteditable="false" data-primary="debugging" data-secondary="macros" data-type="indexterm" id="ix_debug_macro"/> a wayward macro can be challenging. The biggest problem is the lack of visibility into the process of macro expansion. Rust will often expand all macros, find some kind of error, and then print an error message that does not show the fully expanded code that contains the error!</p>
+
+<p>Here are three tools to help troubleshoot macros. All three rely on experimental features of Rust, so they require the nightly version of Rust to be installed. You can do this with <code>rustup toolchain install nightly</code>, then compile your code with <code>cargo +nightly build</code>.</p>
+
+<p>First and simplest, you can<a contenteditable="false" data-primary="cargo expand" data-type="indexterm" id="id2488"/> ask Rust to show what your code looks like after expanding all macros. Most Rust IDEs offer a menu option to do this for any given macro call. Alternatively, you can install the <code>cargo-expand</code> extension using <code>cargo install cargo-expand</code>. Then use <code>cargo expand path::to::module</code> to inspect any module in your project. The fully expanded code is pretty-printed and dumped to your terminal. Unfortunately, this works only if your code is free of syntax errors.</p>
+
+<p>Second, Rust provides a <code>log_syntax!()</code> macro<a contenteditable="false" data-primary="log_syntax! macro" data-type="indexterm" id="id2489"/> that simply prints its arguments to the terminal at compile time. You can use this for <code>println!</code>-style debugging of your macro as it’s being expanded. This macro requires the <code>#![feature(log_syntax)]</code> feature flag.</p>
+
+<p>Third, you can ask the Rust compiler to log all macro calls to the terminal. Insert<a contenteditable="false" data-primary="trace_macros! macro" data-type="indexterm" id="id2490"/> <code>trace_macros!(true);</code> somewhere in your code. From that point on, each time Rust expands a macro, it will print the macro name and arguments. For example, consider this <span class="keep-together">program:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-10">
+<code class="cp">#![feature(trace_macros)]</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">trace_macros!</code><code class="p">(</code><code class="kc">true</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">buffer</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">0</code><code class="k">u8</code><code class="p">;</code><code class="w"> </code><code class="mi">64</code><code class="p">];</code><code class="w"/>
+<code class="w">    </code><code class="fm">trace_macros!</code><code class="p">(</code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">buffer</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">64</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>It produces this output:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>+nightly<code class="w"> </code>build<code class="w"/>
+<code class="go">note: trace_macro</code>
+<code class="go"> --&gt; src/main.rs:7:18</code>
+<code class="go">  |</code>
+<code class="go">7 |     let buffer = vec![0u8; 64];</code>
+<code class="go">  |                  ^^^^^^^^^^^^^</code>
+<code class="go">  |</code>
+<code class="go">  = note: expanding `vec! { 0u8; 64 }`</code>
+<code class="go">  = note: to `$crate :: vec :: from_elem(0u8, 64)`</code>
+</pre>
+
+<p>The compiler shows the code of each macro call, both before and after expansion. The line <code>trace_macros!(false);</code> turns tracing off again, so the call to <code>println!()</code> is not traced<a contenteditable="false" data-startref="ix_debug_macro" data-type="indexterm" id="id2491"/><a contenteditable="false" data-startref="ix_macro_debug" data-type="indexterm" id="id2492"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Building the json! Macro"><div class="sect1" id="building-the-json-macro">
+<h1>Building the json! Macro</h1>
+
+<p>We’ve now discussed<a contenteditable="false" data-primary="macros" data-secondary="json!" data-type="indexterm" id="ix_macros_json"/><a contenteditable="false" data-primary="json! macro" data-type="indexterm" id="ix_json_macro"/> the core features of <code>macro_rules!</code>. In this section, we’ll incrementally develop a macro for building JSON data. We’ll use this example to show what it’s like to develop a macro, present the few remaining pieces of <code>macro_rules!</code>, and offer some advice on how to make sure your macros behave as desired.</p>
+
+<p>Back in <a data-type="xref" href="ch10.html#enums-and-patterns">Chapter 10</a>, we presented this enum for representing JSON data:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-11">
+<code class="cp">#[derive(Clone, PartialEq, Debug)]</code><code class="w"/>
+<code class="k">enum</code><code class="w"> </code><code class="nc">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Null</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">Boolean</code><code class="p">(</code><code class="kt">bool</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Number</code><code class="p">(</code><code class="kt">f64</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="nb">String</code><code class="p">(</code><code class="nb">String</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Array</code><code class="p">(</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">Json</code><code class="o">&gt;</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Object</code><code class="p">(</code><code class="nb">Box</code><code class="o">&lt;</code><code class="n">HashMap</code><code class="o">&lt;</code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><code class="n">Json</code><code class="o">&gt;&gt;</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The syntax for writing out <code>Json</code> values is unfortunately rather verbose:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-12">
+<code class="kd">let</code><code class="w"> </code><code class="n">students</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="n">Array</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">    </code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="s">"name"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="nb">String</code><code class="p">(</code><code class="s">"Jim Blandy"</code><code class="p">.</code><code class="n">to_string</code><code class="p">())),</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="s">"class_of"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="n">Number</code><code class="p">(</code><code class="mf">1926.0</code><code class="p">)),</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="s">"major"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="nb">String</code><code class="p">(</code><code class="s">"Tibetan throat singing"</code><code class="p">.</code><code class="n">to_string</code><code class="p">())),</code><code class="w"/>
+<code class="w">    </code><code class="p">].</code><code class="n">into_iter</code><code class="p">().</code><code class="n">collect</code><code class="p">())),</code><code class="w"/>
+<code class="w">    </code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="s">"name"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="nb">String</code><code class="p">(</code><code class="s">"Jason Orendorff"</code><code class="p">.</code><code class="n">to_string</code><code class="p">())),</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="s">"class_of"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="n">Number</code><code class="p">(</code><code class="mf">1702.0</code><code class="p">)),</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="s">"major"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="nb">String</code><code class="p">(</code><code class="s">"Knots"</code><code class="p">.</code><code class="n">to_string</code><code class="p">())),</code><code class="w"/>
+<code class="w">    </code><code class="p">].</code><code class="n">into_iter</code><code class="p">().</code><code class="n">collect</code><code class="p">())),</code><code class="w"/>
+<code class="p">]);</code><code class="w"/>
+</pre>
+
+<p>We would like to be able to write this using a more JSON-like syntax:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-13">
+<code class="kd">let</code><code class="w"> </code><code class="n">students</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">json</code><code class="o">!</code><code class="p">([</code><code class="w"/>
+<code class="w">    </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="s">"name"</code><code class="p">:</code><code class="w"> </code><code class="s">"Jim Blandy"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="s">"class_of"</code><code class="p">:</code><code class="w"> </code><code class="mi">1926</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="s">"major"</code><code class="p">:</code><code class="w"> </code><code class="s">"Tibetan throat singing"</code><code class="w"/>
+<code class="w">    </code><code class="p">},</code><code class="w"/>
+<code class="w">    </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="s">"name"</code><code class="p">:</code><code class="w"> </code><code class="s">"Jason Orendorff"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="s">"class_of"</code><code class="p">:</code><code class="w"> </code><code class="mi">1702</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="s">"major"</code><code class="p">:</code><code class="w"> </code><code class="s">"Knots"</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">]);</code><code class="w"/>
+</pre>
+
+<p>What we want is a <code>json!</code> macro that takes a JSON value as an argument and expands to a Rust expression like the one in the previous example.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Fragment Types"><div class="sect2" id="fragment-types">
+<h2>Fragment Types</h2>
+
+<p>The first<a contenteditable="false" data-primary="macros" data-secondary="fragment types" data-type="indexterm" id="ix_macros_frag_type"/><a contenteditable="false" data-primary="json! macro" data-secondary="fragment types" data-type="indexterm" id="ix_json_macro_frag"/> job in writing any complex macro is figuring out how to match, or <em>parse</em>, the desired input.</p>
+
+<p>We can already see that the macro will have several rules, because there are several different sorts of things in JSON data: objects, arrays, numbers, and so forth. In fact, we might guess that we’ll have one rule for each JSON type:</p>
+
+<pre class="ignore" data-type="programlisting">
+macro_rules! json {
+    (null)    =&gt; { Json::Null };
+    ([ ... ]) =&gt; { Json::Array(...) };
+    ({ ... }) =&gt; { Json::Object(...) };
+    (???)     =&gt; { Json::Boolean(...) };
+    (???)     =&gt; { Json::Number(...) };
+    (???)     =&gt; { Json::String(...) };
+}
+</pre>
+
+<p>This is not quite correct, as macro patterns offer no way to tease apart the last three cases, but we’ll see how to deal with that later. The first three cases, at least, clearly begin with different tokens, so let’s start with those.</p>
+
+<p>The first rule already works:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-14">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="n">null</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Null</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">json_null</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="n">null</code><code class="p">),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="n">Null</code><code class="p">);</code><code class="w">  </code><code class="c1">// passes!</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>To add support for JSON arrays, we might try matching the elements as <code>expr</code>s:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-15">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="n">null</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Null</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">([</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$element</code><code class="p">:</code><code class="nc">expr</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Array</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$element</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Unfortunately, this does not match all JSON arrays. Here’s a test that illustrates the problem:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-16">
+<code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">json_array_with_json_element</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">macro_generated_value</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="p">[</code><code class="w"/>
+<code class="w">            </code><code class="c1">// valid JSON that doesn't match `$element:expr`</code>
+<code class="w">            </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="s">"pitch"</code><code class="p">:</code><code class="w"> </code><code class="mf">440.0</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">]</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">hand_coded_value</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Array</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">            </code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">                </code><code class="p">(</code><code class="s">"pitch"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="n">Number</code><code class="p">(</code><code class="mf">440.0</code><code class="p">)),</code><code class="w"/>
+<code class="w">            </code><code class="p">].</code><code class="n">into_iter</code><code class="p">().</code><code class="n">collect</code><code class="p">())),</code><code class="w"/>
+<code class="w">        </code><code class="p">]);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">macro_generated_value</code><code class="p">,</code><code class="w"> </code><code class="n">hand_coded_value</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The pattern <code>$( $element:expr ),*</code> means “a comma-separated list of Rust expressions.” But many JSON values, particularly objects, aren’t valid Rust expressions. They won’t match.</p>
+
+<p>Since not every bit of code you want to match is an expression, Rust supports several other fragment types<a contenteditable="false" data-primary="macro_rules!" data-type="indexterm" id="id2493"/>, listed in <a data-type="xref" href="#fragment-type-table">Table 22-2</a>.</p>
+
+<table class="tallrow" id="fragment-type-table">
+	<caption><span class="label">Table 22-2. </span>Fragment types supported by <code>macro_rules!</code></caption>
+	<thead>
+		<tr>
+			<th>Fragment type</th>
+			<th>Matches (with examples)</th>
+			<th>Can be followed by...</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td><code>expr</code></td>
+			<td>
+			<p>An expression:</p>
+
+			<p class="table-example"><code>2 + 2</code>, <code>"udon"</code>, <code>x.len()</code></p>
+			</td>
+			<td><code>=&gt; , ;</code></td>
+		</tr>
+		<tr>
+			<td><code>stmt</code></td>
+			<td>
+			<p>An expression or declaration, not including any trailing semicolon</p>
+
+			<p>(hard to use; try <code>expr</code> or <code>block</code> instead)</p>
+			</td>
+			<td><code>=&gt; , ;</code></td>
+		</tr>
+		<tr>
+			<td><code>ty</code></td>
+			<td>
+			<p>A type:</p>
+
+			<p class="table-example"><code>String</code>, <code>Vec&lt;u8&gt;</code>, <code>(&amp;str, bool)</code>, <code>dyn Read + Send</code></p>
+			</td>
+			<td><code>=&gt; , ; = | { [ : &gt; as where</code></td>
+		</tr>
+		<tr>
+			<td><code>path</code></td>
+			<td>
+			<p>A path (discussed<a data-type="xref" data-xrefstyle="select:labelnumber" href="ch08.html#paths-and-imports"/>):</p>
+
+			<p class="table-example"><code>ferns</code>, <code>::std::sync::mpsc</code></p>
+			</td>
+			<td><code>=&gt; , ; = | { [ : &gt; as where</code></td>
+		</tr>
+		<tr>
+			<td><code>pat</code></td>
+			<td>
+			<p>A pattern (discussed<a data-type="xref" data-xrefstyle="select:labelnumber" href="ch10.html#patterns"/>):</p>
+
+			<p class="table-example"><code>_</code>, <code>Some(ref x)</code></p>
+			</td>
+			<td><code>=&gt; , = | if in</code></td>
+		</tr>
+		<tr>
+			<td><code>item</code></td>
+			<td>
+			<p>An item (discussed<a data-type="xref" data-xrefstyle="select:labelnumber" href="ch06.html#declarations"/>):</p>
+
+			<p class="table-example"><code>struct Point { x: f64, y: f64 }</code>, <code>mod ferns;</code></p>
+			</td>
+			<td>Anything</td>
+		</tr>
+		<tr>
+			<td><code>block</code></td>
+			<td>
+			<p>A block (discussed<a data-type="xref" data-xrefstyle="select:labelnumber" href="ch06.html#blocks"/>):</p>
+
+			<p class="table-example"><code>{ s += "ok\n"; true }</code></p>
+			</td>
+			<td>Anything</td>
+		</tr>
+		<tr>
+			<td><code>meta</code></td>
+			<td>
+			<p>The body of an attribute (discussed<a data-type="xref" data-xrefstyle="select:labelnumber" href="ch08.html#attributes"/>):</p>
+
+			<p class="table-example"><code>inline</code>, <code>derive(Copy, Clone)</code>, <code>doc="3D models."</code></p>
+			</td>
+			<td>Anything</td>
+		</tr>
+		<tr>
+			<td><code>literal</code></td>
+			<td>
+			<p>A literal value:</p>
+
+			<p class="table-example"><code>1024</code>, <code>"Hello, world!"</code>, <code>1_000_000f64</code></p>
+			</td>
+			<td>Anything</td>
+		</tr>
+		<tr>
+			<td><code>lifetime</code></td>
+			<td>
+			<p>A lifetime:</p>
+
+			<p class="table-example"><code>'a</code>, <code>'item</code>, <code>'static</code></p>
+			</td>
+			<td>Anything</td>
+		</tr>
+		<tr>
+			<td><code>vis</code></td>
+			<td>
+			<p>An optional visibility specifier:</p>
+
+			<p class="table-example"><code>pub</code>, <code>pub(crate)</code>, <code>pub(in module::submodule)</code></p>
+			</td>
+			<td>Anything</td>
+		</tr>
+		<tr>
+			<td><code>ident</code></td>
+			<td>
+			<p>An identifier:</p>
+
+			<p class="table-example"><code>std</code>, <code>Json</code>, <code>longish_variable_name</code></p>
+			</td>
+			<td>Anything</td>
+		</tr>
+		<tr>
+			<td><code>tt</code></td>
+			<td>
+			<p>A token tree (see text):</p>
+
+			<p class="table-example"><code>;</code>, <code>&gt;=</code>, <code>{}</code>, <code>[0 1 (+ 0 1)]</code></p>
+			</td>
+			<td>Anything</td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Most of the options in this table strictly enforce Rust syntax. The <code>expr</code> type matches only Rust expressions (not JSON values), <code>ty</code> matches only Rust types, and so on. They’re not extensible: there’s no way to define new arithmetic operators or new keywords that <code>expr</code> would recognize. We won’t be able to make any of these match arbitrary JSON data.</p>
+
+<p>The last two, <code>ident</code> and <code>tt</code>, support matching macro arguments that don’t look like Rust code. <code>ident</code> matches any identifier. <code>tt</code> matches a single <em>token tree<a contenteditable="false" data-primary="token tree" data-type="indexterm" id="id2494"/></em>: either a properly matched pair of brackets, <code>(...)</code>, <code>[...]</code>, or <code>{...}</code>, and everything in between, including nested token trees, or a single token that isn’t a bracket, like <code>1926</code> or <code>"Knots"</code>.</p>
+
+<p>Token trees are exactly what we need for our <code>json!</code> macro. Every JSON value is a single token tree: numbers, strings, Boolean values, and <code>null</code> are all single tokens; objects and arrays are bracketed. So we can write the patterns like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-17">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="n">null</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Null</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">([</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$element</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Array</code><code class="p">(</code><code class="o">..</code><code class="p">.)</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">({</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$key</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">:</code><code class="w"> </code><code class="cp">$value</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">})</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="o">..</code><code class="p">.)</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="cp">$other</code><code class="p">:</code><code class="nc">tt</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="p">.</code><code class="w">  </code><code class="c1">// TODO: Return Number, String, or Boolean</code>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This version of the <code>json!</code> macro can match all JSON data. Now we just need to produce correct Rust code.</p>
+
+<p>To make sure Rust can gain new syntactic features in the future without breaking any macros you write today, Rust restricts tokens that appear in patterns right after a fragment. The “Can be followed by...” column of <a data-type="xref" href="#fragment-type-table">Table 22-2</a> shows which tokens are allowed. For example, the pattern <code>$x:expr ~ $y:expr</code> is an error, because <code>~</code> isn’t allowed after an <code>expr</code>. The pattern <code>$vars:pat =&gt; $handler:expr</code> is OK, because <code>$vars:pat</code> is followed by the arrow <code>=&gt;</code><a contenteditable="false" data-primary="=&gt; symbol" data-secondary="in macros" data-type="indexterm" id="id2495"/>, one of the allowed tokens for a <code>pat</code>, and <code>$handler:expr</code> is followed by nothing, which is always allowed<a contenteditable="false" data-startref="ix_json_macro_frag" data-type="indexterm" id="id2496"/><a contenteditable="false" data-startref="ix_macros_frag_type" data-type="indexterm" id="id2497"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Recursion in Macros"><div class="sect2" id="recursion-in-macros">
+<h2>Recursion in Macros</h2>
+
+<p>You’ve already<a contenteditable="false" data-primary="macros" data-secondary="recursion in" data-type="indexterm" id="id2498"/><a contenteditable="false" data-primary="recursion, macros" data-type="indexterm" id="id2499"/> seen one trivial case of a macro calling itself: our implementation of <code>vec!</code> uses recursion to support trailing commas. Here we can show a more significant example: <code>json!</code> needs<a contenteditable="false" data-primary="json! macro" data-secondary="recursion in" data-type="indexterm" id="id2500"/> to call itself recursively.</p>
+
+<p>We might try supporting JSON arrays without using recursion, like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-18">
+<code class="p">([</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$element</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Json</code><code class="p">::</code><code class="n">Array</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$element</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>But this wouldn’t work. We ⁠’d be pasting JSON data (the <code>$element</code> token trees) right into a Rust expression. They’re two different languages.</p>
+
+<p>We need to convert each element of the array from JSON form to Rust. Fortunately, there’s a macro that does this: the one we’re writing!</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-19">
+<code class="p">([</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$element</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Json</code><code class="p">::</code><code class="n">Array</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="cp">$element</code><code class="p">)</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>Objects can be supported in the same way:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-20">
+<code class="p">({</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$key</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">:</code><code class="w"> </code><code class="cp">$value</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">})</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">        </code><code class="cp">$(</code><code class="w"> </code><code class="p">(</code><code class="cp">$key</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="cp">$value</code><code class="p">))</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"/>
+<code class="w">    </code><code class="p">].</code><code class="n">into_iter</code><code class="p">().</code><code class="n">collect</code><code class="p">()))</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p><span data-claim-test="macros-recursion-limit">The compiler imposes a recursion limit on macros: 128 calls, by default.</span> That’s more than enough for normal uses of <code>json!</code>, but complex recursive macros sometimes hit the limit. You can adjust it by adding this attribute at the top of the crate where the macro is used:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-21">
+<code class="cp">#![recursion_limit = </code><code class="s">"256"</code><code class="cp">]</code><code class="w"/>
+</pre>
+
+<p>Our <code>json!</code> macro is nearly complete. All that remains is to support Boolean, number, and string values.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Using Traits with Macros"><div class="sect2" id="using-traits-with-macros">
+<h2>Using Traits with Macros</h2>
+
+<p>Writing complex<a contenteditable="false" data-primary="macros" data-secondary="using traits with" data-type="indexterm" id="ix_macros_traits"/><a contenteditable="false" data-primary="traits" data-secondary="with macros" data-secondary-sortas="macros" data-type="indexterm" id="ix_traits_macros"/><a contenteditable="false" data-primary="json! macro" data-secondary="using traits with" data-type="indexterm" id="ix_json_macro_traits"/> macros always poses puzzles. It’s important to remember that macros themselves are not the only puzzle-solving tool at your disposal.</p>
+
+<p>Here, we need to support <code>json!(true)</code>, <code>json!(1.0)</code>, and <code>json!("yes")</code>, converting the value, whatever it may be, to the appropriate kind of <code>Json</code> value. But macros are not good at distinguishing types. We can imagine writing:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-22">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Boolean</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="kc">false</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Boolean</code><code class="p">(</code><code class="kc">false</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This approach breaks down right away. There are only two Boolean values, but rather more numbers than that, and even more strings.</p>
+
+<p>Fortunately, there is a standard way to convert values of various types to one specified type: the <code>From</code> trait<a contenteditable="false" data-primary="From trait" data-type="indexterm" id="id2501"/><a contenteditable="false" data-primary="utility traits" data-secondary="From and Into" data-type="indexterm" id="id2502"/>, covered <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch13.html#from-and-into"/>. We simply need to implement this trait for a few types:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-23">
+<code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="kt">bool</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">b</code><code class="p">:</code><code class="w"> </code><code class="kt">bool</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Boolean</code><code class="p">(</code><code class="n">b</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">i</code><code class="p">:</code><code class="w"> </code><code class="kt">i32</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Number</code><code class="p">(</code><code class="n">i</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">f64</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">s</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="nb">String</code><code class="p">(</code><code class="n">s</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;&amp;'</code><code class="na">a</code><code class="w"> </code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">s</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">a</code><code class="w"> </code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="nb">String</code><code class="p">(</code><code class="n">s</code><code class="p">.</code><code class="n">to_string</code><code class="p">())</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>In fact, all 12 numeric types should have very similar implementations, so it might make sense to write a macro, just to avoid the copy and paste:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-24">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">impl_from_num_for_json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$t</code><code class="p">:</code><code class="nc">ident</code><code class="w"> </code><code class="p">)</code><code class="o">*</code><code class="w"> </code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="cp">$(</code><code class="w"/>
+<code class="w">            </code><code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="cp">$t</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">n</code><code class="p">:</code><code class="w"> </code><code class="cp">$t</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                    </code><code class="n">Json</code><code class="p">::</code><code class="n">Number</code><code class="p">(</code><code class="n">n</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">f64</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">}</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="o">*</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="n">impl_from_num_for_json</code><code class="o">!</code><code class="p">(</code><code class="kt">u8</code><code class="w"> </code><code class="kt">i8</code><code class="w"> </code><code class="kt">u16</code><code class="w"> </code><code class="kt">i16</code><code class="w"> </code><code class="kt">u32</code><code class="w"> </code><code class="kt">i32</code><code class="w"> </code><code class="kt">u64</code><code class="w"> </code><code class="kt">i64</code><code class="w"> </code><code class="kt">u128</code><code class="w"> </code><code class="kt">i128</code><code class="w"/>
+<code class="w">                        </code><code class="kt">usize</code><code class="w"> </code><code class="kt">isize</code><code class="w"> </code><code class="kt">f32</code><code class="w"> </code><code class="kt">f64</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Now we can use <code>Json::from(value)</code> to convert a <code>value</code> of any supported type to <code>Json</code>. In our macro, it’ll look like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-25">
+<code class="p">(</code><code class="w"> </code><code class="cp">$other</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Json</code><code class="p">::</code><code class="n">from</code><code class="p">(</code><code class="cp">$other</code><code class="p">)</code><code class="w">  </code><code class="c1">// Handle Boolean/number/string</code>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>Adding this rule to our <code>json!</code> macro makes it pass all the tests we’ve written so far. Putting together all the pieces, it currently looks like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-26">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="n">null</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Null</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">([</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$element</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Array</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="cp">$element</code><code class="p">)</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">({</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$key</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">:</code><code class="w"> </code><code class="cp">$value</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">})</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">            </code><code class="cp">$(</code><code class="w"> </code><code class="p">(</code><code class="cp">$key</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="cp">$value</code><code class="p">))</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"/>
+<code class="w">        </code><code class="p">].</code><code class="n">into_iter</code><code class="p">().</code><code class="n">collect</code><code class="p">()))</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="w"> </code><code class="cp">$other</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">from</code><code class="p">(</code><code class="cp">$other</code><code class="p">)</code><code class="w">  </code><code class="c1">// Handle Boolean/number/string</code>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>As it turns out, the macro unexpectedly supports the use of variables and even arbitrary Rust expressions inside the JSON data, a handy extra feature:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-27">
+<code class="kd">let</code><code class="w"> </code><code class="n">width</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mf">4.0</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">desc</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="n">json</code><code class="o">!</code><code class="p">({</code><code class="w"/>
+<code class="w">        </code><code class="s">"width"</code><code class="p">:</code><code class="w"> </code><code class="nc">width</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="s">"height"</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="n">width</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mf">9.0</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="mf">4.0</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">});</code><code class="w"/>
+</pre>
+
+<p>Because <code>(width * 9.0 / 4.0)</code> is parenthesized, it’s a single token tree, so the macro successfully matches it with <code>$value:tt</code> when parsing the object<a contenteditable="false" data-startref="ix_traits_macros" data-type="indexterm" id="id2503"/><a contenteditable="false" data-startref="ix_json_macro_traits" data-type="indexterm" id="id2504"/><a contenteditable="false" data-startref="ix_macros_traits" data-type="indexterm" id="id2505"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Scoping and Hygiene"><div class="sect2" id="scoping-and-hygiene">
+<h2>Scoping and Hygiene</h2>
+
+<p>A surprisingly<a contenteditable="false" data-primary="macros" data-secondary="scoping and hygiene" data-type="indexterm" id="ix_macros_scope-hyg"/><a contenteditable="false" data-primary="scopes and scoping" data-type="indexterm" id="ix_scopes_ch21"/><a contenteditable="false" data-primary="json! macro" data-secondary="scoping and hygiene" data-type="indexterm" id="ix_json_macro_scope"/> tricky aspect of writing macros is that they involve pasting code from different scopes together. So the next few pages cover the two ways Rust handles scoping: one way for local variables and arguments, and another way for everything else.</p>
+
+<p>To show why this matters, let’s rewrite our rule for parsing JSON objects (the third rule in the <code>json!</code> macro shown previously) to eliminate the temporary vector. We can write it like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-29">
+<code class="p">({</code><code class="w"> </code><code class="cp">$($key</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">:</code><code class="w"> </code><code class="cp">$value</code><code class="p">:</code><code class="nc">tt</code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">})</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">fields</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">HashMap</code><code class="p">::</code><code class="n">new</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="cp">$(</code><code class="w"> </code><code class="n">fields</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="cp">$key</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="cp">$value</code><code class="p">));</code><code class="w"> </code><code class="p">)</code><code class="o">*</code><code class="w"/>
+<code class="w">        </code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="n">fields</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>Now we’re populating the <code>HashMap</code> not by using <code>collect()</code> but by repeatedly calling the <code>.insert()</code> method. This means we need to store the map in a temporary variable, which we’ve called <code>fields</code>.</p>
+
+<p>But then what happens if the code that calls <code>json!</code> happens to use a variable of its own, also named <code>fields</code>?</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-30">
+<code class="kd">let</code><code class="w"> </code><code class="n">fields</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"Fields, W.C."</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">role</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">json</code><code class="o">!</code><code class="p">({</code><code class="w"/>
+<code class="w">    </code><code class="s">"name"</code><code class="p">:</code><code class="w"> </code><code class="s">"Larson E. Whipsnade"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="s">"actor"</code><code class="p">:</code><code class="w"> </code><code class="nc">fields</code><code class="w"/>
+<code class="p">});</code><code class="w"/>
+</pre>
+
+<p>Expanding the macro would paste together two bits of code, both using the name <code>fields</code> for different things!</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-28">
+<code class="kd">let</code><code class="w"> </code><code class="n">fields</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"Fields, W.C."</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">role</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">fields</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">HashMap</code><code class="p">::</code><code class="n">new</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="n">fields</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="s">"name"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="n">from</code><code class="p">(</code><code class="s">"Larson E. Whipsnade"</code><code class="p">));</code><code class="w"/>
+<code class="w">    </code><code class="n">fields</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="s">"actor"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">Json</code><code class="p">::</code><code class="n">from</code><code class="p">(</code><code class="n">fields</code><code class="p">));</code><code class="w"/>
+<code class="w">    </code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="n">fields</code><code class="p">)</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>This may seem like an unavoidable pitfall whenever macros use temporary variables, and you may already be thinking through the possible fixes. Perhaps we should rename the variable that the <code>json!</code> macro defines to something that its callers aren’t likely to pass in: instead of <code>fields</code>, we could call it <code>__json$fields</code>.</p>
+
+<p>The surprise<a contenteditable="false" data-primary="hygienic macros" data-type="indexterm" id="id2506"/> here is that <em>the macro works as is</em>. Rust renames the variable for you! This feature, first implemented in Scheme macros, is called <em>hygiene</em>, and so Rust is said to have <em>hygienic macros</em>.</p>
+
+<p>The easiest way to understand macro hygiene is to imagine that every time a macro is expanded, the parts of the expansion that come from the macro itself are painted a different color.</p>
+
+<p>Variables of different colors, then, are treated as if they had different names:</p>
+
+<pre>
+<span class="macrocolor0">
+let fields = "Fields, W.C.";
+let role = <span class="macrocolor1">{
+    let mut fields = Box::new(HashMap::new());
+    fields.insert(<span class="macrocolor0">"name"</span>.to_string(), <span class="macrocolor2">Json::from(<span class="macrocolor0">"Larson E. Whipsnade"</span>)</span>);
+    fields.insert(<span class="macrocolor0">"actor"</span>.to_string(), <span class="macrocolor3">Json::from(<span class="macrocolor0">fields</span>)</span>);
+    Json::Object(fields)
+}</span>;
+</span>
+</pre>
+
+<p>Note that bits of code that were passed in by the macro caller and pasted into the output, such as <code>"name"</code> and <code>"actor"</code>, keep their original color (black). Only tokens that originate from the macro template are painted.</p>
+
+<p>Now there’s one variable named <code><span class="macrocolor0">fields</span></code> (declared in the caller) and a separate variable named <code><span class="macrocolor1">fields</span></code> (introduced by the macro). Since the names are different colors, the two variables don’t get confused.</p>
+
+<p>If a macro really does need to refer to a variable in the caller’s scope, the caller has to pass the name of the variable to the macro.</p>
+
+<p>(The paint metaphor isn’t meant to be an exact description of how hygiene works. The real mechanism is even a little smarter than that, recognizing two identifiers as the same, regardless of “paint,” if they refer to a common variable that’s in scope for both the macro and its caller. But cases like this are rare in Rust. If you understand the preceding example, you know enough to use hygienic macros.)</p>
+
+<p>You may have noticed that many other identifiers were painted one or more colors as the macros were expanded: <code>Box</code>, <code>HashMap</code>, and <code>Json</code>, for example. Despite the paint, Rust had no trouble recognizing these type names. That’s because hygiene in Rust is limited to local variables and arguments. When it comes to constants, types, methods, modules, statics, and macro names, Rust is “colorblind.”</p>
+
+<p>This means that if our <code>json!</code> macro is used in a module where <code>Box</code>, <code>HashMap</code>, or <code>Json</code> is not in scope, the macro won’t work. We’ll show how to avoid this problem in the next section.</p>
+
+<p>First, we’ll consider a case where Rust’s strict hygiene gets in the way, and we need to work around it. Suppose we have many functions that contain this line of code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-31">
+<code class="kd">let</code><code class="w"> </code><code class="n">req</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ServerRequest</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">server_socket</code><code class="p">.</code><code class="n">session</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>Copying and pasting that line is a pain. Can we use a macro instead?</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-32">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">setup_req</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">()</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">req</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ServerRequest</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">server_socket</code><code class="p">.</code><code class="n">session</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">handle_http_request</code><code class="p">(</code><code class="n">server_socket</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">ServerSocket</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">setup_req</code><code class="o">!</code><code class="p">();</code><code class="w">  </code><code class="c1">// declares `req`, uses `server_socket`</code>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w">  </code><code class="c1">// code that uses `req`</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>As written, this doesn’t work. It would require the name <code>server_socket</code> in the macro to refer to the local <code>server_socket</code> declared in the function, and vice versa for the variable <code>req</code>. But hygiene prevents names in macros from “colliding” with names in other scopes—even in cases like this, where that’s what you want.</p>
+
+<p>The solution is to pass the macro any identifiers you plan on using both inside and outside the macro code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-33">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">setup_req</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="cp">$req</code><code class="p">:</code><code class="nc">ident</code><code class="p">,</code><code class="w"> </code><code class="cp">$server_socket</code><code class="p">:</code><code class="nc">ident</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="cp">$req</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ServerRequest</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="cp">$server_socket</code><code class="p">.</code><code class="n">session</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">handle_http_request</code><code class="p">(</code><code class="n">server_socket</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">ServerSocket</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">setup_req</code><code class="o">!</code><code class="p">(</code><code class="n">req</code><code class="p">,</code><code class="w"> </code><code class="n">server_socket</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w">  </code><code class="c1">// code that uses `req`</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Since <code>req</code> and <code>server_socket</code> are now provided by the function, they’re the right “color” for that scope.</p>
+
+<p>Hygiene makes this macro a little wordier to use, but that’s a feature, not a bug: it’s easier to reason about hygienic macros knowing that they can’t mess with local variables behind your back. If you search for an identifier like <code>server_socket</code> in a function, you’ll find all the places where it’s used, including macro calls<a contenteditable="false" data-startref="ix_scopes_ch21" data-type="indexterm" id="id2507"/><a contenteditable="false" data-startref="ix_json_macro_scope" data-type="indexterm" id="id2508"/><a contenteditable="false" data-startref="ix_macros_scope-hyg" data-type="indexterm" id="id2509"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Importing and Exporting Macros"><div class="sect2" id="importing-and-exporting-macros">
+<h2>Importing and Exporting Macros</h2>
+
+<p>Since macros<a contenteditable="false" data-primary="macros" data-secondary="importing and exporting" data-type="indexterm" id="ix_macros_import"/><a contenteditable="false" data-primary="json! macro" data-secondary="importing and exporting" data-type="indexterm" id="ix_json_macro_import"/> are expanded early in compilation, before Rust knows the full module structure of your project, the rules for their scope and for importing and exporting them are a bit unusual.</p>
+
+<p>By default, a macro is visible from the point of its declaration to the end of the enclosing scope. To declare a macro in one module and access it from other modules within the same crate, declare a <code>pub(crate)</code> alias for the macro:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-pub-crate">
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">ping</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">pub</code><code class="p">(</code><code class="k">crate</code><code class="p">)</code><code class="w"> </code><code class="k">use</code><code class="w"> </code><code class="n">ping</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p><span data-claim-test="macros-pub-crate-importing">Other modules can then use the macro just like any other <code>pub(crate)</code> feature of that module. If the above code is in the <code>sonar</code> module, in another module you can write <code>use crate::sonar::ping;</code> to import it, then call <code>ping!()</code>.</span> <span data-claim-test="macros-pub-crate-qualified">Or, if you prefer, you can use the macro without importing it by writing out its full path: <code>crate::sonar::ping!()</code>.</span></p>
+
+<p>Importing a macro from another crate works much the same way. You can write <code>use tokio::select;</code> to import the <code>select!</code> macro from the <code>tokio</code> crate, or use <code>tokio::select! {...}</code> directly.</p>
+
+<p>To export a macro, mark its definition with the <code>#[macro_export]</code> attribute:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-export">
+<code class="sd">/// ...documentation for `select!` macro...</code>
+<code class="cp">#[macro_export]</code><code class="w"/>
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">select</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This causes the macro to be exported from your crate’s root module, regardless of where the macro is defined. For example, Tokio’s <code>select!</code> macro is defined in the file <em>src/macros/select.rs</em>, but it is nonetheless exported as <code>tokio::select!</code>, not <code>tokio::macros::select::select!</code>.</p>
+
+<p>If you do want to export a macro from a submodule of your crate, it’s possible, but it requires a slightly ugly hack. First export the macro from the crate root, but undocumented, with an obscure name. Then, in the same file, declare a public alias for the macro with <code>pub use</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-macros-export-hack">
+<code class="cp">#[doc(hidden)]</code><code class="w"/>
+<code class="cp">#[macro_export]</code><code class="w"/>
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">_secret_macro_sweep</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="sd">/// ...documentation for `sweep!`...</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">use</code><code class="w"> </code><code class="n">_secret_macro_sweep</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="n">sweep</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>If this code is in <em>src/monsters/broom.rs</em>, and <code>monsters</code> and <code>monsters::broom</code> are both public, then the macro is accessible <span data-claim-test="macros-export-hack-outside">from outside the crate as <code>my_crate_name::monsters::broom::sweep!</code></span> and <span data-claim-test="macros-export-hack-inside">inside the crate as <code>crate::monsters::broom::sweep!</code></span>.</p>
+
+<p>Of course, exporting a module means it can be expanded within user code that you don’t control. A macro therefore shouldn’t rely on anything being in scope—there’s no telling what will be in scope where it’s used. Even features of the standard prelude can be shadowed.</p>
+
+<p>Instead, the macro should use absolute paths to any names it uses. <code>macro_rules!</code> <span class="keep-together">provides</span> the special<a contenteditable="false" data-primary="crates" data-secondary="$crate fragment versus crate keyword" data-type="indexterm" id="id2510"/> fragment <code>$crate</code> to help with this. This is not the same as <code>crate</code>, which is a keyword that can be used in paths anywhere, not just in macros. <code>$crate</code> acts like an absolute path to the root module of the crate where the macro was defined. Instead of <code>Json</code>, we can write <code>$crate::Json</code>, which works even <span class="keep-together">if <code>Json</code></span> was not imported. <code>HashMap</code> can be changed to either <code>::std::collections::HashMap</code> or <code>$crate::macros::HashMap</code>. In the latter case, we’ll have to re-export <code>HashMap</code>, because <code>$crate</code> can’t be used to access private features of a crate. It really just expands to something like <code>::jsonlib</code>, an ordinary path. Visibility rules are unaffected.</p>
+
+<p>After moving the macro to its own module <code>macros</code> and modifying it to use <code>$crate</code>, it looks like this. This is the final version:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-json-macro-final">
+<code class="c1">// macros.rs</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">boxed</code><code class="p">::</code><code class="nb">Box</code><code class="p">;</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">collections</code><code class="p">::</code><code class="n">HashMap</code><code class="p">;</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">string</code><code class="p">::</code><code class="nb">ToString</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[macro_export]</code><code class="w"/>
+<code class="fm">macro_rules!</code><code class="w"> </code><code class="n">json</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="n">null</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="cp">$crate</code><code class="p">::</code><code class="n">Json</code><code class="p">::</code><code class="n">Null</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">([</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$element</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="cp">$crate</code><code class="p">::</code><code class="n">Json</code><code class="p">::</code><code class="n">Array</code><code class="p">(</code><code class="fm">vec!</code><code class="p">[</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$crate</code><code class="p">::</code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="cp">$element</code><code class="p">)</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">])</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">({</code><code class="w"> </code><code class="cp">$(</code><code class="w"> </code><code class="cp">$key</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">:</code><code class="w"> </code><code class="cp">$value</code><code class="p">:</code><code class="nc">tt</code><code class="w"> </code><code class="p">),</code><code class="o">*</code><code class="w"> </code><code class="p">})</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">fields</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="cp">$crate</code><code class="p">::</code><code class="n">macros</code><code class="p">::</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="w"/>
+<code class="w">                </code><code class="cp">$crate</code><code class="p">::</code><code class="n">macros</code><code class="p">::</code><code class="n">HashMap</code><code class="p">::</code><code class="n">new</code><code class="p">());</code><code class="w"/>
+<code class="w">            </code><code class="cp">$(</code><code class="w"/>
+<code class="w">                </code><code class="n">fields</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="w"/>
+<code class="w">                    </code><code class="cp">$crate</code><code class="p">::</code><code class="n">macros</code><code class="p">::</code><code class="nb">ToString</code><code class="p">::</code><code class="n">to_string</code><code class="p">(</code><code class="cp">$key</code><code class="p">),</code><code class="w"/>
+<code class="w">                    </code><code class="cp">$crate</code><code class="p">::</code><code class="n">json</code><code class="o">!</code><code class="p">(</code><code class="cp">$value</code><code class="p">),</code><code class="w"/>
+<code class="w">                </code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="p">)</code><code class="o">*</code><code class="w"/>
+<code class="w">            </code><code class="cp">$crate</code><code class="p">::</code><code class="n">Json</code><code class="p">::</code><code class="n">Object</code><code class="p">(</code><code class="n">fields</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="cp">$other</code><code class="p">:</code><code class="nc">tt</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="cp">$crate</code><code class="p">::</code><code class="n">Json</code><code class="p">::</code><code class="n">from</code><code class="p">(</code><code class="cp">$other</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Since the <code>.to_string()</code> method is part of the standard <code>ToString</code> trait, we use <code>$crate</code> to refer to that as well, using syntax we introduced in <a data-type="xref" href="ch11.html#fully-qualified-method-calls">“Fully Qualified Method Calls”</a>: <code>$crate::macros::ToString::to_string($key)</code>. In our case, this isn’t strictly necessary to make the macro work, because <code>ToString</code> is in the standard prelude. But if you’re calling methods of a trait that may not be in scope at the point where the macro is called, a fully qualified method call is the best way to do it<a contenteditable="false" data-startref="ix_json_macro_import" data-type="indexterm" id="id2511"/><a contenteditable="false" data-startref="ix_macros_import" data-type="indexterm" id="id2512"/><a contenteditable="false" data-startref="ix_json_macro" data-type="indexterm" id="id2513"/><a contenteditable="false" data-startref="ix_macros_json" data-type="indexterm" id="id2514"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Beyond macro_rules!"><div class="sect1" id="beyond-macro_rules">
+<h1>Beyond macro_rules!</h1>
+
+<p>Macro patterns can parse input that’s even more intricate than JSON, but the complexity quickly gets out of hand. As an alternative, Rust offers <em>procedural macros</em>, a more general mechanism for expanding code at build time<a contenteditable="false" data-primary="macros" data-secondary="procedural" data-type="indexterm" id="id2515"/><a contenteditable="false" data-primary="procedural macros" data-type="indexterm" id="id2516"/>. Procedural macros can’t use <code>macro_rules!</code> pattern-matching. They are more like extensions to the compiler. Each one is implemented as a regular Rust function, operating on Rust tokens, and the compiler calls the function each time it needs to expand the macro.</p>
+
+<p>Any <code>macro_rules!</code> macro could be implemented as a procedural macro, but procedural macros can also do things that <code>macro_rules!</code> can’t, like access files and the network at build time. For example, the <code>diesel</code> database library uses procedural macros to connect to a database and generate code based on the schema of that database at compile time. Procedural macros can also extend the Rust language in two ways that <code>macro_rules!</code> can’t. They can extend the <code>#[derive]</code> attribute, as we’ve seen with <code>#[derive(serde::Serialize)]</code>. They can also be used to implement custom attributes like <code>#[tokio::test]</code>.</p>
+
+<p>The details are beyond the scope of this book. To get started, see the documentation and examples for <a href="https://docs.rs/syn/latest/syn/index.html">the <code>syn</code> crate</a>.</p>
+
+<p>If your code generation needs outgrow macros, you can use a build script instead. The <a href="https://oreil.ly/42irF">Cargo documentation</a> shows how. It involves writing a program that generates the Rust code you want, adding a line to <em>Cargo.toml</em> to run that program as part of the build process, and using <code>include!</code> to get the generated code into your crate.<a contenteditable="false" data-startref="ix_macros_ch21" data-type="indexterm" id="id2517"/></p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

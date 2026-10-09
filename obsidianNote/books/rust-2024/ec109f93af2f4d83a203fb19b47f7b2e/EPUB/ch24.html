@@ -1,0 +1,1204 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch24.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 24. Foreign Functions">
+        <div class="chapter" id="foreign-functions">
+<h1><span class="label">Chapter 24. </span>Foreign Functions</h1>
+
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id2626"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the twenty-fourth chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>Cyberspace. Unthinkable complexity. Lines of light ranged in the non-space of the mind, clusters and constellations of data. Like city lights, receding . . .</p>
+
+<p data-type="attribution">William Gibson, <em>Neuromancer</em></p>
+</blockquote>
+
+<p>Tragically<a contenteditable="false" data-primary="foreign functions" data-type="indexterm" id="ix_foreign_functions_ch23"/>, not every program in the world is written in Rust. There are many critical libraries and interfaces implemented in other languages that we would like to be able to use in our Rust programs. Rust’s <em>foreign function interface</em> (FFI) lets Rust code call functions written in C, and in some cases C‍++. Since most operating systems offer C interfaces, Rust’s foreign function interface allows immediate access to all sorts of low-level facilities.</p>
+
+<p>In this chapter, we’ll write a program that links<a contenteditable="false" data-primary="libgit2" data-type="indexterm" id="id2627"/> with <code>libgit2</code>, a C library for working with the Git version control system. First, we’ll show what it’s like to use C functions directly from Rust, using the unsafe features demonstrated in the previous chapter. Then, we’ll show how to construct a safe interface to <code>libgit2</code>, taking inspiration from the open source <code>git2-rs</code> crate<a contenteditable="false" data-primary="git2-rs crate" data-type="indexterm" id="id2628"/>.</p>
+
+<p>We’ll assume that you’re familiar with C and the mechanics of compiling and linking C programs. Working with C‍++ is similar. We’ll also assume that you’re somewhat familiar with the Git version control system.</p>
+
+<p>There do exist Rust crates for communicating with many other languages, including Python, JavaScript, Lua, and Java. We don’t have room to cover them here, but ultimately, all these interfaces are built using the C foreign function interface, so this chapter should give you a head start no matter which language you need to work with.</p>
+
+<section data-type="sect1" data-pdf-bookmark="Finding Common Data Representations"><div class="sect1" id="finding-common-data-representations">
+<h1>Finding Common Data Representations</h1>
+
+<p>The common denominator of Rust and C is machine language<a contenteditable="false" data-primary="machine language" data-type="indexterm" id="id2629"/>, so in order to anticipate what Rust values look like to C code, or vice versa, you need to consider their machine-level representations. Throughout the book, we’ve made a point of showing how values are actually represented in memory, so you’ve probably noticed that the data worlds of C and Rust have a lot in common: a Rust <code>usize</code> and a C <code>size_t</code> are identical, for example, and structs are fundamentally the same idea in both languages. To establish a correspondence between Rust and C types, we’ll start with primitives and then work our way up to more complicated types.</p>
+
+<p>Given<a contenteditable="false" data-primary="foreign functions" data-secondary="finding common data representations" data-type="indexterm" id="ix_foreign_functions_data_reps"/><a contenteditable="false" data-primary="C" data-secondary="type representations" data-type="indexterm" id="ix_c_type_reps"/> its primary use as a systems programming language, C has always been surprisingly loose about its types’ representations<a contenteditable="false" data-primary="integers" data-secondary="Rust and C type commonalities" data-type="indexterm" id="id2630"/>: an <code>int</code> is typically 32 bits long, but could be longer, or as short as 16 bits; a C <code>char</code> may be signed or unsigned; and so on. To cope with this variability, Rust’s <code>std::ffi</code> module<a contenteditable="false" data-primary="raw module" data-type="indexterm" id="id2631"/> defines a set of Rust types that are guaranteed to have the same representation as certain C types (<a data-type="xref" href="#table2301">Table 24-1</a>). These cover the primitive integer and character types.</p>
+
+<table id="table2301">
+	<caption><span class="label">Table 24-1. </span><code>std::ffi</code> types in Rust</caption>
+	<thead>
+		<tr class="header">
+			<th style="text-align: left;">C type</th>
+			<th style="text-align: left;">Corresponding <code>std::ffi type</code></th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td style="text-align: left;"><code>short</code></td>
+			<td style="text-align: left;"><code>c_short</code></td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>int</code></td>
+			<td style="text-align: left;"><code>c_int</code></td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>long</code></td>
+			<td style="text-align: left;"><code>c_long</code></td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>long long</code></td>
+			<td style="text-align: left;"><code>c_longlong</code></td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>unsigned short</code></td>
+			<td style="text-align: left;"><code>c_ushort</code></td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>unsigned</code>, <code>unsigned int</code></td>
+			<td style="text-align: left;"><code>c_uint</code></td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>unsigned long</code></td>
+			<td style="text-align: left;"><code>c_ulong</code></td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>unsigned long long</code></td>
+			<td style="text-align: left;"><code>c_ulonglong</code></td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>char</code></td>
+			<td style="text-align: left;"><code>c_char</code></td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>signed char</code></td>
+			<td style="text-align: left;"><code>c_schar</code></td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>unsigned char</code></td>
+			<td style="text-align: left;"><code>c_uchar</code></td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>float</code></td>
+			<td style="text-align: left;"><code>c_float</code></td>
+		</tr>
+		<tr class="odd">
+			<td style="text-align: left;"><code>double</code></td>
+			<td style="text-align: left;"><code>c_double</code></td>
+		</tr>
+		<tr class="even">
+			<td style="text-align: left;"><code>void *</code>, <code>const void *</code></td>
+			<td style="text-align: left;"><code>*mut c_void</code>, <code>*const c_void</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Some notes about <a data-type="xref" href="#table2301">Table 24-1</a>:</p>
+
+<ul>
+	<li>
+	<p>Except for <code>c_void</code>, all the Rust types here are aliases for some primitive Rust type: <code>c_char</code>, for example, is either <code>i8</code> or <code>u8</code>.</p>
+	</li>
+	<li>
+	<p>A Rust <code>bool</code> is equivalent to a C or C‍++ <code>bool</code>.</p>
+	</li>
+	<li>
+	<p>Rust’s 32-bit <code>char</code> type is not the analogue of <code>wchar_t</code><a contenteditable="false" data-primary="characters (char)" data-secondary="Rust and C type commonalities" data-type="indexterm" id="id2632"/>, whose width and encoding vary from one implementation to another. C’s <code>char32_t</code> type is closer, but its encoding is still not guaranteed to be Unicode.</p>
+	</li>
+	<li>
+	<p>Rust’s primitive <code>usize</code> and <code>isize</code> types have the same representations as C’s <code>size_t</code> and <code>ptrdiff_t</code>.</p>
+	</li>
+	<li>
+	<p>C and C‍++ pointers and C‍++ references correspond to Rust’s raw pointer types, <code>*mut T</code> and <code>*const T</code>.</p>
+	</li>
+	<li>
+	<p>Technically, the C standard permits implementations to use representations for which Rust has no corresponding type: 36-bit integers, sign-and-magnitude representations for signed values, and so on. In practice, on every platform Rust has been ported to, every common C integer type has a match in Rust.</p>
+	</li>
+</ul>
+
+<p>For defining Rust struct types compatible with C structs, you can use the <code>#[repr(C)]</code> attribute<a contenteditable="false" data-primary="#[repr(C)] attribute" data-primary-sortas="repr(C) attribute" data-type="indexterm" id="id2633"/><a contenteditable="false" data-primary="#[repr(C)] attribute" data-type="indexterm" id="id2634"/>. Placing <code>#[repr(C)]</code> above a struct definition asks Rust to lay out the struct’s fields in memory the same way a C compiler would lay out the analogous C struct type. For example, <code>libgit2</code>’s <em>git2/errors.h</em> header file defines the following C struct to provide details about a previously reported error:</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-ffi-0">
+<code class="k">typedef</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kt">char</code><code class="w"> </code><code class="o">*</code><code class="n">message</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kt">int</code><code class="w"> </code><code class="n">klass</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"> </code><code class="n">git_error</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>You can define a Rust type with an identical representation as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-1">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::{</code><code class="n">c_char</code><code class="p">,</code><code class="w"> </code><code class="n">c_int</code><code class="p">};</code><code class="w"/>
+
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">klass</code><code class="p">:</code><code class="w"> </code><code class="nc">c_int</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>#[repr(C)]</code> attribute affects only the layout of the struct itself, not the representations of its individual fields, so to match the C struct, each field must use the C-like type as well: <code>*const c_char</code> for <code>char *</code>, <code>c_int</code> for <code>int</code>, and so on.</p>
+
+<p>In this particular case, the <code>#[repr(C)]</code> attribute probably doesn’t change the layout of <code>git_error</code>. There really aren’t too many interesting ways to lay out a pointer and an integer. But whereas C and C‍++ guarantee that a structure’s members appear in memory in the order they’re declared, each at a distinct address, Rust reorders fields to minimize the overall size of the struct, and zero-sized types take up no space. The <code>#[repr(C)]</code> attribute tells Rust to follow C’s rules for the given type.</p>
+
+<p>You can also use <code>#[repr(C)]</code> to declare C-compatible enums, but it’s not recommended:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-enum-danger">
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="cp">#[allow(non_camel_case_types)]</code><code class="w"/>
+<code class="k">enum</code><code class="w"> </code><code class="nc">git_error_code</code><code class="w"> </code><code class="p">{</code><code class="w">  </code><code class="c1">// NOT recommended</code>
+<code class="w">    </code><code class="n">GIT_OK</code><code class="w">         </code><code class="o">=</code><code class="w">  </code><code class="mi">0</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">GIT_ERROR</code><code class="w">      </code><code class="o">=</code><code class="w"> </code><code class="o">-</code><code class="mi">1</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">GIT_ENOTFOUND</code><code class="w">  </code><code class="o">=</code><code class="w"> </code><code class="o">-</code><code class="mi">3</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">GIT_EEXISTS</code><code class="w">    </code><code class="o">=</code><code class="w"> </code><code class="o">-</code><code class="mi">4</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is dangerous, because Rust is strict about enum values, and C is not. In C, there’s nothing wrong with having a <code>git_error_code</code> whose value is 1, or 2, or 300000, whether those values are listed in the definition of <code>enum git_error_code</code> or not. In Rust, an enum whose value doesn’t match one of the variants in the <code>enum</code> declaration is invalid. Returning such a value from C code to Rust is undefined behavior. (Feeding an invalid enum value to a <code>match</code> expression is especially likely to go off the rails. This happens implicitly in derived <code>Debug</code> implementations. But creating the invalid value in Rust at all is what invalidates <code>rustc</code>’s assumptions; nothing can make that safe.)</p>
+
+<p>The safe alternative is to declare <code>git_error_code</code> to be an alias for <code>c_int</code>, and declare the enumerators as constants:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-enum-as-int">
+<code class="k">type</code><code class="w"> </code><code class="nc">git_error_code</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">c_int</code><code class="p">;</code><code class="w"/>
+
+<code class="k">const</code><code class="w"> </code><code class="n">GIT_OK</code><code class="p">:</code><code class="w"> </code><code class="nc">git_error_code</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="k">const</code><code class="w"> </code><code class="n">GIT_ERROR</code><code class="p">:</code><code class="w"> </code><code class="nc">git_error_code</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">-</code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>Bindgen applies this workaround automatically.</p>
+
+<p>As long as the behavior of the code on the other side of the FFI boundary is well-understood, it’s possible to pass even complex values back and forth.</p>
+
+<p>Passing<a contenteditable="false" data-primary="C" data-secondary="passing strings between Rust and" data-type="indexterm" id="id2635"/><a contenteditable="false" data-primary="strings and text" data-secondary="passing between Rust and C" data-type="indexterm" id="id2636"/> strings between Rust and C is a little harder. C represents a string as a pointer to an array of characters, terminated by a null character. Rust, on the other hand, stores the length of a string explicitly, either as a field of a <code>String</code> or as the second word of a fat reference <code>&amp;str</code>. Rust strings are not null-terminated; in fact, they may include null characters in their contents, like any other character.</p>
+
+<p>This means that you can’t borrow a Rust string as a C string: if you pass C code a pointer into a Rust string, it could mistake an embedded null character for the end of the string or run off the end looking for a terminating null that isn’t there. Going the other direction, you may be able to borrow a C string as a Rust <code>&amp;str</code>, as long as its contents are well-formed UTF-8.</p>
+
+<p>This situation effectively forces Rust to treat C strings as types entirely distinct from <code>String</code> and <code>&amp;str</code>. In the <code>std::ffi</code> module, the <code>CString</code> and <code>CStr</code> types represent owned and borrowed null-terminated arrays of bytes. Compared to <code>String</code> and <code>str</code>, the methods on <code>CString</code> and <code>CStr</code> are quite limited, restricted to construction and conversion to other types. We’ll show these types in action in the next section<a contenteditable="false" data-startref="ix_c_type_reps" data-type="indexterm" id="id2637"/><a contenteditable="false" data-startref="ix_foreign_functions_data_reps" data-type="indexterm" id="id2638"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Declaring Foreign Functions and Variables"><div class="sect1" id="declaring-foreign-functions-and-variables">
+<h1>Declaring Foreign Functions and Variables</h1>
+
+<p>An <code>extern</code> block<a contenteditable="false" data-primary="extern block" data-type="indexterm" id="ix_extern_block"/><a contenteditable="false" data-primary="blocks" data-secondary="extern block" data-type="indexterm" id="ix_blocks_extern"/> declares<a contenteditable="false" data-primary="declarations" data-type="indexterm" id="ix_declarations"/> functions<a contenteditable="false" data-primary="variables" data-secondary="declaring from foreign libraries" data-type="indexterm" id="ix_var_foreign_functions_decl"/><a contenteditable="false" data-primary="foreign functions" data-secondary="declaring foreign functions and variables" data-type="indexterm" id="ix_foreign_functions_decl_var"/> or variables defined in some other library that the final Rust executable will be linked with. For example, on most platforms, every Rust program is linked against the standard C library, so we can tell Rust about the C library’s <code>strlen</code> function like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-5">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">c_char</code><code class="p">;</code><code class="w"/>
+
+<code class="k">unsafe</code><code class="w"> </code><code class="k">extern</code><code class="w"> </code><code class="s">"C"</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">strlen</code><code class="p">(</code><code class="n">s</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">usize</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This gives Rust the function’s name and type, while leaving the definition to be linked in later.</p>
+
+<p>Rust assumes that functions declared inside <code>unsafe extern "C"</code> blocks use C conventions for passing arguments and accepting return values. They are defined as <code>unsafe</code> functions. These are the right choices for <code>strlen</code>: it is indeed a C function, and its specification in C requires that you pass it a valid pointer to a properly terminated string, which is a contract that Rust cannot enforce. (Almost any function that takes a raw pointer must be <code>unsafe</code>: safe Rust can construct raw pointers from arbitrary integers, and dereferencing such a pointer would be undefined behavior.)</p>
+
+<p>With this <code>extern</code> block, we can call <code>strlen</code> like any other Rust function, although its type gives it away as a tourist:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-6">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">CString</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">rust_str</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"I'll be back"</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">null_terminated</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">CString</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">rust_str</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">strlen</code><code class="p">(</code><code class="n">null_terminated</code><code class="p">.</code><code class="n">as_ptr</code><code class="p">()),</code><code class="w"> </code><code class="mi">12</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>CString::new</code> function builds a null-terminated C string. It first checks its argument for embedded null characters, since those cannot be represented in a C string, and returns an error if it finds any (hence the need to <code>unwrap</code> the result). Otherwise, it adds a null byte to the end and returns a <code>CString</code> owning the resulting characters.</p>
+
+<p>The cost of <code>CString::new</code> depends on what type you pass it. It accepts anything that implements <code>Into&lt;Vec&lt;u8&gt;&gt;</code>. Passing a <code>&amp;str</code> entails an allocation and a copy, as the conversion to <code>Vec&lt;u8&gt;</code> builds a heap-allocated copy of the string for the vector to own. But passing a <code>String</code> by value simply consumes the string and takes over its buffer, so unless appending the null character forces the buffer to be resized, the conversion requires no copying of text or allocation at all. Like <code>&amp;[u8]</code> and <code>&amp;str</code>, <code>&amp;CStr</code> can be written as a literal, like <code>c"Hello, world."</code>.</p>
+
+<p><code>CString</code> dereferences to <code>CStr</code>, whose <code>as_ptr</code> method returns a <code>*const c_char</code> pointing at the start of the string. This is the type that <code>strlen</code> expects. In the example, <code>strlen</code> runs down the string, finds the null character that <code>CString::new</code> placed there, and returns the length, as a byte count.</p>
+
+<p>You can also declare global variables in <code>extern</code> blocks. POSIX systems have a global variable named <code>environ</code> that holds the values of the process’s environment variables. In C, it’s declared:</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-ffi-7">
+<code class="k">extern</code><code class="w"> </code><code class="kt">char</code><code class="w"> </code><code class="o">**</code><code class="n">environ</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>In Rust, you would say:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-8">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::{</code><code class="n">CStr</code><code class="p">,</code><code class="w"> </code><code class="n">c_char</code><code class="p">};</code><code class="w"/>
+
+<code class="k">unsafe</code><code class="w"> </code><code class="k">extern</code><code class="w"> </code><code class="s">"C"</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">static</code><code class="w"> </code><code class="n">environ</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">c_char</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>To print the environment’s first element, you could write:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-9">
+<code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="n">environ</code><code class="p">.</code><code class="n">is_null</code><code class="p">()</code><code class="w"> </code><code class="o">&amp;&amp;</code><code class="w"> </code><code class="o">!</code><code class="p">(</code><code class="o">*</code><code class="n">environ</code><code class="p">).</code><code class="n">is_null</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">var</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">CStr</code><code class="p">::</code><code class="n">from_ptr</code><code class="p">(</code><code class="o">*</code><code class="n">environ</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"first environment variable: {}"</code><code class="p">,</code><code class="w"> </code><code class="n">var</code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>After making sure <code>environ</code> has a first element, the code calls <code>CStr::from_ptr</code> to build a <code>CStr</code> that borrows it. The <code>to_string_lossy</code> method returns a <code>Cow&lt;str&gt;</code>: if the C string contains well-formed UTF-8, the <code>Cow</code> borrows its content as a <code>&amp;str</code>, not including the terminating null byte. Otherwise, <code>to_string_lossy</code> makes a copy of the text in the heap, replaces the ill-formed UTF-8 sequences with the official Unicode replacement character, <code>�</code>, and builds an owning <code>Cow</code> from that. Either way, the result implements <code>Display</code>, so you can print it with the <code>{}</code> format parameter<a contenteditable="false" data-startref="ix_foreign_functions_decl_var" data-type="indexterm" id="id2639"/><a contenteditable="false" data-startref="ix_var_foreign_functions_decl" data-type="indexterm" id="id2640"/><a contenteditable="false" data-startref="ix_blocks_extern" data-type="indexterm" id="id2641"/><a contenteditable="false" data-startref="ix_extern_block" data-type="indexterm" id="id2642"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Using Functions from Libraries"><div class="sect1" id="using-functions-from-libraries">
+<h1>Using Functions from Libraries</h1>
+
+<p>To use functions<a contenteditable="false" data-primary="foreign functions" data-secondary="from libraries" data-secondary-sortas="libraries" data-type="indexterm" id="ix_foreign_functions_lib"/> provided by a particular library<a contenteditable="false" data-primary="libraries" data-secondary="foreign functions from" data-type="indexterm" id="ix_lib_for_function"/>, you can place a <code>#[link]</code> attribute<a contenteditable="false" data-primary="#[link] attribute" data-primary-sortas="link attribute" data-type="indexterm" id="id2643"/><a contenteditable="false" data-primary="#[link] attribute" data-type="indexterm" id="id2644"/> atop the <code>extern</code> block that names the library Rust should link the executable with. For example, here’s a program that calls <code>libgit2</code>’s initialization<a contenteditable="false" data-primary="libgit2" data-type="indexterm" id="ix_libgit2_gen"/> and shutdown methods, but does nothing else:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-10">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">c_int</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[link(name = </code><code class="s">"git2"</code><code class="cp">)]</code><code class="w"/>
+<code class="k">unsafe</code><code class="w"> </code><code class="k">extern</code><code class="w"> </code><code class="s">"C"</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_libgit2_init</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_libgit2_shutdown</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">git_libgit2_init</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="n">git_libgit2_shutdown</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>unsafe extern "C"</code> block declares the extern functions as before. The <code>#[link(name = "git2")]</code> attribute leaves a note in the crate to the effect that, when Rust creates the final executable or shared library, it should link against the <code>git2</code> library. Rust uses the system linker to build executables; on Unix, this passes the argument <code>-lgit2</code> on the linker command line; on Windows, it passes <code>git2.LIB</code>.</p>
+
+<p><code>#[link]</code> attributes work in library crates, too. When you build a program that depends on other crates, Cargo gathers together the link notes from the entire dependency graph and includes them all in the final link.</p>
+
+<p>In this example, if you would like to follow along on your own machine, you’ll need to build <code>libgit2</code> for yourself. We used <a href="https://oreil.ly/T1dPr"><code>libgit2</code></a> version 1.8.1. To compile <code>libgit2</code>, you will need to install the CMake build tool and the Python language; we used <a href="https://cmake.org">CMake</a> version 3.28.3 and <a href="https://www.python.org">Python</a> version 3.12.3.</p>
+
+<p>The full instructions for building <code>libgit2</code> are available on its website, but they’re simple enough that we’ll show the essentials here. On Linux, assume you’ve already unzipped the library’s source into the directory <em>/home/jimb/libgit2-1.8.1</em>:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>/home/jimb/libgit2-1.8.1<code class="w"/>
+<code class="gp">$ </code>mkdir<code class="w"> </code>build<code class="w"/>
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>build<code class="w"/>
+<code class="gp">$ </code>cmake<code class="w"> </code>..<code class="w"/>
+<code class="gp">$ </code>cmake<code class="w"> </code>--build<code class="w"> </code>.<code class="w"/>
+</pre>
+
+<p>On Linux<a contenteditable="false" data-primary="Linux" data-secondary="using functions from libraries" data-type="indexterm" id="id2645"/>, this produces a shared library <em>/home/jimb/libgit2-1.8.1/build/libgit2.so​.⁠1.8.1</em> with the usual nest of symlinks pointing to it, including one named <em>libgit2.so</em>. On macOS<a contenteditable="false" data-primary="macOS" data-secondary="using functions from libraries" data-type="indexterm" id="id2646"/>, the results are similar, but the library is named <em>libgit2.dylib</em>.</p>
+
+<p>On Windows<a contenteditable="false" data-primary="Windows" data-secondary="using functions from libraries" data-type="indexterm" id="id2647"/>, things are also straightforward. Assume you’ve unzipped the source into the directory <em>C:\Users\JimB\libgit2-1.8.1</em>. In a Visual Studio command prompt:</p>
+
+<pre class="doscon" data-code-language="doscon" data-type="programlisting">
+<code class="gp">&gt;</code> <code class="k">cd</code> C:\Users\JimB\libgit2-1.8.1
+<code class="gp">&gt;</code> <code class="k">mkdir</code> build
+<code class="gp">&gt;</code> <code class="k">cd</code> build
+<code class="gp">&gt;</code> cmake -A x64 ..
+<code class="gp">&gt;</code> cmake --build .
+</pre>
+
+<p>These are the same commands as used on Linux, except that you must request a 64-bit build when you run CMake the first time to match your Rust compiler. (If you have installed the 32-bit Rust toolchain, then you should omit the <code>-A x64</code> flag to the first <code>cmake</code> command.) This produces an import library <em>git2.LIB</em> and a dynamic-link library <em>git2.DLL</em>, both in the directory <em>C:\Users\JimB\libgit2-1.8.1\build\Debug</em>. (The remaining instructions are shown for Unix, except where Windows is substantially different.)</p>
+
+<p>Create the Rust program in a separate directory:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>/home/jimb<code class="w"/>
+<code class="gp">$ </code>cargo<code class="w"> </code>new<code class="w"> </code>--bin<code class="w"> </code>git-toy<code class="w"/>
+<code class="go">    Creating binary (application) `git-toy` package</code>
+</pre>
+
+<p>Take the code shown earlier and put it in <em>src/main.rs</em>. Naturally, if you try to build this, Rust has no idea where to find the <code>libgit2</code> you built:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>git-toy<code class="w"/>
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"/>
+<code class="go">   Compiling git-toy v0.1.0 (/home/jimb/git-toy)</code>
+<code class="go">error: linking with `cc` failed: exit status: 1</code>
+<code class="go">  |</code>
+<code class="go">  = note: rust-lld: error: unable to find library -lgit2</code>
+<code class="go">          collect2: error: ld returned 1 exit status</code>
+
+
+<code class="go">error: could not compile `git-toy` (bin "git-toy") due to 1 previous error</code>
+</pre>
+
+<p>You can tell Rust where to search for libraries by writing a build script<a contenteditable="false" data-primary="build script" data-type="indexterm" id="id2648"/> which tells Cargo to add a library search path to the executable’s link command. Cargo parses the build script’s output for information of this sort, so the build script simply needs to print the right magic to its standard output. For more on build scripts in general, see <a data-type="xref" href="ch08.html#build-scripts">“Build Scripts”</a>.</p>
+
+<p>To create your build script, add a file named <em>build.rs</em> in the same directory as the <em>Cargo.toml</em> file, with the following contents:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-11">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">r"cargo:rustc-link-search=native=/home/jimb/libgit2-1.8.1/build"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is the right path for Linux; on Windows, you would change the path following the text <code>native=</code> to <code>C:\Users\JimB\libgit2-1.8.1\build\Debug</code>. (We’re cutting some corners to keep this example simple; in a real application, you should avoid using absolute paths in your build script. We cite documentation that shows how to do it right at the end of this section.)</p>
+
+<p>Now you can almost run the program. On macOS it may work immediately; on a Linux system you will probably see something like the following:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"/>
+<code class="go">   Compiling git-toy v0.1.0 (/home/jimb/git-toy)</code>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s)</code>
+<code class="go">     Running `target/debug/git-toy`</code>
+<code class="go">target/debug/git-toy: error while loading shared libraries:</code>
+<code class="go">libgit2.so.25: cannot open shared object file: No such file or directory</code>
+</pre>
+
+<p>This means that, although Cargo succeeded in linking the executable against the library, it doesn’t know where to find the shared library at run time. Windows reports this failure by popping up a dialog box. On Linux, you must set the <code>LD_LIBRARY_PATH</code> environment variable:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code><code class="nb">export</code><code class="w"> </code><code class="nv">LD_LIBRARY_PATH</code><code class="o">=</code>/home/jimb/libgit2-1.8.1/build:<code class="nv">$LD_LIBRARY_PATH</code><code class="w"/>
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"/>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.0 secs</code>
+<code class="go">     Running `target/debug/git-toy`</code>
+</pre>
+
+<p>On macOS, you may need to set <code>DYLD_LIBRARY_PATH</code> instead.</p>
+
+<p>On Windows, you must set the <code>PATH</code> environment variable:</p>
+
+<pre class="doscon" data-code-language="doscon" data-type="programlisting">
+<code class="gp">&gt;</code> <code class="k">set</code> <code class="nv">PATH</code><code class="p">=</code>C:\Users\JimB\libgit2-1.8.1\build\Debug;<code class="nv">%PATH%</code>
+<code class="gp">&gt;</code> cargo run
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.0 secs</code>
+<code class="go">     Running `target/debug/git-toy`</code>
+<code class="gp">&gt;</code>
+</pre>
+
+<p>Naturally, in a deployed application you’d want to avoid having to set environment variables just to find your library’s code. One alternative is to statically link the C library into your crate. This copies the library’s object files into the crate’s <em>.rlib</em> file, alongside the object files and metadata for the crate’s Rust code. The entire collection then participates in the final link.</p>
+
+<p>It is a Cargo convention that a crate that provides access to a C library should be named <code>LIB-sys</code>, where <code>LIB</code> is the name of the C library. A <code>-sys</code> crate should contain nothing but the statically linked library and Rust modules containing <code>extern</code> blocks and type definitions. Higher-level interfaces then belong in crates that depend on the <code>-sys</code> crate. This allows multiple upstream crates to depend on the same <code>-sys</code> crate, assuming there is a single version of the <code>-sys</code> crate that meets everyone’s needs.</p>
+
+<p>For the full details on Cargo’s support for build scripts and linking with system libraries, see <a href="https://oreil.ly/Rxa1D">the online Cargo documentation</a>. It shows how to avoid absolute paths in build scripts, control compilation flags, use tools like <code>pkg-config</code>, and so on. The <code>git2-rs</code> crate also provides good examples to emulate; its build script handles some complex situations<a contenteditable="false" data-startref="ix_lib_for_function" data-type="indexterm" id="id2649"/><a contenteditable="false" data-startref="ix_libgit2_gen" data-type="indexterm" id="id2650"/><a contenteditable="false" data-startref="ix_foreign_functions_lib" data-type="indexterm" id="id2651"/><a contenteditable="false" data-startref="ix_declarations" data-type="indexterm" id="id2652"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="A Raw Interface to libgit2"><div class="sect1" id="a-raw-interface-to-libgit2">
+<h1>A Raw Interface to libgit2</h1>
+
+<p>Figuring<a contenteditable="false" data-primary="unsafe code" data-secondary="libgit2 raw interface" data-type="indexterm" id="ix_unsafe_code_libgit2"/><a contenteditable="false" data-primary="raw module" data-type="indexterm" id="ix_raw_module"/><a contenteditable="false" data-primary="libgit2" data-secondary="raw interface to" data-type="indexterm" id="ix_libgit2_raw"/><a contenteditable="false" data-primary="foreign functions" data-secondary="raw interface to libgit2" data-type="indexterm" id="ix_for_functions_libgit2_raw"/> out how to use <code>libgit2</code> properly breaks down into two questions:</p>
+
+<ul>
+	<li>
+	<p>What does it take to use <code>libgit2</code> functions in Rust?</p>
+	</li>
+	<li>
+	<p>How can we build a safe Rust interface around them?</p>
+	</li>
+</ul>
+
+<p>We’ll take these questions one at a time. In this section, we’ll write a program that’s essentially a single giant <code>unsafe</code> block filled with nonidiomatic Rust code, reflecting the clash of type systems and conventions that is inherent in mixing languages. We’ll call this the <em>raw</em> interface. The code will be messy, but it will make plain all the steps that must occur for Rust code to use <code>libgit2</code>.</p>
+
+<p>Then, in the next section, we’ll build a safe interface to <code>libgit2</code> that puts Rust’s types to use enforcing the rules <code>libgit2</code> imposes on its users. Fortunately, <code>libgit2</code> is an exceptionally well-designed C library, so the questions that Rust’s safety requirements force us to ask all have pretty good answers, and we can construct an idiomatic Rust interface with no <code>unsafe</code> functions.</p>
+
+<p>The program we’ll write is very simple: it takes a path as a command-line argument, opens the Git repository there, and prints out the head commit. But this is enough to illustrate the key strategies for building safe and idiomatic Rust interfaces.</p>
+
+<p>For the raw interface, the program will end up needing a somewhat larger collection of functions and types from <code>libgit2</code> than we used before, so it makes sense to move the <code>extern</code> block into its own module. We’ll create a file named <em>raw.rs</em> in <em>git-toy/src</em> whose contents are as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-12">
+<code class="cp">#![allow(non_camel_case_types)]</code><code class="w"/>
+
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::{</code><code class="n">c_int</code><code class="p">,</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"> </code><code class="n">c_uchar</code><code class="p">};</code><code class="w"/>
+
+<code class="cp">#[link(name = </code><code class="s">"git2"</code><code class="cp">)]</code><code class="w"/>
+<code class="k">unsafe</code><code class="w"> </code><code class="k">extern</code><code class="w"> </code><code class="s">"C"</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_libgit2_init</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_libgit2_shutdown</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">giterr_last</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">git_error</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_repository_open</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">out</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">git_repository</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">path</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_repository_free</code><code class="p">(</code><code class="n">repo</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">git_repository</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_reference_name_to_id</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">out</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">git_oid</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">repo</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">git_repository</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">reference</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_commit_lookup</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">out</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">git_commit</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">repo</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">git_repository</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">id</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">git_oid</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_commit_author</code><code class="p">(</code><code class="n">commit</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">git_commit</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">git_signature</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_commit_message</code><code class="p">(</code><code class="n">commit</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">git_commit</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_commit_free</code><code class="p">(</code><code class="n">commit</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">git_commit</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_repository</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">_private</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">u8</code><code class="p">;</code><code class="w"> </code><code class="mi">0</code><code class="p">],</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_commit</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">_private</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">u8</code><code class="p">;</code><code class="w"> </code><code class="mi">0</code><code class="p">],</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">klass</code><code class="p">:</code><code class="w"> </code><code class="nc">c_int</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">const</code><code class="w"> </code><code class="n">GIT_OID_RAWSZ</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">20</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_oid</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">id</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="n">c_uchar</code><code class="p">;</code><code class="w"> </code><code class="n">GIT_OID_RAWSZ</code><code class="p">],</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">type</code><code class="w"> </code><code class="nc">git_time_t</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kt">i64</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_time</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">time</code><code class="p">:</code><code class="w"> </code><code class="nc">git_time_t</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">offset</code><code class="p">:</code><code class="w"> </code><code class="nc">c_int</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_signature</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">name</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">email</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">when</code><code class="p">:</code><code class="w"> </code><code class="nc">git_time</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Each item here is modeled on a declaration from <code>libgit2</code>’s own header files. For example, <em>libgit2-1.8.1/include/git2/repository.h</em> includes this declaration:</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-ffi-13">
+<code class="k">extern</code><code class="w"> </code><code class="kt">int</code><code class="w"> </code><code class="nf">git_repository_open</code><code class="p">(</code><code class="n">git_repository</code><code class="w"> </code><code class="o">**</code><code class="n">out</code><code class="p">,</code><code class="w"> </code><code class="k">const</code><code class="w"> </code><code class="kt">char</code><code class="w"> </code><code class="o">*</code><code class="n">path</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This function tries to open the Git repository at <code>path</code>. If all goes well, it creates a <code>git_repository</code> object and stores a pointer to it in the location pointed to by <code>out</code>. The equivalent Rust declaration is the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-15">
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">git_repository_open</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">out</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">git_repository</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">path</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The <code>libgit2</code> public header files define the <code>git_repository</code> type as a typedef for an incomplete struct type:</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-ffi-14">
+<code class="k">typedef</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_repository</code><code class="w"> </code><code class="n">git_repository</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>Since the details of this type are private to the library, the public headers never define <code>struct git_repository</code>, ensuring that the library’s users can never build an instance of this type themselves. One possible analogue to an incomplete struct type in Rust is this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-16">
+<code class="cp">#[repr(C)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">git_repository</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">_private</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">u8</code><code class="p">;</code><code class="w"> </code><code class="mi">0</code><code class="p">],</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is a struct type containing an array with no elements. Since the <code>_private</code> field isn’t <code>pub</code>, values of this type cannot be constructed outside this module, which is perfect as the reflection of a C type that only <code>libgit2</code> should ever construct, and which is manipulated solely through raw pointers.</p>
+
+<p>Writing large <code>extern</code> blocks by hand can be a chore. If you are creating a Rust interface to a complex C library, you may want to try using the <code>bindgen</code> crate<a contenteditable="false" data-primary="bindgen crate" data-type="indexterm" id="id2653"/>, which has functions you can use from your build script to parse C header files and generate the corresponding Rust declarations automatically. We don’t have space to show <code>bindgen</code> in action here, but <a href="https://oreil.ly/sr8rS"><code>bindgen</code>’s page on crates.io</a> includes links to its documentation.</p>
+
+<p>Next we’ll rewrite <em>main.rs</em> completely. First, we need to declare the <code>raw</code> module:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-17">
+<code class="k">mod</code><code class="w"> </code><code class="nn">raw</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>According to <code>libgit2</code>’s conventions, fallible functions return an integer code that is positive or zero on success, and negative on failure. If an error occurs, the <code>giterr_last</code> function will return a pointer to a <code>git_error</code> structure providing more details about what went wrong. <code>libgit2</code> owns this structure, so we don’t need to free it ourselves, but it could be overwritten by the next library call we make. A proper Rust interface would use <code>Result</code>, but for now, we want to use the <code>libgit2</code> functions just as they are, so we’ll roll our own function for handling errors:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-18">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::{</code><code class="n">CStr</code><code class="p">,</code><code class="w"> </code><code class="n">c_int</code><code class="p">};</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">check</code><code class="p">(</code><code class="n">activity</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="nb">static</code><code class="w"> </code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">status</code><code class="p">:</code><code class="w"> </code><code class="nc">c_int</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">c_int</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">status</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">error</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;*</code><code class="n">raw</code><code class="p">::</code><code class="n">giterr_last</code><code class="p">();</code><code class="w"/>
+<code class="w">            </code><code class="fm">println!</code><code class="p">(</code><code class="w"/>
+<code class="w">                </code><code class="s">"error while {activity}: {} ({})"</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="n">CStr</code><code class="p">::</code><code class="n">from_ptr</code><code class="p">(</code><code class="n">error</code><code class="p">.</code><code class="n">message</code><code class="p">).</code><code class="n">to_string_lossy</code><code class="p">(),</code><code class="w"/>
+<code class="w">                </code><code class="n">error</code><code class="p">.</code><code class="n">klass</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="n">std</code><code class="p">::</code><code class="n">process</code><code class="p">::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="n">status</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>We’ll use this function to check the results of <code>libgit2</code> calls like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-19">
+<code class="n">check</code><code class="p">(</code><code class="s">"initializing library"</code><code class="p">,</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_libgit2_init</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>This uses the same <code>CStr</code> methods used earlier: <code>from_ptr</code> to construct the <code>CStr</code> from a C string and <code>to_string_lossy</code> to turn that into something Rust can print.</p>
+
+<p>Next, we need a function to print out a commit:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-20">
+<code class="k">unsafe</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">show_commit</code><code class="p">(</code><code class="n">commit</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// SAFETY: Lifetimes of `name` and `email` are tied to `commit`.</code>
+<code class="w">    </code><code class="c1">// The commit message is cloned and non-UTF-8 data is removed.</code>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">author</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit_author</code><code class="p">(</code><code class="n">commit</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">CStr</code><code class="p">::</code><code class="n">from_ptr</code><code class="p">((</code><code class="o">*</code><code class="n">author</code><code class="p">).</code><code class="n">name</code><code class="p">).</code><code class="n">to_string_lossy</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">email</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">CStr</code><code class="p">::</code><code class="n">from_ptr</code><code class="p">((</code><code class="o">*</code><code class="n">author</code><code class="p">).</code><code class="n">email</code><code class="p">).</code><code class="n">to_string_lossy</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{name} &lt;{email}&gt;</code><code class="se">\n</code><code class="s">"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">message</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit_message</code><code class="p">(</code><code class="n">commit</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="n">CStr</code><code class="p">::</code><code class="n">from_ptr</code><code class="p">(</code><code class="n">message</code><code class="p">).</code><code class="n">to_string_lossy</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Given a pointer to a <code>git_commit</code>, <code>show_commit</code> calls <code>git_commit_author</code> and <code>git_commit_message</code> to retrieve the information it needs. These two functions follow a convention that the <code>libgit2</code> documentation explains as follows:</p>
+
+<blockquote>
+<p>If a function returns an object as a return value, that function is a getter and the object’s lifetime is tied to the parent object.</p>
+</blockquote>
+
+<p>In Rust terms, <code>author</code> and <code>message</code> are borrowed from <code>commit</code>: <code>show_commit</code> doesn’t need to free them itself, but it must not hold on to them after <code>commit</code> is freed. Since this API uses raw pointers, Rust won’t check their lifetimes for us: if we do accidentally create dangling pointers, we probably won’t find out about it until the program crashes.</p>
+
+<p>The preceding code assumes these fields hold UTF-8 text, which is not always correct. Git permits other encodings as well. Interpreting these strings properly would probably entail using the <code>encoding</code> crate. For brevity’s sake, we’ll gloss over those issues here.</p>
+
+<p>Our program’s <code>main</code> function reads as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-21">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">CString</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">mem</code><code class="p">::</code><code class="n">MaybeUninit</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ptr</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">nth</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"usage: git-toy PATH"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">CString</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"path contains null characters"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">check</code><code class="p">(</code><code class="s">"initializing library"</code><code class="p">,</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_libgit2_init</code><code class="p">());</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">repo</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ptr</code><code class="p">::</code><code class="n">null_mut</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="n">check</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="s">"opening repository"</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">raw</code><code class="p">::</code><code class="n">git_repository_open</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">repo</code><code class="p">,</code><code class="w"> </code><code class="n">path</code><code class="p">.</code><code class="n">as_ptr</code><code class="p">()),</code><code class="w"/>
+<code class="w">        </code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">c_name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">c</code><code class="s">"HEAD"</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">oid</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">oid</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">MaybeUninit</code><code class="p">::</code><code class="n">uninit</code><code class="p">();</code><code class="w"/>
+<code class="w">            </code><code class="n">check</code><code class="p">(</code><code class="w"/>
+<code class="w">                </code><code class="s">"looking up HEAD"</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="n">raw</code><code class="p">::</code><code class="n">git_reference_name_to_id</code><code class="p">(</code><code class="n">oid</code><code class="p">.</code><code class="n">as_mut_ptr</code><code class="p">(),</code><code class="w"> </code><code class="n">repo</code><code class="p">,</code><code class="w"> </code><code class="n">c_name</code><code class="p">.</code><code class="n">as_ptr</code><code class="p">()),</code><code class="w"/>
+<code class="w">            </code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="n">oid</code><code class="p">.</code><code class="n">assume_init</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">};</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">commit</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ptr</code><code class="p">::</code><code class="n">null_mut</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="n">check</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="s">"looking up commit"</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit_lookup</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">commit</code><code class="p">,</code><code class="w"> </code><code class="n">repo</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">oid</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="n">show_commit</code><code class="p">(</code><code class="n">commit</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit_free</code><code class="p">(</code><code class="n">commit</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="n">raw</code><code class="p">::</code><code class="n">git_repository_free</code><code class="p">(</code><code class="n">repo</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="n">check</code><code class="p">(</code><code class="s">"shutting down library"</code><code class="p">,</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_libgit2_shutdown</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This starts with code to handle the path argument and initialize the library, all of which we’ve seen before. The first novel code is this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-22">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">repo</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ptr</code><code class="p">::</code><code class="n">null_mut</code><code class="p">();</code><code class="w"/>
+<code class="n">check</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="s">"opening repository"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">raw</code><code class="p">::</code><code class="n">git_repository_open</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">repo</code><code class="p">,</code><code class="w"> </code><code class="n">path</code><code class="p">.</code><code class="n">as_ptr</code><code class="p">()),</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The call to <code>git_repository_open</code> tries to open the Git repository at the given path. If it succeeds, it allocates a new <code>git_repository</code> object for it and sets <code>repo</code> to point to that. Rust implicitly coerces references into raw pointers, so passing <code>&amp;mut repo</code> here provides the <code>*mut *mut git_repository</code> the call expects.</p>
+
+<p>This shows another <code>libgit2</code> convention in use (from the <code>libgit2</code> documentation):</p>
+
+<blockquote>
+<p>Objects which are returned via the first argument as a pointer-to-pointer are owned by the caller and it is responsible for freeing them.</p>
+</blockquote>
+
+<p>In Rust terms, functions like <code>git_repository_open</code> pass ownership of the new value to the caller.</p>
+
+<p>Next, consider the code that looks up the object hash of the repository’s current head commit:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-23">
+<code class="kd">let</code><code class="w"> </code><code class="n">oid</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">oid</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">MaybeUninit</code><code class="p">::</code><code class="n">uninit</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">check</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="s">"looking up HEAD"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">raw</code><code class="p">::</code><code class="n">git_reference_name_to_id</code><code class="p">(</code><code class="n">oid</code><code class="p">.</code><code class="n">as_mut_ptr</code><code class="p">(),</code><code class="w"> </code><code class="n">repo</code><code class="p">,</code><code class="w"> </code><code class="n">c_name</code><code class="p">.</code><code class="n">as_ptr</code><code class="p">()),</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">oid</code><code class="p">.</code><code class="n">assume_init</code><code class="p">()</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>The <code>git_oid</code> type stores an object identifier—a 160-bit hash code that Git uses internally (and throughout its delightful user interface) to identify commits, individual versions of files, and so on. This call to <code>git_reference_name_to_id</code> looks up the object identifier of the current <code>"HEAD"</code> commit.</p>
+
+<p>In C it’s perfectly normal to initialize a variable by passing a pointer to it to some function that fills in its value; this is how <code>git_reference_name_to_id</code> expects to treat its first argument. But Rust won’t let us borrow a reference to an uninitialized variable. We could initialize <code>oid</code> with zeros, but this is a waste: any value stored there will simply be overwritten.</p>
+
+<p>It is possible to ask Rust to give us uninitialized memory, but because reading uninitialized memory at any time is instant undefined behavior, Rust provides an abstraction<a contenteditable="false" data-primary="MaybeUninit type" data-type="indexterm" id="id2654"/>, <code>MaybeUninit</code>, to ease its use. <code>MaybeUninit&lt;T&gt;</code> tells the compiler to set aside enough memory for your type <code>T</code>, but not to touch it until you say that it’s safe to do so. While this memory is owned by the <code>MaybeUninit</code>, the compiler will also avoid certain optimizations that could otherwise cause undefined behavior even without any explicit access to the uninitialized memory in your code.</p>
+
+<p><code>MaybeUninit</code> provides a method, <code>as_mut_ptr()</code>, that produces a <code>*mut T</code> pointing to the potentially uninitialized memory it wraps. By passing that pointer to a foreign function that initializes the memory and then calling the unsafe method <code>assume_init</code> on the <code>MaybeUninit</code> to produce a fully initialized <code>T</code>, you can avoid undefined behavior without the additional overhead that comes from initializing and immediately throwing away a value. <code>assume_init</code> is unsafe because calling it on a <code>MaybeUninit</code> without being certain that the memory is actually initialized will immediately cause undefined behavior.</p>
+
+<p>In this case, it is safe because <code>git_reference_name_to_id</code> initializes the memory owned by the <code>MaybeUninit</code>. We could use <code>MaybeUninit</code> for the <code>repo</code> and <code>commit</code> <span class="keep-together">variables</span> as well, but since these are just single words, we just go ahead and initialize them to null:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-24">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">commit</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ptr</code><code class="p">::</code><code class="n">null_mut</code><code class="p">();</code><code class="w"/>
+<code class="n">check</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="s">"looking up commit"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit_lookup</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">commit</code><code class="p">,</code><code class="w"> </code><code class="n">repo</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">oid</code><code class="p">),</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This takes the commit’s object identifier and looks up the actual commit, storing a <code>git_commit</code> pointer in <code>commit</code> on success.</p>
+
+<p>The remainder of the <code>main</code> function should be self-explanatory. It calls the <code>show_commit</code> function defined earlier, frees the commit and repository objects, and shuts down the library.</p>
+
+<p>Now we can try out the program on any Git repository ready at hand<a contenteditable="false" data-startref="ix_raw_module" data-type="indexterm" id="id2655"/><a contenteditable="false" data-startref="ix_unsafe_code_libgit2" data-type="indexterm" id="id2656"/><a contenteditable="false" data-startref="ix_for_functions_libgit2_raw" data-type="indexterm" id="id2657"/><a contenteditable="false" data-startref="ix_libgit2_raw" data-type="indexterm" id="id2658"/>:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"> </code>/home/jimb/rbattle<code class="w"/>
+<code class="go">    Finished dev [unoptimized + debuginfo] target(s) in 0.0 secs</code>
+<code class="go">     Running `target/debug/git-toy /home/jimb/rbattle`</code>
+<code class="go">Jim Blandy &lt;jimb@red-bean.com&gt;</code>
+
+<code class="go">Animate goop a bit.</code>
+</pre>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="A Safe Interface to libgit2"><div class="sect1" id="a-safe-interface-to-libgit2">
+<h1>A Safe Interface to libgit2</h1>
+
+<p>The raw interface<a contenteditable="false" data-primary="safe interface to libgit2" data-type="indexterm" id="ix_safe_libgit2"/><a contenteditable="false" data-primary="foreign functions" data-secondary="safe interface to libgit2" data-type="indexterm" id="ix_for_functions_safe_libgit2"/><a contenteditable="false" data-primary="libgit2" data-secondary="safe interface to" data-type="indexterm" id="ix_libgit2_safe"/> to <code>libgit2</code> is a perfect example of an unsafe feature: it certainly can be used correctly (as we do here, so far as we know), but Rust can’t enforce the rules you must follow. Designing a safe API for a library like this is a matter of identifying all these rules and then finding ways to turn any violation of them into a type or borrow-checking error.</p>
+
+<p>Here, then, are <code>libgit2</code>’s rules for the features the program uses:</p>
+
+<ul>
+	<li>
+	<p>You must call <code>git_libgit2_init</code> before using any other library function. You must not use any library function after calling <code>git_libgit2_shutdown</code>.</p>
+	</li>
+	<li>
+	<p>All values passed to <code>libgit2</code> functions must be fully initialized, except for output parameters.</p>
+	</li>
+	<li>
+	<p>When a call fails, output parameters passed to hold the results of the call are left uninitialized, and you must not use their values.</p>
+	</li>
+	<li>
+	<p>A <code>git_commit</code> object refers to the <code>git_repository</code> object it is derived from, so the former must not outlive the latter. (This isn’t spelled out in the <code>libgit2</code> documentation; we inferred it from the presence of certain functions in the interface and then verified it by reading the source code.)</p>
+	</li>
+	<li>
+	<p>Similarly, a <code>git_signature</code> is always borrowed from a given <code>git_commit</code>, and the former must not outlive the latter. (The documentation does cover this case.)</p>
+	</li>
+	<li>
+	<p>The message associated with a commit and the name and email address of the author are all borrowed from the commit and must not be used after the commit is freed.</p>
+	</li>
+	<li>
+	<p>Once a <code>libgit2</code> object has been freed, it must never be used again.</p>
+	</li>
+</ul>
+
+<p>As it turns out, you can build a Rust interface to <code>libgit2</code> that enforces all of these rules, either through Rust’s type system or by managing details internally.</p>
+
+<p>Before we get started, let’s restructure the project a little bit. We ⁠’d like to have a <code>git</code> module that exports the safe interface, of which the raw interface from the previous program is a private submodule.</p>
+
+<p>The whole source tree will look like this:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">git-toy/</code>
+<code class="go">├── Cargo.toml</code>
+<code class="go">├── build.rs</code>
+<code class="go">└── src/</code>
+<code class="go">    ├── main.rs</code>
+<code class="go">    └── git/</code>
+<code class="go">        ├── mod.rs</code>
+<code class="go">        └── raw.rs</code>
+</pre>
+
+<p>Following the rules we explained in <a data-type="xref" href="ch08.html#modules-in-separate-files">“Modules in Separate Files”</a>, the source for the <code>git</code> module appears in <em>git/mod.rs</em>, and the source for its <code>git::raw</code> submodule goes in <em>git/raw.rs</em>.</p>
+
+<p>Once again, we’re going to rewrite <em>main.rs</em> completely. It should start with a declaration of the <code>git</code> module:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-25">
+<code class="k">mod</code><code class="w"> </code><code class="nn">git</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>Then, we’ll need to create the <em>git</em> subdirectory and move <em>raw.rs</em> into it:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>/home/jimb/git-toy<code class="w"/>
+<code class="gp">$ </code>mkdir<code class="w"> </code>src/git<code class="w"/>
+<code class="gp">$ </code>mv<code class="w"> </code>src/raw.rs<code class="w"> </code>src/git/raw.rs<code class="w"/>
+</pre>
+
+<p>The <code>git</code> module needs to declare its <code>raw</code> submodule. The file <em>src/git/mod.rs</em> must say:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-26">
+<code class="k">mod</code><code class="w"> </code><code class="nn">raw</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>Since it’s not <code>pub</code>, this submodule is not visible to the main program.</p>
+
+<p>In a bit we’ll need to use some functions from the <code>libc</code> crate, so we must add a dependency in <em>Cargo.toml</em>. The full file now reads:</p>
+
+<pre class="toml" data-code-language="toml" data-type="programlisting">
+<code class="k">[package]</code><code class="w"/>
+<code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"git-toy"</code><code class="w"/>
+<code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.1.0"</code><code class="w"/>
+<code class="n">authors</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"You &lt;you@example.com&gt;"</code><code class="p">]</code><code class="w"/>
+<code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2024"</code><code class="w"/>
+
+<code class="k">[dependencies]</code><code class="w"/>
+<code class="n">libc</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.2.186"</code><code class="w"/>
+</pre>
+
+<p>Now that we’ve restructured our modules, let’s consider error handling. Even <code>libgit2</code>’s initialization function can return an error code, so we’ll need to have this sorted out before we can get started. An idiomatic Rust interface needs its own <code>Error</code> type<a contenteditable="false" data-primary="error handling" data-secondary="unsafe code and" data-type="indexterm" id="id2659"/> that captures the <code>libgit2</code> failure code as well as the error message and class from <code>giterr_last</code>. A proper error type must implement the usual <code>Error</code>, <code>Debug</code>, and <code>Display</code> traits. Then, it needs its own <code>Result</code> type that uses this <code>Error</code> type. Here are the necessary definitions in <em>src/git/mod.rs</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-27">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fmt</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">result</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[derive(Debug)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">code</code><code class="p">:</code><code class="w"> </code><code class="kt">i32</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">class</code><code class="p">:</code><code class="w"> </code><code class="kt">i32</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">fmt</code><code class="p">::</code><code class="n">Display</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">fmt</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">f</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">fmt</code><code class="p">::</code><code class="n">Formatter</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">result</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(),</code><code class="w"> </code><code class="n">fmt</code><code class="p">::</code><code class="n">Error</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// Displaying an `Error` simply displays the message from libgit2.</code>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">message</code><code class="p">.</code><code class="n">fmt</code><code class="p">(</code><code class="n">f</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Error</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">type</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">result</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">Error</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>To check the result from raw library calls, the module needs a function that turns a <code>libgit2</code> return code into a <code>Result</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-28">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::{</code><code class="n">CStr</code><code class="p">,</code><code class="w"> </code><code class="n">c_int</code><code class="p">};</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">check</code><code class="p">(</code><code class="n">code</code><code class="p">:</code><code class="w"> </code><code class="nc">c_int</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">c_int</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">code</code><code class="w"> </code><code class="o">&gt;=</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">code</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">error</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">giterr_last</code><code class="p">();</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// libgit2 ensures that (*error).message is always non-null and null</code>
+<code class="w">        </code><code class="c1">// terminated, so this call is safe.</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">message</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">CStr</code><code class="p">::</code><code class="n">from_ptr</code><code class="p">((</code><code class="o">*</code><code class="n">error</code><code class="p">).</code><code class="n">message</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">to_string_lossy</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">into_owned</code><code class="p">();</code><code class="w"/>
+
+<code class="w">        </code><code class="nb">Err</code><code class="p">(</code><code class="n">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">code</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">message</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">class</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="o">*</code><code class="n">error</code><code class="p">).</code><code class="n">klass</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">})</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The main difference between this and the <code>check</code> function from the raw version is that this constructs an <code>Error</code> value instead of printing an error message and exiting immediately.</p>
+
+<p>Now we’re ready to tackle <code>libgit2</code> initialization. The safe interface will provide a <code>Repository</code> type that represents an open Git repository, with methods for resolving references, looking up commits, and so on. Continuing in <em>git/mod.rs</em>, here’s the definition of <code>Repository</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-29">
+<code class="sd">/// A Git repository.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Repository</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// This must always be a pointer to a live `git_repository` structure.</code>
+<code class="w">    </code><code class="c1">// No other `Repository` may point to it.</code>
+<code class="w">    </code><code class="n">raw</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_repository</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>A <code>Repository</code>’s <code>raw</code> field is not public. Since only code in this module can access the <code>raw::git_repository</code> pointer, getting this module right should ensure the pointer is always used correctly.</p>
+
+<p>If the only way to create a <code>Repository</code> is to successfully open a fresh Git repository, that will ensure that each <code>Repository</code> points to a distinct <code>git_repository</code> object:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-Repository-open">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">path</code><code class="p">::</code><code class="n">Path</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ptr</code><code class="p">;</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">Repository</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">open</code><code class="o">&lt;</code><code class="n">P</code><code class="p">:</code><code class="w"> </code><code class="nb">AsRef</code><code class="o">&lt;</code><code class="n">Path</code><code class="o">&gt;&gt;</code><code class="p">(</code><code class="n">path</code><code class="p">:</code><code class="w"> </code><code class="nc">P</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">Repository</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">ensure_initialized</code><code class="p">();</code><code class="w"/>
+
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">path_to_cstring</code><code class="p">(</code><code class="n">path</code><code class="p">.</code><code class="n">as_ref</code><code class="p">())</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">repo</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ptr</code><code class="p">::</code><code class="n">null_mut</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">check</code><code class="p">(</code><code class="n">raw</code><code class="p">::</code><code class="n">git_repository_open</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">repo</code><code class="p">,</code><code class="w"> </code><code class="n">path</code><code class="p">.</code><code class="n">as_ptr</code><code class="p">()))</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="nb">Ok</code><code class="p">(</code><code class="n">Repository</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">raw</code><code class="p">:</code><code class="w"> </code><code class="nc">repo</code><code class="w"> </code><code class="p">})</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Since the only way to do anything with the safe interface is to start with a <code>Repository</code> value, and <code>Repository::open</code> starts with a call to <code>ensure_initialized</code>, we can be confident that <code>ensure_initialized</code> will be called before any <code>libgit2</code> functions. Its definition is as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ensure_initialized">
+<code class="k">fn</code><code class="w"> </code><code class="nf">ensure_initialized</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">static</code><code class="w"> </code><code class="n">ONCE</code><code class="p">:</code><code class="w"> </code><code class="nc">std</code><code class="p">::</code><code class="n">sync</code><code class="p">::</code><code class="n">Once</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">sync</code><code class="p">::</code><code class="n">Once</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">ONCE</code><code class="p">.</code><code class="n">call_once</code><code class="p">(</code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">check</code><code class="p">(</code><code class="n">raw</code><code class="p">::</code><code class="n">git_libgit2_init</code><code class="p">())</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"initializing libgit2 failed"</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">libc</code><code class="p">::</code><code class="n">atexit</code><code class="p">(</code><code class="n">shutdown</code><code class="p">),</code><code class="w"> </code><code class="mi">0</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">});</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">extern</code><code class="w"> </code><code class="s">"C"</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">shutdown</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">check</code><code class="p">(</code><code class="n">raw</code><code class="p">::</code><code class="n">git_libgit2_shutdown</code><code class="p">())</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"shutting down libgit2 failed"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>std::sync::Once</code> type helps run initialization code in a thread-safe way. Only the first thread to call <code>ONCE.call_once</code> runs the given closure. Any subsequent calls, by this thread or any other, block until the first has completed and then return immediately, without running the closure again. Once the closure has finished, calling <code>ONCE.call_once</code> is cheap, requiring nothing more than an atomic load of a flag stored in <code>ONCE</code>.</p>
+
+<p>In the preceding code, the initialization closure calls <code>git_libgit2_init</code> and checks the result. It punts a bit and just uses <code>expect</code> to make sure initialization succeeded, instead of trying to propagate errors back to the caller.</p>
+
+<p>To make sure the program calls <code>git_libgit2_shutdown</code>, the initialization closure uses the C library’s <code>atexit</code> function, which takes a pointer to a function to invoke before the process exits. Rust closures cannot serve as C function pointers: a closure is a value of some anonymous type carrying the values of whatever variables it captures or references to them; a C function pointer is just a pointer. However, Rust <code>fn</code> types work fine, as long as you declare them <code>extern "C"</code> so that Rust knows to use the C calling conventions. The local function <code>shutdown</code> fits the bill and ensures <code>libgit2</code> gets shut down properly.</p>
+
+<p>In <a data-type="xref" href="ch07.html#unwinding">“Unwinding”</a>, we mentioned that Rust’s runtime aborts the process immediately if a panic is about to cross language boundaries. The call from <code>atexit</code> to <code>shutdown</code> is such a boundary, so if <code>shutdown</code> panics, there will be no chance to catch the panic higher up the stack. Rust provides an alternative ABI, called <code>"C-unwind"</code>, which specifies behavior for unwinding into C, as long as the panic eventually reaches Rust code again afterwards. Using <code>"C-unwind"</code> isn’t possible in this case, as there is no Rust code on the other side of <code>atexit</code> to catch the panic.</p>
+
+<p>It might be possible to arrange to call <code>git_libgit2_shutdown</code> sooner—say, when the last <code>Repository</code> value is dropped. But no matter how we arrange things, calling <code>git_libgit2_shutdown</code> must be the safe API’s responsibility. The moment it is called, any extant <code>libgit2</code> objects become unsafe to use, so a safe API must not expose this function directly.</p>
+
+<p>A <code>Repository</code>’s raw pointer must always point to a live <code>git_repository</code> object. This implies that the only way to close a repository is to drop the <code>Repository</code> value that owns it:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-30">
+<code class="k">impl</code><code class="w"> </code><code class="nb">Drop</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Repository</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">drop</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">raw</code><code class="p">::</code><code class="n">git_repository_free</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">raw</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>By calling <code>git_repository_free</code> only when the sole pointer to the <code>raw::git_repository</code> is about to go away, the <code>Repository</code> type also ensures the pointer will never be used after it’s freed.</p>
+
+<p>The <code>Repository::open</code> method uses a private function called <code>path_to_cstring</code>, which has two definitions—one for Unix-like systems and one for Windows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-31">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">CString</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[cfg(unix)]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">path_to_cstring</code><code class="p">(</code><code class="n">path</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">CString</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// The `as_bytes` method exists only on Unix-like systems.</code>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">os</code><code class="p">::</code><code class="n">unix</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">OsStrExt</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">CString</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">path</code><code class="p">.</code><code class="n">as_os_str</code><code class="p">().</code><code class="n">as_bytes</code><code class="p">())</code><code class="o">?</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[cfg(windows)]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">path_to_cstring</code><code class="p">(</code><code class="n">path</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">CString</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Try to convert to UTF-8. If this fails, libgit2 can't handle the path</code>
+<code class="w">    </code><code class="c1">// anyway.</code>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">path</code><code class="p">.</code><code class="n">to_str</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">s</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">CString</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">s</code><code class="p">)</code><code class="o">?</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">message</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">format!</code><code class="p">(</code><code class="w"/>
+<code class="w">                </code><code class="s">"Couldn't convert path '{}' to UTF-8"</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="n">path</code><code class="p">.</code><code class="n">display</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">message</code><code class="p">.</code><code class="n">into</code><code class="p">())</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>libgit2</code> interface makes this code a little tricky. On all platforms, <code>libgit2</code> accepts paths as null-terminated C strings. On Windows, <code>libgit2</code> assumes these C strings hold well-formed UTF-8 and converts them internally to the 16-bit paths Windows actually requires. This usually works, but it’s not ideal. Windows permits filenames that are not well-formed Unicode and thus cannot be represented in UTF-8. If you have such a file, it’s impossible to pass its name to <code>libgit2</code>.</p>
+
+<p>In Rust, the proper representation of a filesystem path is a <code>std::path::Path</code>, carefully designed to handle any path that can appear on Windows or POSIX. This means that there are <code>Path</code> values on Windows that one cannot pass to <code>libgit2</code>, because they are not well-formed UTF-8. So although <code>path_to_cstring</code>’s behavior is less than ideal, it’s actually the best we can do given <code>libgit2</code>’s interface.</p>
+
+<p>The two <code>path_to_cstring</code> definitions just shown rely on conversions to our <code>Error</code> type: the <code>?</code> operator attempts such conversions, and the Windows version explicitly calls <code>.into()</code>. These conversions are unremarkable:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-32">
+<code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">code</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="mi">1</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">message</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">class</code><code class="p">:</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="c1">// NulError is what `CString::new` returns if a string</code>
+<code class="c1">// has embedded zero bytes.</code>
+<code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">NulError</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">e</code><code class="p">:</code><code class="w"> </code><code class="nc">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">NulError</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Error</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">code</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="mi">1</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="nc">e</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="n">class</code><code class="p">:</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Next, let’s figure out how to resolve a Git reference to an object identifier. Since an object identifier is just a 20-byte hash value, it’s perfectly fine to expose it in the safe API:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-33">
+<code class="sd">/// The identifier of some sort of object stored in the Git object</code>
+<code class="sd">/// database: a commit, tree, blob, tag, etc. This is a wide hash of the</code>
+<code class="sd">/// object's contents.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Oid</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">raw</code><code class="p">:</code><code class="w"> </code><code class="nc">raw</code><code class="p">::</code><code class="n">git_oid</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>We’ll add a method to <code>Repository</code> to perform the lookup:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-Repository-reference-name-to-id">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">c_char</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">mem</code><code class="p">::</code><code class="n">MaybeUninit</code><code class="p">;</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">Repository</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">reference_name_to_id</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">name</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">Oid</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">CString</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">name</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">oid</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">oid</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">MaybeUninit</code><code class="p">::</code><code class="n">uninit</code><code class="p">();</code><code class="w"/>
+<code class="w">                </code><code class="n">check</code><code class="p">(</code><code class="n">raw</code><code class="p">::</code><code class="n">git_reference_name_to_id</code><code class="p">(</code><code class="w"/>
+<code class="w">                    </code><code class="n">oid</code><code class="p">.</code><code class="n">as_mut_ptr</code><code class="p">(),</code><code class="w"/>
+<code class="w">                    </code><code class="bp">self</code><code class="p">.</code><code class="n">raw</code><code class="p">,</code><code class="w"/>
+<code class="w">                    </code><code class="n">name</code><code class="p">.</code><code class="n">as_ptr</code><code class="p">()</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="p">))</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">                </code><code class="n">oid</code><code class="p">.</code><code class="n">assume_init</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">};</code><code class="w"/>
+<code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">Oid</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">raw</code><code class="p">:</code><code class="w"> </code><code class="nc">oid</code><code class="w"> </code><code class="p">})</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Although <code>oid</code> is left uninitialized when the lookup fails, this function guarantees that its caller can never see the uninitialized value simply by following Rust’s <code>Result</code> idiom: either the caller gets an <code>Ok</code> carrying a properly initialized <code>Oid</code> value, or it gets an <code>Err</code>.</p>
+
+<p>Next, the module needs a way to retrieve commits from the repository. We’ll define a <code>Commit</code> type as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-34">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">marker</code><code class="p">::</code><code class="n">PhantomData</code><code class="p">;</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Commit</code><code class="o">&lt;'</code><code class="na">repo</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// This must always be a pointer to a usable `git_commit` structure.</code>
+<code class="w">    </code><code class="n">raw</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">_marker</code><code class="p">:</code><code class="w"> </code><code class="nc">PhantomData</code><code class="o">&lt;&amp;'</code><code class="na">repo</code><code class="w"> </code><code class="n">Repository</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>As we mentioned earlier, a <code>git_commit</code> object must never outlive the <code>git_repository</code> object it was retrieved from. Rust’s lifetimes let the code capture this rule precisely.</p>
+
+<p>In <a data-type="xref" href="ch23.html#example-refwithflag">“Example: RefWithFlag”</a>, we used a <code>PhantomData</code> field to tell Rust to treat a type as if it contained a reference with a given lifetime, even though the type apparently contained no such reference. The <code>Commit</code> type needs to do something similar. In this case, the <code>_marker</code> field’s type is <code>PhantomData&lt;&amp;'repo Repository&gt;</code>, indicating that Rust should treat <code>Commit&lt;'repo&gt;</code> as if it held a reference with lifetime <code>'repo</code> to some <code>Repository</code>.</p>
+
+<p>The method for looking up a commit is as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-Repository-find_commit">
+<code class="k">impl</code><code class="w"> </code><code class="n">Repository</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">find_commit</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">oid</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Oid</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">Commit</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">commit</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ptr</code><code class="p">::</code><code class="n">null_mut</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">check</code><code class="p">(</code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit_lookup</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">commit</code><code class="p">,</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">raw</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">oid</code><code class="p">.</code><code class="n">raw</code><code class="p">))</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="nb">Ok</code><code class="p">(</code><code class="n">Commit</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">raw</code><code class="p">:</code><code class="w"> </code><code class="nc">commit</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">_marker</code><code class="p">:</code><code class="w"> </code><code class="nc">PhantomData</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">})</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>How does this relate the <code>Commit</code>’s lifetime to the <code>Repository</code>’s? The signature of <code>find_commit</code> omits the lifetimes of the references involved according to the rules outlined in <a data-type="xref" href="ch05.html#omitting-lifetime-parameters">“Omitting Lifetime Parameters”</a>. If we were to write the lifetimes out, the full signature would read:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-35">
+<code class="k">fn</code><code class="w"> </code><code class="nf">find_commit</code><code class="o">&lt;'</code><code class="na">repo</code><code class="p">,</code><code class="w"> </code><code class="o">'</code><code class="na">id</code><code class="o">&gt;</code><code class="p">(</code><code class="o">&amp;'</code><code class="na">repo</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">oid</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">id</code><code class="w"> </code><code class="nc">Oid</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">Commit</code><code class="o">&lt;'</code><code class="na">repo</code><code class="o">&gt;&gt;</code><code class="w"/>
+</pre>
+
+<p>This is exactly what we want: Rust treats the returned <code>Commit</code> as if it borrows something from <code>self</code>, which is the <code>Repository</code>.</p>
+
+<p>When a <code>Commit</code> is dropped, it must free its <code>raw::git_commit</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-36">
+<code class="k">impl</code><code class="w"> </code><code class="nb">Drop</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Commit</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">drop</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit_free</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">raw</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>From a <code>Commit</code>, you can borrow a <code>Signature</code> (a name and email address) and the text of the commit message:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-37">
+<code class="k">impl</code><code class="w"> </code><code class="n">Commit</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">author</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Signature</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">Signature</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="n">raw</code><code class="p">:</code><code class="w"> </code><code class="nc">raw</code><code class="p">::</code><code class="n">git_commit_author</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">raw</code><code class="p">),</code><code class="w"/>
+<code class="w">                </code><code class="n">_marker</code><code class="p">:</code><code class="w"> </code><code class="nc">PhantomData</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">message</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;&amp;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">message</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_commit_message</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">raw</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="n">char_ptr_to_str</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">message</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here’s the <code>Signature</code> type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-38">
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Signature</code><code class="o">&lt;'</code><code class="na">text</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">raw</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">raw</code><code class="p">::</code><code class="n">git_signature</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">_marker</code><code class="p">:</code><code class="w"> </code><code class="nc">PhantomData</code><code class="o">&lt;&amp;'</code><code class="na">text</code><code class="w"> </code><code class="kt">str</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>A <code>git_signature</code> object always borrows its text from elsewhere; in particular, signatures returned by <code>git_commit_author</code> borrow their text from the <code>git_commit</code>. So our safe <code>Signature</code> type includes a <code>PhantomData&lt;&amp;'text str&gt;</code> to tell Rust to behave as if it contained a <code>&amp;str</code> with a lifetime of <code>'text</code>. Just as before, <code>Commit::author</code> properly connects this <code>'text</code> lifetime of the <code>Signature</code> it returns to that of the <code>Commit</code> without us needing to write a thing. The <code>Commit::message</code> method does the same with the <code>Option&lt;&amp;str&gt;</code> holding the commit message.</p>
+
+<p>A <code>Signature</code> includes methods for retrieving the author’s name and email address:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-39">
+<code class="k">impl</code><code class="w"> </code><code class="n">Signature</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Returns the author's name as a `&amp;str`,</code>
+<code class="w">    </code><code class="sd">/// or `None` if it is not well-formed UTF-8.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">name</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;&amp;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">char_ptr_to_str</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="o">*</code><code class="bp">self</code><code class="p">.</code><code class="n">raw</code><code class="p">).</code><code class="n">name</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Returns the author's email as a `&amp;str`,</code>
+<code class="w">    </code><code class="sd">/// or `None` if it is not well-formed UTF-8.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">email</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;&amp;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">char_ptr_to_str</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="o">*</code><code class="bp">self</code><code class="p">.</code><code class="n">raw</code><code class="p">).</code><code class="n">email</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The preceding methods depend on a private utility function <code>char_ptr_to_str</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-char_ptr_to_str">
+<code class="sd">/// Tries to borrow a `&amp;str` from `ptr`, given that `ptr` may be null or</code>
+<code class="sd">/// refer to ill-formed UTF-8. The result gets a lifetime as if it were</code>
+<code class="sd">/// borrowed from `_owner`.</code>
+<code class="sd">///</code>
+<code class="sd">/// Safety: if `ptr` is non-null, it must point to a null-terminated C</code>
+<code class="sd">/// string that is both safe to access and whose contents are not modified</code>
+<code class="sd">/// for at least as long as the lifetime of `_owner`.</code>
+<code class="k">unsafe</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">char_ptr_to_str</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">(</code><code class="n">_owner</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">T</code><code class="p">,</code><code class="w"> </code><code class="n">ptr</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;&amp;</code><code class="kt">str</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">ptr</code><code class="p">.</code><code class="n">is_null</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">CStr</code><code class="p">::</code><code class="n">from_ptr</code><code class="p">(</code><code class="n">ptr</code><code class="p">).</code><code class="n">to_str</code><code class="p">().</code><code class="n">ok</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>_owner</code> parameter’s value is never used, but its lifetime is. Making the lifetimes in this function’s signature explicit gives us:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-40">
+<code class="k">fn</code><code class="w"> </code><code class="nf">char_ptr_to_str</code><code class="o">&lt;'</code><code class="na">o</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="o">'</code><code class="na">o</code><code class="o">&gt;</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">_owner</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">o</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">ptr</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">c_char</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;&amp;'</code><code class="na">o</code><code class="w"> </code><code class="kt">str</code><code class="o">&gt;</code><code class="w"/>
+</pre>
+
+<p>The <code>CStr::from_ptr</code> function returns a <code>&amp;CStr</code> whose lifetime is completely unbounded, since it was borrowed from a dereferenced raw pointer. Unbounded lifetimes are almost always inaccurate, so it’s good to constrain them as soon as possible. Including the <code>_owner</code> parameter causes Rust to attribute its lifetime to the return value’s type, so callers can receive a more accurately bounded reference.</p>
+
+<p>It is not clear from the <code>libgit2</code> documentation whether a <code>git_signature</code>’s <code>email</code> and <code>author</code> pointers can be null, despite the documentation for <code>libgit2</code> being quite good. Your authors dug around in the source code for some time without being able to persuade themselves one way or the other and finally decided that <code>char_ptr_to_str</code> had better be prepared for null pointers just in case. In Rust, this sort of question is answered immediately by the type: if it’s <code>&amp;str</code>, you can count on the string to be there; if it’s <code>Option&lt;&amp;str&gt;</code>, it’s optional.</p>
+
+<p>Finally, we’ve provided safe interfaces for all the functionality we need. The new <code>main</code> function in <em>src/main.rs</em> is slimmed down quite a bit and looks like real Rust code<a contenteditable="false" data-startref="ix_for_functions_safe_libgit2" data-type="indexterm" id="id2660"/><a contenteditable="false" data-startref="ix_libgit2_safe" data-type="indexterm" id="id2661"/><a contenteditable="false" data-startref="ix_safe_libgit2" data-type="indexterm" id="id2662"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ffi-41">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">::</code><code class="n">args_os</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">nth</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"usage: git-toy PATH"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">repo</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">git</code><code class="p">::</code><code class="n">Repository</code><code class="p">::</code><code class="n">open</code><code class="p">(</code><code class="o">&amp;</code><code class="n">path</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"opening repository"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">commit_oid</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">repo</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">reference_name_to_id</code><code class="p">(</code><code class="s">"HEAD"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"looking up 'HEAD' reference"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">commit</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">repo</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">find_commit</code><code class="p">(</code><code class="o">&amp;</code><code class="n">commit_oid</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"looking up commit"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">author</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">commit</code><code class="p">.</code><code class="n">author</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="s">"{} &lt;{}&gt;</code><code class="se">\n</code><code class="s">"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">author</code><code class="p">.</code><code class="n">name</code><code class="p">().</code><code class="n">unwrap_or</code><code class="p">(</code><code class="s">"(none)"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">author</code><code class="p">.</code><code class="n">email</code><code class="p">().</code><code class="n">unwrap_or</code><code class="p">(</code><code class="s">"none"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="n">commit</code><code class="p">.</code><code class="n">message</code><code class="p">().</code><code class="n">unwrap_or</code><code class="p">(</code><code class="s">"(none)"</code><code class="p">));</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In this chapter, we’ve gone from simplistic interfaces that don’t provide many safety guarantees to a safe API wrapping an inherently unsafe API by arranging for any violation of the latter’s contract to be a Rust type error. The result is an interface that Rust can ensure you use correctly. For the most part, the rules we’ve made Rust enforce are the sorts of rules that C and C‍++ programmers end up imposing on themselves anyway. What makes Rust feel so much stricter than C and C‍++ is not that the rules are so foreign, but that this enforcement is mechanical and comprehensive<a contenteditable="false" data-startref="ix_foreign_functions_ch23" data-type="indexterm" id="id2663"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Conclusion"><div class="sect1" id="conclusion23">
+<h1>Conclusion</h1>
+
+<p>Rust is not a simple language. Its goal is to span two very different worlds. It’s a modern programming language, safe by design, with conveniences like closures and iterators, yet it aims to put you in control of the raw capabilities of the machine it runs on, with minimal run-time overhead.</p>
+
+<p>The contours of the language are determined by these goals. Rust manages to bridge most of the gap with safe code. Its borrow checker and zero-cost abstractions put you as close to the bare metal as possible without risking undefined behavior. When that’s not enough or when you want to leverage existing C code, unsafe code and the foreign function interface stand ready. But again, the language doesn’t just offer you these unsafe features and wish you luck. The goal is always to use unsafe features to build safe APIs. That’s what we did with <code>libgit2</code>. It’s also what the Rust team has done with <code>Box</code>, <code>Vec</code>, the other collections, channels, and more: the standard library is full of safe abstractions, implemented with some unsafe code behind the scenes.</p>
+
+<p>A language with Rust’s ambitions was, perhaps, not destined to be the simplest of tools. But Rust is safe, fast, concurrent—and effective. Use it to build large, fast, secure, robust systems that take advantage of the full power of the hardware they run on. Use it to make software better.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

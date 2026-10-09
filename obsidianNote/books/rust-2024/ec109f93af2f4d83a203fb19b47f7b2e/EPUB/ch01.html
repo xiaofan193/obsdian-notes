@@ -1,0 +1,129 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch01.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section class="pagenumrestart" data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 1. Systems Programmers Can Have Nice Things">
+        <div class="chapter" id="systems-programmers-can-have-nice-things">
+<h1><span class="label">Chapter 1. </span>Systems Programmers Can <span class="keep-together">Have Nice Things</span></h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id574"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the first chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>In certain contexts—for example the context Rust is targeting—being 10x or even 2x faster than the competition is a make-or-break thing. It decides the fate of a system in the market, as much as it would in the hardware market.</p>
+
+<p data-type="attribution">Graydon Hoare</p>
+</blockquote>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>All computers are now parallel...<br/>
+Parallel programming <strong>is</strong> programming.</p>
+
+<p data-type="attribution">Michael McCool et al., <em>Structured Parallel Programming</em></p>
+</blockquote>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>TrueType parser flaw used by nation-state attacker for surveillance; all software is security-sensitive.</p>
+
+<p data-type="attribution">Andy Wingo</p>
+</blockquote>
+
+<p>We<a contenteditable="false" data-primary="references (pointer type)" data-secondary="mutable" data-see="mutable references" data-type="indexterm" id="id575"/><a contenteditable="false" data-primary="pointer types" data-secondary="references" data-see="references (pointer type)" data-type="indexterm" id="id576"/><a contenteditable="false" data-primary="atomic reference count" data-see="Arc pointer type" data-type="indexterm" id="id577"/><a contenteditable="false" data-primary="iterators" data-secondary="consuming" data-see="consuming iterators" data-type="indexterm" id="id578"/><a contenteditable="false" data-primary="libraries" data-secondary="third-party" data-see="crates" data-type="indexterm" id="id579"/><a contenteditable="false" data-primary="FFI" data-see="foreign functions" data-type="indexterm" id="id580"/><a contenteditable="false" data-primary="unsafe code" data-secondary="foreign functions" data-see="foreign functions" data-type="indexterm" id="id581"/><a contenteditable="false" data-primary="functions" data-secondary="foreign" data-see="foreign functions" data-type="indexterm" id="id582"/><a contenteditable="false" data-primary="namespaces" data-see="modules" data-type="indexterm" id="id583"/><a contenteditable="false" data-primary="assignment" data-secondary="moves and" data-see="moves" data-type="indexterm" id="id584"/><a contenteditable="false" data-primary="Model-View-Controller" data-see="MVC" data-type="indexterm" id="id585"/><a contenteditable="false" data-primary="types" data-secondary="pointers" data-see="pointer types" data-type="indexterm" id="id586"/><a contenteditable="false" data-primary="unsafe code" data-secondary="raw pointers" data-see="raw pointers" data-type="indexterm" id="id587"/><a contenteditable="false" data-primary="types" data-secondary="String and str" data-see="String and str types" data-type="indexterm" id="id588"/><a contenteditable="false" data-primary="traits" data-secondary="utility" data-see="utility traits" data-type="indexterm" id="id589"/><a contenteditable="false" data-primary="systems programming" data-type="indexterm" id="id590"/> chose to open our book with the three quotes above for a reason. But let’s start with a mystery. What does the following C program do?</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-undef-c">
+<code class="kt">int</code><code class="w"> </code><code class="nf">main</code><code class="p">(</code><code class="kt">int</code><code class="w"> </code><code class="n">argc</code><code class="p">,</code><code class="w"> </code><code class="kt">char</code><code class="w"> </code><code class="o">**</code><code class="n">argv</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">  </code><code class="kt">unsigned</code><code class="w"> </code><code class="kt">long</code><code class="w"> </code><code class="n">a</code><code class="p">[</code><code class="mi">1</code><code class="p">];</code><code class="w"/>
+<code class="w">  </code><code class="n">a</code><code class="p">[</code><code class="mi">3</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mh">0x7ffff7d48a38UL</code><code class="p">;</code><code class="w"/>
+<code class="w">  </code><code class="k">return</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>On Jason’s laptop this morning, this program printed:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">undef: Error: .netrc file is readable by others.</code>
+<code class="go">undef: Remove 'password' line or make file unreadable by others.</code>
+</pre>
+
+<p>Then it crashed. If you try it on your machine, it may do something else. What’s going on here?</p>
+
+<p>The program is flawed. The array <code>a</code> is only one element long, so using <code>a[3]</code> is, according to the C programming language standard, <em>undefined behavior<a contenteditable="false" data-primary="undefined behavior" data-type="indexterm" id="id591"/></em>:</p>
+
+<blockquote>
+<p>Behavior, upon use of a nonportable or erroneous program construct or of erroneous data, for which this International Standard imposes no requirements</p>
+</blockquote>
+
+<p>Undefined behavior doesn’t just have an unpredictable result: the standard explicitly permits the program to do <em>anything at all</em>. In our case, storing this particular value in the fourth element of this particular array happens to corrupt the function call stack such that returning from the <code>main</code> function, instead of exiting the program gracefully as it should, jumps into the midst of code from the C standard library for retrieving a password from a file in the user’s home directory. It doesn’t go well.</p>
+
+<p>C and C‍++ have hundreds of rules for avoiding undefined behavior<a contenteditable="false" data-primary="C++" data-secondary="rules for avoiding undefined behavior" data-type="indexterm" id="id592"/><a contenteditable="false" data-primary="C" data-secondary="rules for avoiding undefined behavior" data-type="indexterm" id="id593"/><a contenteditable="false" data-primary="C" data-seealso="foreign functions" data-type="indexterm" id="id594"/><a contenteditable="false" data-primary="C++" data-seealso="foreign functions" data-type="indexterm" id="id595"/>. They’re mostly common sense: don’t access memory you shouldn’t, don’t let arithmetic operations overflow, don’t divide by zero, and so on. But the compiler does not enforce these rules; it has no obligation to detect even blatant violations. The responsibility for avoiding undefined behavior falls entirely on you, the programmer.</p>
+
+<p>Empirically speaking, we programmers do not have a great track record in this regard. While a student at the University of Utah, researcher Peng Li<a contenteditable="false" data-primary="Li, Peng" data-type="indexterm" id="id596"/> modified C and C‍++ compilers to make the programs they translated report whether they executed certain forms of undefined behavior. He found that nearly all programs do, including those from well-respected projects that hold their code to high standards. Assuming that you can avoid undefined behavior in C and C‍++ is like assuming you can win a game of chess simply because you know the rules.</p>
+
+<p>The occasional strange message or crash may be a quality issue, but inadvertent undefined behavior has also been a major cause of security flaws since the 1988 Morris Worm<a contenteditable="false" data-primary="Morris worm" data-type="indexterm" id="id597"/> used a variation of the technique shown earlier to propagate from one computer to another on the early Internet.</p>
+
+<p>So C and C‍++ put programmers in an awkward position: those languages are the industry standards for systems programming, but the demands they place on programmers all but guarantee a steady stream of crashes and security problems. Answering our mystery just raises a bigger question: can’t we do any better?</p>
+
+<section data-type="sect1" data-pdf-bookmark="Rust Shoulders the Load for You"><div class="sect1" id="rust-shoulders-the-load-for-you">
+<h1>Rust Shoulders the Load for You</h1>
+
+<p>Our answer<a contenteditable="false" data-primary="Rust" data-secondary="reasons for using" data-type="indexterm" id="ix_rust_reasons"/> is framed by our three opening quotes. The third quote refers to reports that Stuxnet, a computer worm found breaking into industrial control equipment in 2010, gained control of the victims’ computers using, among many other techniques, undefined behavior in code that parsed TrueType fonts embedded in word processing documents. It’s a safe bet that the authors of that code were not expecting it to be used this way, illustrating that it’s not just operating systems and servers that need to worry about security: any software that might handle data from an untrusted source could be the target of an exploit.</p>
+
+<p>The Rust language makes you a simple promise: if your program passes the compiler’s checks, it is free of undefined behavior. Dangling pointers, double-frees, and null pointer dereferences are all caught at compile time. Array references are secured with a mix of compile-time and run-time checks, so there are no buffer overruns: the Rust equivalent of our unfortunate C program exits safely with an error message.</p>
+
+<p>Further, Rust aims to be both <em>safe</em> and <em>pleasant to use</em>. In order to make stronger guarantees about your program’s behavior, Rust imposes more restrictions on your code than C and C‍++ do, and these restrictions take practice and experience to get used to. But the language overall is flexible and expressive. This is attested to by the breadth of code written in Rust and the range of application areas to which it is being applied.</p>
+
+<p>In our experience, being able to trust the language to catch more mistakes encourages us to try more ambitious projects. Modifying large, complex programs is less risky when you know that issues of memory management and pointer validity are taken care of. And debugging is much simpler when the potential consequences of a bug don’t include corrupting unrelated parts of your program.</p>
+
+<p>Of course, there are still plenty of bugs that Rust cannot detect. But in practice, taking undefined behavior off the table substantially changes the character of development for the better.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Parallel Programming Is Tamed"><div class="sect1" id="parallel-programming-is-tamed">
+<h1>Parallel Programming Is Tamed</h1>
+
+<p>Concurrency<a contenteditable="false" data-primary="concurrency" data-type="indexterm" id="id598"/> is notoriously difficult to use correctly in C and C‍++. Developers usually turn to concurrency only when single-threaded code has proven unable to achieve the performance they need. But the second opening quote argues that parallelism<a contenteditable="false" data-primary="parallel programming" data-seealso="concurrency" data-type="indexterm" id="id599"/> is too important to modern machines to treat as a method of last resort.</p>
+
+<p>As it turns out, the same restrictions that ensure memory safety in Rust also ensure that Rust programs are free of data races. You can share data freely between threads, as long as it isn’t changing. Data that does change can only be accessed using synchronization primitives. All the traditional concurrency tools are available: mutexes, condition variables, channels, atomics, and so on. Rust simply checks that you’re using them properly.</p>
+
+<p>This makes Rust an excellent language for multi-threaded programming. The Rust ecosystem offers libraries that go beyond the usual concurrency primitives and help you distribute complex loads evenly across pools of processors, use lock-free synchronization mechanisms, and more.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="And Yet Rust Is Still Fast"><div class="sect1" id="and-yet-rust-is-still-fast">
+<h1>And Yet Rust Is Still Fast</h1>
+
+<p>This, finally, is our first opening quote. Rust shares the ambitions Bjarne Stroustrup articulates for C‍++ in his paper “Abstraction and the C‍++ Machine Model<a contenteditable="false" data-primary="“Abstraction and the C++ Machine Model” (Stroustrup)" data-primary-sortas="Abstraction and the C++ Machine Model (Stroustrup)" data-type="indexterm" id="id600"/><a contenteditable="false" data-primary="Stroustrup, Bjarne" data-secondary="&quot;Abstraction and the C++ Machine Model&quot;" data-type="indexterm" id="id601"/>”:</p>
+
+<blockquote>
+<p>In general, C‍++ implementations obey the zero-overhead principle<a contenteditable="false" data-primary="zero-overhead principle" data-type="indexterm" id="id602"/>: What you don’t use, you don’t pay for. And further: What you do use, you couldn’t hand code any <span class="keep-together">better.</span></p>
+</blockquote>
+
+<p>Systems programming is often concerned with pushing the machine to its limits. For games, the entire machine should be devoted to creating the best experience for the player. For web browsers, the efficiency of the browser sets the ceiling on what content authors can do. Within the machine’s inherent limitations, as much memory and processor attention as possible must be left to the content itself. The same principle applies to operating systems: the kernel should make the machine’s resources available to user programs, not consume them itself.</p>
+
+<p>But when we say Rust is “fast,” what does that really mean? One can write slow code in any general-purpose language. It would be more precise to say that, if you are ready to make the investment to design your program to make the best use of the underlying machine’s capabilities, Rust supports you in that effort. The language is designed with efficient defaults and gives you the ability to control how memory gets used and how the processor’s attention is spent.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Rust Makes Collaboration Easier"><div class="sect1" id="rust-makes-collaboration-easier">
+<h1>Rust Makes Collaboration Easier</h1>
+
+<p>We<a contenteditable="false" data-primary="collaboration, Rust and" data-type="indexterm" id="id603"/> hid a fourth quote in the title of this chapter: “Systems programmers can have nice things.” This refers to Rust’s support for code sharing and reuse.</p>
+
+<p>Rust’s package manager and build tool, Cargo<a contenteditable="false" data-primary="Cargo" data-type="indexterm" id="id604"/>, makes it easy to use libraries published by others on Rust’s public package repository, the crates.io website. You simply add the library’s name and required version number to a file, and Cargo takes care of downloading the library, along with whatever other libraries it uses in turn, compiling everything, and linking the whole lot together. You can think of Cargo as Rust’s answer to NPM or RubyGems, with an emphasis on sound version management and reproducible builds.</p>
+
+<p>There are popular Rust libraries providing everything from off-the-shelf serialization to HTTP clients and servers and modern graphics APIs. The language’s traits and generics let library interfaces offer just the right degree of flexibility. And Rust’s standard library provides a common vocabulary of basic types to help plug everything together.</p>
+
+<p>The next chapter aims to make concrete the broad claims we’ve made in this chapter, with a tour of several small Rust programs that show off the language’s strengths<a contenteditable="false" data-startref="ix_rust_reasons" data-type="indexterm" id="id605"/>.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

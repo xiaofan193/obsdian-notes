@@ -1,0 +1,1220 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch06.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 6. Expressions">
+        <div class="chapter" id="expressions">
+<h1><span class="label">Chapter 6. </span>Expressions</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id933"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the sixth chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>LISP programmers know the value of everything, but the cost of nothing.</p>
+
+<p data-type="attribution">Alan Perlis, epigram #55</p>
+</blockquote>
+
+<p>In this chapter<a contenteditable="false" data-primary="expressions" data-type="indexterm" id="ix_expressions_ch6"/>, we’ll cover the <em>expressions</em> of Rust, the building blocks that make up the body of Rust functions and thus the majority of Rust code. We’ll cover control flow, including <code>if</code> and <code>match</code> expressions, loops, and function calls, which in Rust are all expressions, and we’ll examine how Rust’s foundational operators work in isolation and in combination.</p>
+
+<p>A few concepts that technically fall into this category, such as closures and iterators, are deep enough that we will dedicate a whole chapter to them later. For now, we aim to cover as much syntax as possible in a few pages.</p>
+
+<section data-type="sect1" data-pdf-bookmark="An Expression Language"><div class="sect1" id="an-expression-language">
+<h1>An Expression Language</h1>
+
+<p>Rust<a contenteditable="false" data-primary="expressions" data-secondary="Rust as expression language" data-type="indexterm" id="id934"/> visually resembles the C family of languages, but this is a bit of a ruse. In C, there is a sharp distinction between <em>expressions,</em> bits of code that look something like this:</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-cpp-expr">
+<code class="mi">5</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="p">(</code><code class="n">fahr</code><code class="mi">-32</code><code class="p">)</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="mi">9</code><code class="w"/>
+</pre>
+
+<p>and <em>statements,</em> which look more like this:</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-cpp-stmt">
+<code class="k">for</code><code class="w"> </code><code class="p">(;</code><code class="w"> </code><code class="n">begin</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="n">end</code><code class="p">;</code><code class="w"> </code><code class="o">++</code><code class="n">begin</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="p">(</code><code class="o">*</code><code class="n">begin</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">target</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="k">break</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Expressions<a contenteditable="false" data-primary="expressions" data-secondary="statements versus" data-type="indexterm" id="id935"/><a contenteditable="false" data-primary="statements, expressions versus" data-type="indexterm" id="id936"/> have values. Statements don’t.</p>
+
+<p>Rust is what is called an <em>expression language</em>. This means it follows an older tradition, dating back to Lisp, where expressions do all the work.</p>
+
+<p>In C, <code>if</code> and <code>switch</code> are statements. They don’t produce a value, and they can’t be used in the middle of an expression. In Rust, <code>if</code> and <code>match</code> <em>can</em> produce values. We already saw a <code>match</code> expression that produces a numeric value in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr0">
+<code class="n">pixels</code><code class="p">[</code><code class="n">row</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">column</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">escape_time</code><code class="p">(</code><code class="n">point</code><code class="p">,</code><code class="w"> </code><code class="mi">255</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">count</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">255</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u8</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+</pre>
+
+<p>An <code>if</code> expression can be used to initialize a variable:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr1">
+<code class="kd">let</code><code class="w"> </code><code class="n">status</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">cpu</code><code class="p">.</code><code class="n">temperature</code><code class="w"> </code><code class="o">&lt;=</code><code class="w"> </code><code class="n">MAX_TEMP</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">HttpStatus</code><code class="p">::</code><code class="nb">Ok</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">HttpStatus</code><code class="p">::</code><code class="n">ServerError</code><code class="w">  </code><code class="c1">// server melted</code>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+</pre>
+
+<p>A <code>match</code> expression can be passed as an argument to a function or macro:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr2">
+<code class="fm">println!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="s">"Inside the vat, you see {}."</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">vat</code><code class="p">.</code><code class="n">contents</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">brain</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">brain</code><code class="p">.</code><code class="n">desc</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="s">"nothing of interest"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This explains why Rust does not have C’s ternary operator (<code><var>expr1</var> ? <var>expr2</var> : <var>expr3</var></code>). In C, it is a handy expression-level analogue to the <code>if</code> statement. It would be redundant in Rust: the <code>if</code> expression handles both cases.</p>
+
+<p>Most of the control flow tools in C are statements. In Rust, they are all expressions.</p>
+
+<p><a data-type="xref" href="#expressions-block-table">Table 6-1</a> summarizes Rust’s control flow expressions. We will discuss all of these constructs in the first half of this chapter, before turning to other kinds of expressions, like function calls and arithmetic.</p>
+
+<table id="expressions-block-table">
+	<caption><span class="label">Table 6-1. </span>Block and control flow expressions</caption>
+	<thead>
+		<tr>
+			<th>Expression type</th>
+			<th>Example</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td>Block</td>
+			<td><code>{ f(); g() }</code></td>
+		</tr>
+		<tr>
+			<td rowspan="3"><code>if</code> expressions</td>
+			<td><code>if ok { f() }</code></td>
+		</tr>
+		<tr>
+			<td><code>if ok { 1 } else { 0 }</code></td>
+		</tr>
+		<tr>
+			<td><code>if let Some(x) = f() { x } else { 0 }</code></td>
+		</tr>
+		<tr>
+			<td>Pattern matching</td>
+			<td><code>match x { None =&gt; 0, _ =&gt; 1 }</code></td>
+		</tr>
+		<tr>
+			<td rowspan="4">Loops</td>
+			<td><code>for v in e { f(v); }</code></td>
+		</tr>
+		<tr>
+			<td><code>while ok { ok = f(); }</code></td>
+		</tr>
+		<tr>
+			<td><code>while let Some(x) = it.next() { f(x); }</code></td>
+		</tr>
+		<tr>
+			<td><code>loop { next_event(); }</code></td>
+		</tr>
+		<tr>
+			<td rowspan="3">Jumps in control flow</td>
+			<td><code>break</code></td>
+		</tr>
+		<tr>
+			<td><code>continue</code></td>
+		</tr>
+		<tr>
+			<td><code>return 0</code></td>
+		</tr>
+		<tr>
+			<td>Compile-time evaluation</td>
+			<td><code>const { PI / 6.0 }</code></td>
+		</tr>
+		<tr>
+			<td>Enable unsafe features</td>
+			<td><code>unsafe { *ptr = 0; }</code></td>
+		</tr>
+	</tbody>
+</table>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Blocks"><div class="sect1" id="blocks">
+<h1>Blocks</h1>
+
+<p>Blocks<a contenteditable="false" data-primary="expressions" data-secondary="blocks" data-type="indexterm" id="ix_exp_blocks_ch6"/><a contenteditable="false" data-primary="blocks" data-type="indexterm" id="ix_blocks_ch6"/> are the glue of Rust expressions. As in many other languages, they are delimited by curly braces, can contain any number of declarations and expressions, and simply execute line by line from top to bottom.</p>
+
+<p>A block produces a value and can be used anywhere a value is needed:</p>
+
+<pre class="small" data-code-language="rust" data-type="programlisting" id="test-expr3">
+<code class="kd">let</code><code class="w"> </code><code class="n">display_name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">post</code><code class="p">.</code><code class="n">author</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">author</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">author</code><code class="p">.</code><code class="n">name</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">network_info</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">post</code><code class="p">.</code><code class="n">get_network_metadata</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">ip</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">network_info</code><code class="p">.</code><code class="n">client_address</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="n">ip</code><code class="p">.</code><code class="n">to_string</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>The code after <code>Some(author) =&gt;</code> is the simple expression <code>author.name()</code>. The code after <code>None =&gt;</code> is a block expression. It makes no difference to Rust. The value of the block is the value of its last expression, <code>ip.to_string()</code>.</p>
+
+<p>Note that there is no semicolon<a contenteditable="false" data-primary="semicolons following expressions" data-type="indexterm" id="id937"/> after the <code>ip.to_string()</code> method call. Most lines of Rust code do end with either a semi<span class="keep-together">colon</span> or curly braces, just like C or Java. And if a block looks like C code, with semicolons in all the familiar places, then it will run just like a C block, and its value will be <code>()</code>. As we mentioned in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>, when you leave the <span class="keep-together">semicolon</span> off the last line of a block, that makes the value of the block the value of its final expression, rather than the usual <code>()</code>.</p>
+
+<p>In some languages, particularly JavaScript, you’re allowed to omit semicolons, and the language simply fills them in for you—a minor convenience. This is different. In Rust, the semicolon actually means something:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr4">
+<code class="kd">let</code><code class="w"> </code><code class="n">msg</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// let-declaration: semicolon is always required</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">dandelion_control</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">puffball</code><code class="p">.</code><code class="n">open</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// expression + semicolon: method is called, return value dropped</code>
+<code class="w">    </code><code class="n">dandelion_control</code><code class="p">.</code><code class="n">release_all_seeds</code><code class="p">(</code><code class="n">launch_codes</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// expression with no semicolon: method is called,</code>
+<code class="w">    </code><code class="c1">// return value stored in `msg`</code>
+<code class="w">    </code><code class="n">dandelion_control</code><code class="p">.</code><code class="n">get_status</code><code class="p">()</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>This ability of blocks to contain declarations and also produce a value at the end is a neat feature, one that quickly comes to feel natural. The one drawback is that it leads to an odd error message when you leave out a semicolon by accident:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr5">
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="k">if</code><code class="w"> </code><code class="n">preferences</code><code class="p">.</code><code class="n">changed</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">page</code><code class="p">.</code><code class="n">compute_size</code><code class="p">()</code><code class="w">  </code><code class="c1">// oops, missing semicolon</code>
+<code class="p">}</code><code class="w"/>
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>If you made this mistake in a C or Java program, the compiler would simply point out that you’re missing a semicolon. Here’s what Rust says:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: mismatched types</code>
+<code class="go">21 | /     if preferences.changed() {</code>
+<code class="go">22 | |         page.compute_size()  // oops, missing semicolon</code>
+<code class="go">   | |         ^^^^^^^^^^^^^^^^^^^ expected `()`, found `(u32, u32)`</code>
+<code class="go">23 | |     }</code>
+<code class="go">   | |_____- `if` expressions without `else` arms expect their</code>
+<code class="go">   |          inner expression to be `()`</code>
+<code class="go">   |</code>
+<code class="go">   = note: expected unit type `()`</code>
+<code class="go">                  found tuple `(u32, u32)`</code>
+<code class="go">help: consider using a semicolon here</code>
+<code class="go">   |</code>
+<code class="go">22 |         page.compute_size();  // oops, missing semicolon</code>
+<code class="go">   |                            +</code>
+</pre>
+
+<p>Rust eventually suggests a semicolon, but only after explaining in detail why the code can’t work as written. In languages where the semicolon is always required, the compiler has less explaining to do.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Declarations"><div class="sect2" id="declarations">
+<h2>Declarations</h2>
+
+<p>In addition to expressions and semicolons, a block may contain any number of declarations<a contenteditable="false" data-primary="blocks" data-secondary="declarations in" data-type="indexterm" id="id938"/><a contenteditable="false" data-primary="declarations" data-type="indexterm" id="id939"/><a contenteditable="false" data-primary="expressions" data-secondary="declarations" data-type="indexterm" id="id940"/>. The most common are <code>let</code> declarations<a contenteditable="false" data-primary="let declaration" data-type="indexterm" id="id941"/>, which declare local variables:</p>
+
+<pre>
+<strong>let</strong> <var>name</var><strong>:</strong> <var>type</var> <strong>=</strong> <var>expr</var><strong>;</strong>
+</pre>
+
+<p>The type and initializer are optional. The semicolon is required. Like all identifiers in Rust, variable names must start with a letter or underscore, and can contain digits only after that first character. Rust has a broad definition of “letter”: it includes Greek letters, accented Latin characters, and many more symbols—anything that Unicode Standard Annex #31 declares suitable. Emoji aren’t allowed.</p>
+
+<p>A <code>let</code> declaration can declare a variable without initializing it. The variable can then be initialized with a later assignment. This is occasionally useful, because sometimes a variable should be initialized from the middle of some sort of control flow construct:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr7">
+<code class="kd">let</code><code class="w"> </code><code class="n">name</code><code class="p">;</code><code class="w"/>
+<code class="k">if</code><code class="w"> </code><code class="n">user</code><code class="p">.</code><code class="n">has_nickname</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">user</code><code class="p">.</code><code class="n">nickname</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">generate_unique_name</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">user</code><code class="p">.</code><code class="n">register</code><code class="p">(</code><code class="o">&amp;</code><code class="n">name</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here there are two different ways the local variable <code>name</code> might be initialized, but either way it will be initialized exactly once, so <code>name</code> does not need to be declared <code>mut</code>.</p>
+
+<p>It’s an error to use a variable before it’s initialized. (This is closely related to the error of using a value after it’s been moved. Rust really wants you to use values only while they exist!)</p>
+
+<p>You may occasionally see code that seems to redeclare an existing variable, like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr8">
+<code class="k">for</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">lines</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>let</code> declaration creates a new, second variable, of a different type. The type of the first variable <code>line</code> is <code>Result&lt;String, io::Error&gt;</code>. The second <code>line</code> is a <code>String</code>. Its definition supersedes the first’s for the rest of the block. This is called <em>shadowing<a contenteditable="false" data-primary="shadowing" data-type="indexterm" id="id942"/></em> and is very common in Rust programs. The code is equivalent to:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr9">
+<code class="k">for</code><code class="w"> </code><code class="n">line_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">lines</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In this book, we’ll stick to using a <code>_result</code> suffix in such situations so that the variables have distinct names. In real-world code, however, shadowing is helpful. It communicates that we’re definitely done with the old variable, and makes it impossible to use it again by mistake.</p>
+
+<p>A block can also contain <em>item declarations<a contenteditable="false" data-primary="item declarations" data-type="indexterm" id="id943"/></em>. An item is simply any declaration that could appear globally in a program or module, such as a <code>fn</code>, <code>struct</code>, or <code>use</code>.</p>
+
+<p>Later chapters will cover items in detail. For now, <code>fn</code> makes a sufficient example. Any block may contain a <code>fn</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr10">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">cmp</code><code class="p">::</code><code class="n">Ordering</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">show_files</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">v</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[];</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">cmp_by_timestamp_then_name</code><code class="p">(</code><code class="n">a</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">FileInfo</code><code class="p">,</code><code class="w"> </code><code class="n">b</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">FileInfo</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Ordering</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">a</code><code class="p">.</code><code class="n">timestamp</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">cmp</code><code class="p">(</code><code class="o">&amp;</code><code class="n">b</code><code class="p">.</code><code class="n">timestamp</code><code class="p">)</code><code class="w">          </code><code class="c1">// first, compare timestamps</code>
+<code class="w">            </code><code class="p">.</code><code class="n">reverse</code><code class="p">()</code><code class="w">                  </code><code class="c1">// newest file first</code>
+<code class="w">            </code><code class="p">.</code><code class="n">then</code><code class="p">(</code><code class="n">a</code><code class="p">.</code><code class="n">path</code><code class="p">.</code><code class="n">cmp</code><code class="p">(</code><code class="o">&amp;</code><code class="n">b</code><code class="p">.</code><code class="n">path</code><code class="p">))</code><code class="w">  </code><code class="c1">// compare paths to break ties</code>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="n">v</code><code class="p">.</code><code class="n">sort_by</code><code class="p">(</code><code class="n">cmp_by_timestamp_then_name</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>When a <code>fn</code> is declared inside a block, its scope is the entire block—that is, it can be <em>used</em> throughout the enclosing block. But a nested <code>fn</code> cannot access local variables or arguments that happen to be in scope. For example, the function <code>cmp_by_timestamp_then_name</code> could not use <code>v</code> directly. (Rust also has closures, which do see into enclosing scopes. See <a data-type="xref" href="ch14.html#closures">Chapter 14</a>.)</p>
+
+<p>A block can even contain a whole module. This may seem a bit much—do we really need to be able to nest <em>every</em> piece of the language inside every other piece?—but <span class="keep-together">programmers</span> (and particularly programmers using macros) have a way of finding uses for every scrap of orthogonality the language provides<a contenteditable="false" data-startref="ix_blocks_ch6" data-type="indexterm" id="id944"/><a contenteditable="false" data-startref="ix_exp_blocks_ch6" data-type="indexterm" id="id945"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="if and match"><div class="sect2" id="if-and-match">
+<h2>if and match</h2>
+
+<p>The form of an <code>if</code> expression<a contenteditable="false" data-primary="if expression" data-type="indexterm" id="ix_if_expression"/><a contenteditable="false" data-primary="expressions" data-secondary="if and match" data-type="indexterm" id="ix_exp_if_match"/> is familiar:</p>
+
+<pre>
+<strong>if</strong> <var>condition1</var> <strong>{</strong>
+    <var>block1</var>
+<strong>}</strong> <strong>else</strong> <strong>if</strong> <var>condition2</var> <strong>{</strong>
+    <var>block2</var>
+<strong>}</strong> <strong>else</strong> <strong>{</strong>
+    <var>block_n</var>
+<strong>}</strong>
+</pre>
+
+<p>Each <code><var>condition</var></code> must<a contenteditable="false" data-primary="condition (with if expression)" data-type="indexterm" id="id946"/> be an expression of type <code>bool</code>; true to form, Rust does not implicitly convert numbers or pointers to Boolean values.</p>
+
+<p>Unlike C, parentheses are not required around conditions. In fact, <code>rustc</code> will emit a warning if unnecessary parentheses are present. The curly braces, however, are required.</p>
+
+<p>The <code>else if</code> blocks, as well as the final <code>else</code>, are optional. An <code>if</code> expression with no <code>else</code> block behaves exactly as though it had an empty <code>else</code> block.</p>
+
+<p><code>match</code> expressions<a contenteditable="false" data-primary="match expression" data-type="indexterm" id="id947"/> are something like the C <code>switch</code> statement, but more flexible. A simple example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr11">
+<code class="k">match</code><code class="w"> </code><code class="n">code</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="mi">0</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"OK"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="mi">1</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Wires Tangled"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="mi">2</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"User Asleep"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Unrecognized Error {code}"</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is something a <code>switch</code> statement could do. Exactly one of the four arms of this <code>match</code> expression will execute, depending on the value of <code>code</code>. The wildcard pattern <code>_</code> matches everything. This is like the <code>default:</code> case in a <code>switch</code> statement, except that it must come last; placing a <code>_</code> pattern before other patterns means that it will have precedence over them. Those patterns will never match anything (and the compiler will warn you about it).</p>
+
+<p>The compiler can optimize this kind of <code>match</code> using a jump table, just like a <code>switch</code> statement in C‍++. A similar optimization is applied when each arm of a <code>match</code> produces a constant value. In that case, the compiler builds an array of those values, and the <code>match</code> is compiled into an array access. Apart from a bounds check, there is no branching at all in the compiled code.</p>
+
+<p>The versatility of <code>match</code> stems from the variety of supported <em>patterns<a contenteditable="false" data-primary="patterns" data-secondary="match expressions and" data-type="indexterm" id="id948"/></em> that can be used to the left of <code>=&gt;</code><a contenteditable="false" data-primary="=&gt; symbol" data-secondary="in match expressions" data-type="indexterm" id="id949"/> in each arm. Above, each pattern is simply a constant integer. We’ve also shown <code>match</code> expressions that distinguish the two kinds of <code>Option</code> value:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr12">
+<code class="k">match</code><code class="w"> </code><code class="n">params</code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="s">"name"</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">name</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Hello, {name}!"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Greetings, stranger."</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is only a hint of what patterns can do. A pattern can match a range of values. It can unpack tuples. It can match against individual fields of structs. It can chase references, borrow parts of a value, and more. Rust’s patterns are a mini-language of their own. We’ll dedicate several pages to them in <a data-type="xref" href="ch10.html#enums-and-patterns">Chapter 10</a>.</p>
+
+<p>The general form of a <code>match</code> expression is:</p>
+
+<pre>
+<strong>match</strong> <var>value</var> <strong>{</strong>
+    <var>pattern</var> <strong>=&gt;</strong> <var>expr</var>,
+    ...
+<strong>}</strong>
+</pre>
+
+<p>The comma after an arm may be dropped if the <code><var>expr</var></code> is a block.</p>
+
+<p>Rust checks the given <code><var>value</var></code> against each pattern in turn, starting with the first. When a pattern matches, the corresponding <code><var>expr</var></code> is evaluated, and the <code>match</code> expression is complete; no further patterns are checked. At least one of the patterns must match. Rust prohibits <code>match</code> expressions that do not cover all possible values:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr13">
+<code class="kd">let</code><code class="w"> </code><code class="n">score</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">card</code><code class="p">.</code><code class="n">rank</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Jack</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">10</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">Queen</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">10</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">Ace</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">11</code><code class="p">,</code><code class="w"/>
+<code class="p">};</code><code class="w">  </code><code class="c1">// error: nonexhaustive patterns</code>
+</pre>
+
+<p>All branches of an <code>if</code> or <code>match</code> expression must produce values of the same type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr14">
+<code class="kd">let</code><code class="w"> </code><code class="n">favorite_number</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">likes_primes</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="mi">31</code><code class="w"> </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="mi">57</code><code class="w"> </code><code class="p">};</code><code class="w">  </code><code class="c1">// ok, both i32</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">favorite_number</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">user</code><code class="p">.</code><code class="n">is_hobbit</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">"eleventy-one"</code><code class="w"> </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="mi">9</code><code class="w"> </code><code class="p">};</code><code class="w">  </code><code class="c1">// error</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">suggested_pet</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">favorites</code><code class="p">.</code><code class="n">element</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Fire</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">Pet</code><code class="p">::</code><code class="n">RedPanda</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">Air</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">Pet</code><code class="p">::</code><code class="n">Buffalo</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">Water</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">Pet</code><code class="p">::</code><code class="n">Orca</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w">  </code><code class="c1">// error: incompatible types</code>
+<code class="p">};</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">best_sports_team</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">is_hockey_season</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="s">"Predators"</code><code class="w"> </code><code class="p">};</code><code class="w">  </code><code class="c1">// error</code>
+</pre>
+
+<p>(The last example is an error because in July, the result would be <code>()</code>.)</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="if let"><div class="sect2" id="if-let">
+<h2>if let</h2>
+
+<p>An <code>if</code> expression can incorporate pattern matching using the <code>let</code> keyword.<a contenteditable="false" data-primary="expressions" data-secondary="if let" data-type="indexterm" id="id950"/><a contenteditable="false" data-primary="if let expressions" data-type="indexterm" id="id951"/></p>
+
+<pre>
+<strong>if</strong> <strong>let</strong> <var>pattern</var> <strong>=</strong> <var>expr</var> <strong>{</strong>
+    <var>block1</var>
+<strong>}</strong> <strong>else</strong> <strong>{</strong>
+    <var>block2</var>
+<strong>}</strong>
+</pre>
+
+<p>The given <code><var>expr</var></code> either matches the <code><var>pattern</var></code>, in which case <code><var>block1</var></code> runs, or doesn’t match, and <code><var>block2</var></code> runs. This is often a nice way to get data out of an <code>Option</code> or <code>Result</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr-if-let">
+<code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">cookie</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">request</code><code class="p">.</code><code class="n">session_cookie</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">return</code><code class="w"> </code><code class="n">restore_session</code><code class="p">(</code><code class="n">cookie</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">show_cheesy_anti_robot_task</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">log_robot_attempt</code><code class="p">(</code><code class="n">err</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">politely_accuse_user_of_being_a_robot</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">session</code><code class="p">.</code><code class="n">mark_as_human</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Note that in the last example, the variable <code>err</code> is in scope throughout the <code>if</code> block, but not in the <code>else</code> block. If we get there, the pattern failed to match.</p>
+
+<p>Multiple conditions can be chained using <code>&amp;&amp;</code>, like so:<a contenteditable="false" data-primary="chaining" data-secondary="if let" data-type="indexterm" id="id952"/></p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr-if-let-chaining">
+<code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">session</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">sessions</code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="n">cookie</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="o">&amp;&amp;</code><code class="w"> </code><code class="n">session</code><code class="p">.</code><code class="n">is_encrypted</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="o">&amp;&amp;</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">user</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">session</code><code class="p">.</code><code class="n">logged_in_user</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="o">&amp;&amp;</code><code class="w"> </code><code class="n">user</code><code class="p">.</code><code class="n">is_admin</code><code class="p">()</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="n">show</code><code class="w"> </code><code class="n">admin</code><code class="w"> </code><code class="n">controls</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Each condition can either be an expression of type <code>bool</code>, satisfied if the value is <code>true</code>; or a <code>let</code> condition, satisfied if the pattern matches. The names introduced by each <code>let</code> condition are in scope for the subsequent conditions.</p>
+
+<p>It’s never strictly <em>necessary</em> to use <code>if let</code>, because <code>match</code> can do everything <code>if let</code> can do. A simple <code>if let</code> expression is shorthand for a <code>match</code> with just one pattern<a contenteditable="false" data-startref="ix_if_expression" data-type="indexterm" id="id953"/><a contenteditable="false" data-startref="ix_exp_if_match" data-type="indexterm" id="id954"/>:</p>
+
+<pre>
+<strong>match</strong> <var>expr</var> <strong>{</strong>
+    <var>pattern</var> <strong>=&gt;</strong> <strong>{</strong> <var>block1</var> <strong>}</strong>
+    <strong>_</strong> <strong>=&gt;</strong> <strong>{</strong> <var>block2</var> <strong>}</strong>
+<strong>}</strong>
+</pre>
+
+<p>More complex <code>if let</code> expressions, with multiple conditions, can be written as nested <code>match</code> expressions.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="let else"><div class="sect2" id="let-else">
+<h2>let else</h2>
+
+<p>When there is only one acceptable pattern, Rust provides a convenient shorthand, the <code>let ... else</code> declaration:</p>
+
+<pre>
+<strong>let</strong> <var>pattern</var><strong>:</strong> <var>type</var> <strong>=</strong> <var>expr</var> <strong>else</strong> <strong>{</strong>
+    <var>divergent block</var>
+<strong>};</strong>
+</pre>
+
+<p>For instance, application code often needs to look something up in a table, and exit if it isn’t found. With <code>let ... else</code>, this can be written concisely as:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr-let-else">
+<code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">team</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">teams</code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="n">team_name</code><code class="p">)</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">return</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">Error</code><code class="p">::</code><code class="n">TeamNotFound</code><code class="p">);</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">player</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">team</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>else</code> block must always be something that ends the flow of execution, such as a panic, <code>return</code>, <code>break</code>, or <code>continue</code>. (This is called “diverging”, and is discussed further below.) <code>let ... else</code> is convenient for many common control flow patterns, but like <code>if let</code>, it is always possible to do the same thing via <code>match</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr-let-else-desugaring">
+<code class="k">match</code><code class="w"> </code><code class="n">teams</code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="n">team_name</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">team</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// ...the rest of the block following the let-else</code>
+<code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="n">player</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">team</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">Error</code><code class="p">::</code><code class="n">TeamNotFound</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Loops"><div class="sect2" id="loops">
+<h2>Loops</h2>
+
+<p>There are four looping<a contenteditable="false" data-primary="looping expressions" data-type="indexterm" id="ix_loop_exp"/> expressions:</p>
+
+<pre class="small">
+<strong>while</strong> <var>condition</var> <strong>{</strong>
+    <var>block</var>
+<strong>}</strong>
+
+<strong>while</strong> <strong>let</strong> <var>pattern</var> <strong>=</strong> <var>expr</var> <strong>{</strong>
+    <var>block</var>
+<strong>}</strong>
+
+<strong>loop</strong> <strong>{</strong>
+    <var>block</var>
+<strong>}</strong>
+
+<strong>for</strong> <var>pattern</var> <strong>in</strong> <var>iterable</var> <strong>{</strong>
+    <var>block</var>
+<strong>}</strong>
+</pre>
+
+<p>Loops are expressions in Rust, but the value of a <code>while</code> or <code>for</code> loop<a contenteditable="false" data-primary="while loop" data-type="indexterm" id="id955"/> is always <code>()</code>, so their value isn’t very useful. A <code>loop</code> expression can produce a value via the <code>break</code> keyword, as we’ll see in the next section.</p>
+
+<p>A <code>while</code> loop behaves exactly like the C equivalent, except that, again, the <code><var>condition</var></code> must be of the exact type <code>bool</code>.</p>
+
+<p>The <code>while let</code> loop<a contenteditable="false" data-primary="while let loop" data-type="indexterm" id="id956"/> is analogous to <code>if let</code>. At the beginning of each loop iteration, the value of <code><var>expr</var></code> either matches the given <code><var>pattern</var></code>, in which case the block runs, or doesn’t, in which case the loop exits. Multiple conditions can be chained with <code>&amp;&amp;</code>, just as for <code>if</code> expressions.</p>
+
+<p>Use <code>loop</code> to write infinite loops<a contenteditable="false" data-primary="infinite loops" data-type="indexterm" id="id957"/><a contenteditable="false" data-primary="loop (for infinite loops)" data-type="indexterm" id="id958"/>. It executes the <code><var>block</var></code> repeatedly forever (or until a <code>break</code> or <code>return</code> is reached or the thread panics).</p>
+
+<p>A <code>for</code> loop evaluates the <code><var>iterable</var></code> expression and then evaluates the <code><var>block</var></code> once for each value in the resulting iterator. Many types can be iterated over, including all the standard collections like <code>Vec</code> and <code>HashMap</code>. The standard C <code>for</code> loop:</p>
+
+<pre class="cpp" data-code-language="cpp" data-type="programlisting" id="test-expr17">
+<code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="kt">int</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="mi">20</code><code class="p">;</code><code class="w"> </code><code class="n">i</code><code class="o">++</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">printf</code><code class="p">(</code><code class="s">"%d</code><code class="se">\n</code><code class="s">"</code><code class="p">,</code><code class="w"> </code><code class="n">i</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>is written like this in Rust:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr18">
+<code class="k">for</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="mi">20</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{i}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>As in C, the last number printed is <code>19</code>.</p>
+
+<p>The <code>..</code> operator produces a <em>range<a contenteditable="false" data-primary="ranges" data-secondary="in loop expressions" data-type="indexterm" id="id959"/></em>, a simple struct with two fields: <code>start</code> and <code>end</code>. <code>0..20</code> is the same as <code>std::ops::Range { start: 0, end: 20 }</code>. Ranges can be used with <code>for</code> loops because <code>Range</code> is an iterable type: it implements the <code>std::iter::IntoIterator</code> trait, which we’ll discuss in <a data-type="xref" href="ch15.html#iterators">Chapter 15</a>. The standard collections are all iterable, as are arrays and slices.</p>
+
+<p>In keeping with Rust’s move semantics, a <code>for</code> loop over a value consumes the value:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr19">
+<code class="kd">let</code><code class="w"> </code><code class="n">strings</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">error_messages</code><code class="p">();</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">strings</code><code class="w"> </code><code class="p">{</code><code class="w">          </code><code class="c1">// each String is moved into s here...</code>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{s}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w">                           </code><code class="c1">// ...and dropped here</code>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{} error(s)"</code><code class="p">,</code><code class="w"> </code><code class="n">strings</code><code class="p">.</code><code class="n">len</code><code class="p">());</code><code class="w">  </code><code class="c1">// error: use of moved value</code>
+</pre>
+
+<p>This can be inconvenient. The easy remedy is to loop over a reference to the collection instead. The loop variable, then, will be a reference to each item in the collection:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr20">
+<code class="k">for</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">strings</code><code class="w"> </code><code class="p">{</code><code class="w">         </code><code class="c1">// `strings` is only borrowed here...</code>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{s}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w">                           </code><code class="c1">// ...nothing is moved or deallocated</code>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{} error(s)"</code><code class="p">,</code><code class="w"> </code><code class="n">strings</code><code class="p">.</code><code class="n">len</code><code class="p">());</code><code class="w">  </code><code class="c1">// ok</code>
+</pre>
+
+<p>Here the type of <code>&amp;strings</code> is <code>&amp;Vec&lt;String&gt;</code>, and the type of <code>s</code> is <code>&amp;String</code>.</p>
+
+<p>Iterating over a <code>mut</code> reference provides a <code>mut</code> reference to each element:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr21">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">strings</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">error_messages</code><code class="p">();</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">strings</code><code class="w"> </code><code class="p">{</code><code class="w">     </code><code class="c1">// the type of s is &amp;mut String</code>
+<code class="w">    </code><code class="n">s</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="sc">'\n'</code><code class="p">);</code><code class="w">           </code><code class="c1">// add a newline to each string</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p><a data-type="xref" href="ch15.html#iterators">Chapter 15</a> covers <code>for</code> loops in greater detail and shows many other ways to use <span class="keep-together">iterators.</span></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="break and continue Expressions"><div class="sect2" id="break-and-continue-expressions">
+<h2>break and continue Expressions</h2>
+
+<p>A <code>break</code> expression<a contenteditable="false" data-primary="break expressions" data-type="indexterm" id="ix_break_expressions"/> exits an enclosing loop<a contenteditable="false" data-primary="expressions" data-secondary="loops" data-type="indexterm" id="ix_exp_loops_ch6"/>. (In many languages, <code>break</code> also has a special role in <code>switch</code> statements, but not in Rust.)</p>
+
+<p>Within a <code>loop</code> expression, <code>break <var>expr</var></code> exits the <code>loop</code> and gives it a value. This feature is easier to show than explain:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-loop-break">
+<code class="c1">// Prompt the user repeatedly until they enter a number.</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">party_size</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">input_line</code><code class="p">(</code><code class="s">"how many?&gt; "</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">num</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line</code><code class="p">.</code><code class="n">trim</code><code class="p">().</code><code class="n">parse</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">break</code><code class="w"> </code><code class="n">num</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>When this example reaches <code>break num</code>, the value of <code>num</code> becomes the value of the whole <code>loop</code>.</p>
+
+<p>If a <code>loop</code> has multiple <code>break</code> expressions, they must all supply values of the same type. This syntax doesn’t work with <code>for</code> or <code>while</code> loops, as those can finish normally, without breaking, producing the value <code>()</code>.</p>
+
+<p>A <code>continue</code> expression jumps to the next loop iteration:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr22">
+<code class="c1">// Read some data, one line at a time.</code>
+<code class="k">for</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">input_lines</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">trimmed</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">trim_comments_and_whitespace</code><code class="p">(</code><code class="n">line</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">trimmed</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// Jump back to the top of the loop and</code>
+<code class="w">        </code><code class="c1">// move on to the next line of input.</code>
+<code class="w">        </code><code class="k">continue</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In a <code>for</code> loop, <code>continue</code> advances<a contenteditable="false" data-primary="for loop" data-secondary="control flow in" data-type="indexterm" id="id960"/> to the next value in the collection. If there are no more values, the loop exits. Similarly<a contenteditable="false" data-primary="while loop" data-type="indexterm" id="id961"/>, in a <code>while</code> loop, <code>continue</code> rechecks the loop condition. If it’s now false, the loop exits.</p>
+
+<p>A loop can be <em>labeled</em><a contenteditable="false" data-primary="labeled loop" data-type="indexterm" id="id962"/> with a lifetime. In the following example, <code>'search:</code> is a label for the outer <code>for</code> loop. Thus, <code>break 'search</code> exits that loop, not the inner loop:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr23">
+<code class="o">'</code><code class="na">search</code><code class="p">:</code><code class="w"> </code><code class="nc">for</code><code class="w"> </code><code class="n">room</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">apartment</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">spot</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">room</code><code class="p">.</code><code class="n">hiding_spots</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">spot</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="n">keys</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Your keys are {spot} in the {room}."</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="k">break</code><code class="w"> </code><code class="nl">'search</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Labels can also be used with <code>continue</code>.</p>
+
+<p>In the rare case that a <code>break</code> needs both a label and a value, it’s written <code>break 'label value</code>.<a contenteditable="false" data-startref="ix_loop_exp" data-type="indexterm" id="id963"/><a contenteditable="false" data-startref="ix_exp_loops_ch6" data-type="indexterm" id="id964"/></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Labeled Blocks"><div class="sect2" id="labeled-blocks">
+<h2>Labeled Blocks</h2>
+
+<p>The <code>break</code> expression has one other function. It can be used to exit early from a block.</p>
+
+<p>A block can be labeled<a contenteditable="false" data-primary="labeled blocks" data-type="indexterm" id="id965"/> with a lifetime, just like a loop. Then the label can be used with <code>break</code> to break out of the block early. In the following example, <code>'trim</code> is a label for the overall block. <code>break</code> exits the named block immediately, providing its value.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-block-break-label">
+<code class="kd">let</code><code class="w"> </code><code class="n">trimmed</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">'</code><code class="na">trim</code><code class="p">:</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">string</code><code class="p">.</code><code class="n">chars</code><code class="p">().</code><code class="n">last</code><code class="p">()</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="sc">'\n'</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">break</code><code class="w"> </code><code class="nl">'trim</code><code class="w"> </code><code class="nb">None</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">string</code><code class="p">.</code><code class="n">pop</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">string</code><code class="p">.</code><code class="n">chars</code><code class="p">().</code><code class="n">last</code><code class="p">()</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="sc">'\r'</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">break</code><code class="w"> </code><code class="nl">'trim</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">Newline</code><code class="p">::</code><code class="n">Unix</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">string</code><code class="p">.</code><code class="n">pop</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">Newline</code><code class="p">::</code><code class="n">Windows</code><code class="p">)</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>The same logic could be written with nested if-expressions instead, but arguably this version reads better, the same way a function sometimes reads better with a few early <code>return</code>s.<a contenteditable="false" data-startref="ix_break_expressions" data-type="indexterm" id="id966"/></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="return Expressions"><div class="sect2" id="return-expressions">
+<h2>return Expressions</h2>
+
+<p>A <code>return</code> expression<a contenteditable="false" data-primary="expressions" data-secondary="return" data-type="indexterm" id="id967"/><a contenteditable="false" data-primary="return expressions" data-type="indexterm" id="id968"/> exits the current function, returning a value to the caller.</p>
+
+<p><code>return</code> without a value is shorthand for <code>return ()</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr24">
+<code class="k">fn</code><code class="w"> </code><code class="nf">f</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w">     </code><code class="c1">// return type omitted: defaults to ()</code>
+<code class="w">    </code><code class="k">return</code><code class="p">;</code><code class="w">  </code><code class="c1">// return value omitted: defaults to ()</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Functions don’t have to have an explicit <code>return</code> expression. The body of a function works like a block expression: if the last expression isn’t followed by a semicolon, its value is the function’s return value. In fact, this is the preferred way to supply a function’s return value in Rust. The <code>return</code> keyword is only necessary when exiting a function early.</p>
+
+<p>In <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>, we noted that the <code>?</code> operator is shorthand for a common kind of early <code>return</code>: bailing out when an error happens. We’ll cover <code>?</code> fully in the next chapter.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Why Rust Has loop"><div class="sect2" id="why-rust-has-loop">
+<h2>Why Rust Has loop</h2>
+
+<p>Several pieces of the Rust compiler analyze the flow of control through your program:</p>
+
+<ul>
+	<li>
+	<p>Rust checks that every path through a function returns a value of the expected return type. To do this correctly, it needs to know whether it’s possible to reach the end of the function.</p>
+	</li>
+	<li>
+	<p>Rust checks that local variables are never used uninitialized. This entails checking every path through a function to make sure there’s no way to reach a place where a variable is used without having already passed through code that initializes it.</p>
+	</li>
+	<li>
+	<p>Rust warns about unreachable code. Code is unreachable if <em>no</em> path through the function reaches it.</p>
+	</li>
+</ul>
+
+<p>These are called <em>flow-sensitive<a contenteditable="false" data-primary="flow-sensitive analyses" data-type="indexterm" id="id969"/></em> analyses. They are nothing new; Java has had a “definite assignment” analysis, similar to Rust’s, for years.</p>
+
+<p>When enforcing this sort of rule, a language must strike a balance between simplicity, which makes it easier for programmers to figure out what the compiler is talking about sometimes, and cleverness, which can help eliminate false warnings and cases where the compiler rejects a perfectly safe program. Rust went for simplicity. Its flow-sensitive analyses do not examine loop conditions at all, instead simply assuming that any condition in a program can be either true or false.</p>
+
+<p>This causes Rust to reject some safe programs:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr27">
+<code class="k">fn</code><code class="w"> </code><code class="nf">wait_for_process</code><code class="p">(</code><code class="n">process</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Process</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">i32</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">while</code><code class="w"> </code><code class="kc">true</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">process</code><code class="p">.</code><code class="n">wait</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">return</code><code class="w"> </code><code class="n">process</code><code class="p">.</code><code class="n">exit_code</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w">  </code><code class="c1">// error: mismatched types: expected i32, found ()</code>
+</pre>
+
+<p>The error here is bogus. This function only exits via the <code>return</code> expression, so the fact that the <code>while</code> loop doesn’t produce an <code>i32</code> is irrelevant.</p>
+
+<p>However, if you replace <code>while true</code> with <code>loop</code>, the code compiles fine. Rust doesn’t worry about reaching the end of the function without having produced an <code>i32</code> value. It knows the end can’t be reached. Control will never flow past the end of the <code>loop</code>.</p>
+
+<p>There’s another way control flow influences Rust’s type checking. Earlier we said that all branches of an <code>if</code> expression must have the same type. But it would be silly to enforce this rule on blocks that end with a <code>break</code> or <code>return</code> expression, an infinite <code>loop</code>, or a call to <code>panic!()</code> or <code>std::process::exit()</code>. What all those expressions have in common is that they never finish in the usual way and produce a value. A <code>break</code> or <code>return</code> exits the current block abruptly, an infinite <code>loop</code> never finishes at all, and so on.</p>
+
+<p>So in Rust, these expressions don’t have a normal type. Expressions that don’t finish normally are assigned the special type <code>!</code>, and they’re exempt from the rules about types having to match. You can see <code>!</code> in the function signature of <code>std::process::exit()</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr28">
+<code class="k">fn</code><code class="w"> </code><code class="nf">exit</code><code class="p">(</code><code class="n">code</code><code class="p">:</code><code class="w"> </code><code class="kt">i32</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">!</code><code class="w"/>
+</pre>
+
+<p>The <code>!</code> means that <code>exit()</code> never returns. It’s a <em>divergent function<a contenteditable="false" data-primary="divergent function" data-type="indexterm" id="id970"/></em>.</p>
+
+<p>You can write divergent functions of your own using the same syntax, and this is perfectly natural in some cases:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr29">
+<code class="k">fn</code><code class="w"> </code><code class="nf">serve_forever</code><code class="p">(</code><code class="n">socket</code><code class="p">:</code><code class="w"> </code><code class="nc">ServerSocket</code><code class="p">,</code><code class="w"> </code><code class="n">handler</code><code class="p">:</code><code class="w"> </code><code class="nc">ServerHandler</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">!</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">socket</code><code class="p">.</code><code class="n">listen</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">socket</code><code class="p">.</code><code class="n">accept</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="n">handler</code><code class="p">.</code><code class="n">handle</code><code class="p">(</code><code class="n">s</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Of course, Rust then considers it an error if the function can return normally.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="const and unsafe Blocks"><div class="sect1" id="const-and-unsafe-blocks">
+<h1>const and unsafe Blocks</h1>
+
+<p>Finally, there are two more Rust keywords that can be attached to blocks: <code>const</code> and <code>unsafe</code>. These are comparatively rare, so we’ll be brief.</p>
+
+<p>A <code>const</code> block is like a regular block, but it runs at compile time instead of run time. In most cases, it’s clearer to declare a constant:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr-const-vs-const">
+<code class="kd">let</code><code class="w"> </code><code class="n">angle</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">const</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">PI</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="mf">6.0</code><code class="w"> </code><code class="p">};</code><code class="w">  </code><code class="c1">// const block</code>
+
+<code class="k">const</code><code class="w"> </code><code class="n">ANGLE</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">PI</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="mf">6.0</code><code class="p">;</code><code class="w">     </code><code class="c1">// constant</code>
+</pre>
+
+<p>Both values are guaranteed to be computed at compile time, but <code>ANGLE</code> can be declared globally and used throughout your code. Local variables can’t. Nor are <code>const</code> blocks widely useful as a performance feature. The compiler optimizes away wasteful run-time calculations without needing to be told; in this example, the division would happen at compile time even without a <code>const</code> block, even in debug builds.</p>
+
+<p>The interesting thing about <code>const</code> blocks is that the compiler checks that the code finishes successfully. If a <code>const</code> block panics, it’s treated as a compile-time error, not a run-time panic. This makes <code>const</code> blocks useful for compile-time assertions:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr-const-block">
+<code class="k">fn</code><code class="w"> </code><code class="nf">allocate_memory</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">(</code><code class="n">alloc</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">MyAlloc</code><code class="p">,</code><code class="w"> </code><code class="n">value</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">MyBox</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">const</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// Enforce some limitations of the allocator.</code>
+<code class="w">        </code><code class="c1">// Compilation fails if either assertion fails.</code>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">size_of</code><code class="p">::</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">()</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="mi">0</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">assert!</code><code class="p">(</code><code class="n">size_of</code><code class="p">::</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">()</code><code class="w"> </code><code class="o">&lt;=</code><code class="w"> </code><code class="n">MyAlloc</code><code class="p">::</code><code class="n">MAX_SIZE</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Lastly, <code>unsafe</code> blocks are used to opt out of Rust’s safety guarantees and opt in to sharp-edged language and library features, such as raw pointers. We will discuss unsafe code in <a data-type="xref" href="ch23.html#unsafe-code">Chapter 23</a>.</p>
+
+<p>With all the building blocks of Rust control flow in place, we can move on to the finer-grained expressions typically used within that flow, like arithmetic operators and function calls.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Operators"><div class="sect1" id="operators">
+<h1>Operators</h1>
+
+<p><a data-type="xref" href="#expressions-operator-table">Table 6-2</a> lists Rust’s operators<a contenteditable="false" data-primary="associativity" data-type="indexterm" id="id971"/><a contenteditable="false" data-primary="expressions" data-secondary="precedence and associativity" data-type="indexterm" id="id972"/>, the symbols that express the language’s most basic operations. The operators are grouped by precedence and listed from highest precedence to lowest. (Like most programming languages, Rust has <em>operator precedence<a contenteditable="false" data-primary="precedence, operator" data-type="indexterm" id="id973"/><a contenteditable="false" data-primary="operator precedence" data-type="indexterm" id="id974"/></em> to determine the order of operations when an expression contains multiple adjacent operators. For example, in <code>limit &lt; 2 * broom.size + 1</code>, the <code>.</code> operator has the highest precedence, so the field access happens first.)</p>
+
+<table id="expressions-operator-table">
+	<caption><span class="label">Table 6-2. </span>Rust operators</caption>
+	<thead>
+		<tr>
+			<th>Expression type</th>
+			<th>Example</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td>Grouping</td>
+			<td><code>(2 + 2)</code></td>
+		</tr>
+		<tr>
+			<td>Array literal</td>
+			<td><code>[1, 2, 3]</code></td>
+		</tr>
+		<tr>
+			<td>Repeat array literal</td>
+			<td><code>[0; 50]</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Tuple</td>
+			<td><code>(6, "crullers")</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Path</td>
+			<td><code>std::f64::consts::PI</code></td>
+		</tr>
+		<tr>
+			<td>Struct literal</td>
+			<td><code>Point {x: 0, y: 0}</code></td>
+		</tr>
+		<tr>
+			<td>Tuple field access</td>
+			<td><code>pair.0</code></td>
+		</tr>
+		<tr>
+			<td>Struct field access</td>
+			<td><code>point.x</code></td>
+		</tr>
+		<tr>
+			<td>Method call</td>
+			<td><code>point.translate(50, 50)</code></td>
+		</tr>
+		<tr>
+			<td>Function call</td>
+			<td><code>stdin()</code></td>
+		</tr>
+		<tr>
+			<td>Macro invocation</td>
+			<td><code>println!("ok")</code></td>
+		</tr>
+		<tr>
+			<td>Index</td>
+			<td><code>arr[0]</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>Err</code>/<code>None</code> early return</td>
+			<td><code>create_dir("tmp")?</code></td>
+		</tr>
+		<tr>
+			<td>Logical/bitwise NOT</td>
+			<td><code>!ok</code></td>
+		</tr>
+		<tr>
+			<td>Negation</td>
+			<td><code>-num</code></td>
+		</tr>
+		<tr>
+			<td>Dereference</td>
+			<td><code>*ptr</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Borrow</td>
+			<td><code>&amp;val</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Multiplication, division, remainder (modulus)</td>
+			<td><code>n * 2</code>, <code>n / 2</code>, <code>n % 2</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Addition and subtraction</td>
+			<td><code>n + 1</code>, <code>n - 1</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Bit shifts</td>
+			<td><code>n &lt;&lt; 1</code>, <code>n &gt;&gt; 1</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Bitwise AND</td>
+			<td><code>n &amp; 1</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Bitwise exclusive OR</td>
+			<td><code>n ^ 1</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Bitwise OR</td>
+			<td><code>n | 1</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Comparisons</td>
+			<td><code>a == b</code>, <code>a != b</code>, <code>a &lt; b</code>, <code>a &lt;= b</code>, <code>a &gt; b</code>, <code>a &gt;= b</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Logical AND</td>
+			<td><code>x.ok &amp;&amp; y.ok</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Logical OR</td>
+			<td><code>x.ok || backup.ok</code></td>
+		</tr>
+		<tr>
+			<td>Ranges</td>
+			<td><code>start..end</code>, <code>start..=end</code></td>
+		</tr>
+		<tr>
+			<td>Assignment</td>
+			<td><code>x = val</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Compound assignment</td>
+			<td><code>x += 1</code> (also <code>*=</code> <code>/=</code> <code>%=</code> <code>-=</code> <code>&lt;&lt;=</code> <code>&gt;&gt;=</code> <code>&amp;=</code> <code>^=</code> <code>|=</code>)</td>
+		</tr>
+		<tr class="border_bottom">
+			<td>Type cast</td>
+			<td><code>x as u32</code></td>
+		</tr>
+		<tr>
+			<td>Closure</td>
+			<td><code>|x, y| x + y</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>The arithmetic and bitwise operations and their associated compound assignments can be overloaded with arbitrary behavior for user-defined types, as discussed in <a data-type="xref" href="ch12.html#operator-overloading">Chapter 12</a>.</p>
+
+<p>All of the operators that can usefully be chained are left-associative. That is, a chain of operations such as <code>a - b - c</code> is grouped as <code>(a - b) - c</code>, not <code>a - (b - c)</code>. The operators that can be chained in this way are all the ones you might expect:</p>
+
+<pre class="ignore" data-type="programlisting">
+*   /   %   +   -   &lt;&lt;   &gt;&gt;   &amp;   ^   |   &amp;&amp;   ||   as
+</pre>
+
+<p>The comparison operators, the assignment operators, and the range operators <code>..</code> and <code>..=</code> can’t be chained at all.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Function and Method Calls"><div class="sect2" id="function-and-method-calls">
+<h2>Function and Method Calls</h2>
+
+<p>The syntax<a contenteditable="false" data-primary="expressions" data-secondary="function/method calls" data-type="indexterm" id="id975"/><a contenteditable="false" data-primary="functions" data-secondary="calling" data-type="indexterm" id="id976"/><a contenteditable="false" data-primary="methods" data-secondary="calling" data-type="indexterm" id="id977"/> for calling functions and methods is the same in Rust as in many other languages:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr31">
+<code class="kd">let</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">gcd</code><code class="p">(</code><code class="mi">1302</code><code class="p">,</code><code class="w"> </code><code class="mi">462</code><code class="p">);</code><code class="w">  </code><code class="c1">// function call</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">room</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">player</code><code class="p">.</code><code class="n">location</code><code class="p">();</code><code class="w">  </code><code class="c1">// method call</code>
+</pre>
+
+<p>In the second example here, <code>player</code> is a variable of the made-up type <code>Player</code>, which has a made-up <code>.location()</code> method. (We’ll show how to define your own methods when we start talking about user-defined types in <a data-type="xref" href="ch09.html#structs">Chapter 9</a>.)</p>
+
+<p>Rust usually makes a sharp distinction between references and the values they refer to. If you pass a <code>&amp;i32</code> to a function that expects an <code>i32</code>, that’s a type error. You’ll notice that the <code>.</code> operator relaxes those rules a bit. In the method call <code>player.location()</code>, <code>player</code> might be a <code>Player</code>, a reference of type <code>&amp;Player</code>, or a smart pointer of type <code>Box&lt;Player&gt;</code> or <code>Rc&lt;Player&gt;</code>. The <code>.location()</code> method might take the player either by value or by reference. The same <code>.location()</code> syntax works in all cases, because Rust’s <code>.</code> operator automatically dereferences <code>player</code> or borrows a reference to it as needed.</p>
+
+<p>A third syntax is used for calling associated functions, like <code>Vec::new()</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr33">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">numbers</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w">  </code><code class="c1">// associated function call</code>
+</pre>
+
+<p>These are similar to static methods<a contenteditable="false" data-primary="static methods" data-type="indexterm" id="id978"/> in object-oriented languages: ordinary methods are called on values (like <code>my_vec.len()</code>), and associated functions are called on types (like <code>Vec::new()</code>).</p>
+
+<p>Naturally, method calls can be chained:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr34">
+<code class="c1">// From the Actix-based web server in Chapter 2:</code>
+<code class="n">server</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">bind</code><code class="p">(</code><code class="s">"127.0.0.1:3000"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error binding server to address"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">run</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="k">await</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error running server"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>One quirk of Rust syntax is that in a function call or method call, the usual syntax for generic types, <code>Vec&lt;T&gt;</code>, does not work:</p>
+
+<pre data-code-language="rust" data-testing-pragma="oneliners" data-type="programlisting" id="test-expr35">
+<code class="k">return</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">::</code><code class="n">with_capacity</code><code class="p">(</code><code class="mi">1000</code><code class="p">);</code><code class="w">  </code><code class="c1">// error: something about chained comparisons</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">ramp</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="n">n</code><code class="p">).</code><code class="n">collect</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;&gt;</code><code class="p">();</code><code class="w">  </code><code class="c1">// same error</code>
+</pre>
+
+<p>The problem is that in expressions, <code>&lt;</code> is the less-than operator. The Rust compiler helpfully suggests writing <code>::&lt;T&gt;</code> instead of <code>&lt;T&gt;</code> in this case, and that solves the <span class="keep-together">problem:</span></p>
+
+<pre data-code-language="rust" data-testing-pragma="oneliners" data-type="programlisting" id="test-expr36">
+<code class="k">return</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">::</code><code class="n">with_capacity</code><code class="p">(</code><code class="mi">1000</code><code class="p">);</code><code class="w">  </code><code class="c1">// ok, using ::&lt;</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">ramp</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="n">n</code><code class="p">).</code><code class="n">collect</code><code class="p">::</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;&gt;</code><code class="p">();</code><code class="w">  </code><code class="c1">// ok, using ::&lt;</code>
+</pre>
+
+<p>The symbol <code>::&lt;...&gt;</code> is affectionately known in the Rust community as the <em class="keep-together">turbofish<a contenteditable="false" data-primary="::&lt;...&gt; (turbofish symbol)" data-type="indexterm" id="id979"/></em>.</p>
+
+<p>Alternatively, it is often possible to drop the type parameters and let Rust infer them:</p>
+
+<pre data-code-language="rust" data-testing-pragma="oneliners" data-type="programlisting" id="test-expr37">
+<code class="k">return</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">with_capacity</code><code class="p">(</code><code class="mi">10</code><code class="p">);</code><code class="w">  </code><code class="c1">// ok, if the fn return type is Vec&lt;i32&gt;</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">ramp</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="n">n</code><code class="p">).</code><code class="n">collect</code><code class="p">();</code><code class="w">  </code><code class="c1">// ok, variable's type is given</code>
+</pre>
+
+<p>It’s considered good style to omit the types whenever they can be inferred.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Fields and Elements"><div class="sect2" id="fields-and-elements">
+<h2>Fields and Elements</h2>
+
+<p><a contenteditable="false" data-primary=". operator" data-type="indexterm" id="id980"/>The fields<a contenteditable="false" data-primary="fields, expressions and" data-type="indexterm" id="id981"/><a contenteditable="false" data-primary="expressions" data-secondary="fields and elements" data-type="indexterm" id="id982"/> of a struct are accessed using familiar syntax. Tuples are the same except that their fields have numbers rather than names:</p>
+
+<pre data-code-language="rust" data-testing-pragma="oneliners" data-type="programlisting" id="test-expr38">
+<code class="n">game</code><code class="p">.</code><code class="n">black_pawns</code><code class="w">   </code><code class="c1">// struct field</code>
+<code class="n">coords</code><code class="p">.</code><code class="mi">1</code><code class="w">           </code><code class="c1">// tuple field</code>
+</pre>
+
+<p>If the value to the left of the dot is a reference or smart pointer type, it is automatically dereferenced, just as for method calls.</p>
+
+<p>Square brackets access the elements of an array, slice, or vector:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr39">
+<code class="n">pieces</code><code class="p">[</code><code class="n">i</code><code class="p">]</code><code class="w">          </code><code class="c1">// array element</code>
+</pre>
+
+<p>The value to the left of the brackets is automatically dereferenced.</p>
+
+<p>Extracting a slice from an array or vector is straightforward:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr41">
+<code class="kd">let</code><code class="w"> </code><code class="n">second_half</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">game_moves</code><code class="p">[</code><code class="n">midpoint</code><code class="o">..</code><code class="n">end</code><code class="p">];</code><code class="w"/>
+</pre>
+
+<p>Here <code>game_moves</code> may be an array, slice, or vector; the result, regardless, is a borrowed slice of length <code>end - midpoint</code>. All of <code>game_moves</code> is considered borrowed for the lifetime of <code>second_half</code>.</p>
+
+<p>The <code>..</code> operator<a contenteditable="false" data-primary=".. operator" data-type="indexterm" id="id983"/><a contenteditable="false" data-primary="ranges" data-secondary=".. and ..= operators" data-type="indexterm" id="id984"/> allows either operand to be omitted; it produces up to four different types of object depending on which operands are present:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr42">
+<code class="o">..</code><code class="w">      </code><code class="c1">// RangeFull</code>
+<code class="n">a</code><code class="o">..</code><code class="w">     </code><code class="c1">// RangeFrom { start: a }</code>
+<code class="o">..</code><code class="n">b</code><code class="w">     </code><code class="c1">// RangeTo { end: b }</code>
+<code class="n">a</code><code class="o">..</code><code class="n">b</code><code class="w">    </code><code class="c1">// Range { start: a, end: b }</code>
+</pre>
+
+<p>The latter two forms are <em>exclusive<a contenteditable="false" data-primary="ranges" data-secondary="inclusive vs. exclusive" data-type="indexterm" id="id985"/><a contenteditable="false" data-primary="inclusive vs. exclusive ranges" data-type="indexterm" id="id986"/><a contenteditable="false" data-primary="half-open ranges" data-type="indexterm" id="id987"/></em> (or <em>half-open</em>): the end value is not included in the range represented. For example, the range <code>0..3</code> includes the numbers <code>0</code>, <code>1</code>, and <code>2</code>.</p>
+
+<p>The <code>..=</code> operator<a contenteditable="false" data-primary="..= operator" data-type="indexterm" id="id988"/> produces <em>inclusive</em> (or <em>closed</em>) ranges<a contenteditable="false" data-primary="closed (inclusive) ranges" data-type="indexterm" id="id989"/>, which do include the end value:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr43">
+<code class="o">..=</code><code class="n">b</code><code class="w">     </code><code class="c1">// RangeToInclusive { end: b }</code>
+<code class="n">a</code><code class="o">..=</code><code class="n">b</code><code class="w">    </code><code class="c1">// RangeInclusive::new(a, b)</code>
+</pre>
+
+<p>For example, the range <code>0..=3</code> includes the numbers <code>0</code>, <code>1</code>, <code>2</code>, and <code>3</code>.</p>
+
+<p>Only ranges that include a start value are iterable, since a loop must have somewhere to start. But in array slicing, all six forms are useful. If the start or end of the range is omitted, it defaults to the start or end of the data being sliced.</p>
+
+<p>So an implementation of quicksort, the classic divide-and-conquer sorting algorithm, might look, in part, like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr44">
+<code class="k">fn</code><code class="w"> </code><code class="nf">quicksort</code><code class="o">&lt;</code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">Ord</code><code class="o">&gt;</code><code class="p">(</code><code class="n">slice</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="p">[</code><code class="n">T</code><code class="p">])</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">slice</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">&lt;=</code><code class="w"> </code><code class="mi">1</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="p">;</code><code class="w">  </code><code class="c1">// Nothing to sort.</code>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Partition the slice into two parts, front and back.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">pivot_index</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">partition</code><code class="p">(</code><code class="n">slice</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Recursively sort the front half of `slice`.</code>
+<code class="w">    </code><code class="n">quicksort</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">slice</code><code class="p">[</code><code class="o">..</code><code class="n">pivot_index</code><code class="p">]);</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// And the back half.</code>
+<code class="w">    </code><code class="n">quicksort</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">slice</code><code class="p">[</code><code class="n">pivot_index</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="o">..</code><code class="p">]);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Reference Operators"><div class="sect2" id="reference-operators">
+<h2 class="less_space">Reference Operators</h2>
+
+<p>The address-of operators<a contenteditable="false" data-primary="expressions" data-secondary="reference operators" data-type="indexterm" id="id990"/><a contenteditable="false" data-primary="operators" data-secondary="reference" data-type="indexterm" id="id991"/><a contenteditable="false" data-primary="reference operators" data-type="indexterm" id="id992"/>, <code>&amp;</code> and <code>&amp;mut</code>, are covered in <a data-type="xref" href="ch05.html#references">Chapter 5</a>.</p>
+
+<p>The unary <code>*</code> operator<a contenteditable="false" data-primary="* operator" data-secondary="accessing referenced value" data-type="indexterm" id="id993"/> is used to access the value pointed to by a reference. As we’ve seen, Rust automatically follows references when you use the <code>.</code> operator to access a field or method, so the <code>*</code> operator is necessary only when we want to read or write the entire value that the reference points to.</p>
+
+<p>For example, sometimes an iterator produces references, but the program needs the underlying values:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr45">
+<code class="kd">let</code><code class="w"> </code><code class="n">padovan</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">compute_padovan_sequence</code><code class="p">(</code><code class="n">n</code><code class="p">);</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">elem</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">padovan</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">draw_triangle</code><code class="p">(</code><code class="n">turtle</code><code class="p">,</code><code class="w"> </code><code class="o">*</code><code class="n">elem</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In this example, the type of <code>elem</code> is <code>&amp;u64</code>, so <code>*elem</code> is a <code>u64</code>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Arithmetic, Bitwise, Comparison, and Logical Operators"><div class="sect2" id="arithmetic-bitwise-comparison-and-logical-operators">
+<h2>Arithmetic, Bitwise, Comparison, and Logical Operators</h2>
+
+<p>Rust’s binary<a contenteditable="false" data-primary="binary operators" data-type="indexterm" id="id994"/><a contenteditable="false" data-primary="operators" data-secondary="binary" data-type="indexterm" id="id995"/> operators are like those in many other languages. To save time, we assume familiarity with one of those languages, and focus on the few points where Rust departs from tradition.</p>
+
+<p>Rust has the usual arithmetic<a contenteditable="false" data-primary="+ operator" data-type="indexterm" id="id996"/><a contenteditable="false" data-primary="- operator" data-type="indexterm" id="id997"/><a contenteditable="false" data-primary="* operator" data-secondary="multiplication" data-type="indexterm" id="id998"/><a contenteditable="false" data-primary="/ operator" data-type="indexterm" id="id999"/><a contenteditable="false" data-primary="% operator" data-type="indexterm" id="id1000"/><a contenteditable="false" data-primary="arithmetic operators" data-type="indexterm" id="id1001"/><a contenteditable="false" data-primary="operators" data-secondary="arithmetic" data-type="indexterm" id="id1002"/> operators, <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, and <code>%</code>. As mentioned in <a data-type="xref" href="ch03.html#fundamental-types">Chapter 3</a>, integer overflow is detected, and causes a panic, in debug builds. The standard library provides methods like <code>a.wrapping_add(b)</code> for unchecked arithmetic.</p>
+
+<p><span data-claim-test="divsign">Integer<a contenteditable="false" data-primary="integers" data-secondary="division by zero panic" data-type="indexterm" id="id1003"/> division rounds toward zero</span>, and dividing an integer by zero triggers a panic even in release builds. Integers have a method <code>a.checked_div(b)</code> that returns an <code>Option</code> (<code>None</code> if <code>b</code> is zero) and never <span class="keep-together">panics.</span></p>
+
+<p>Unary <code>-</code> negates a number. It is supported for all the numeric types except unsigned integers. There is no unary <code>+</code> operator.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr46">
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="o">-</code><code class="mi">100</code><code class="p">);</code><code class="w">     </code><code class="c1">// -100</code>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="o">-</code><code class="mi">100</code><code class="k">u32</code><code class="p">);</code><code class="w">  </code><code class="c1">// error: can't apply unary `-` to type `u32`</code>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="o">+</code><code class="mi">100</code><code class="p">);</code><code class="w">     </code><code class="c1">// error: leading `+` is not supported</code>
+</pre>
+
+<p>As in C, <code>a % b</code> computes the signed remainder, or modulus, of division rounding toward zero. <span data-claim-test="modsign">The result has the same sign as the lefthand operand.</span> Note that <code>%</code> can be used on floating-point <span class="keep-together">numbers</span> as well as integers:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr47">
+<code class="kd">let</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mf">1234.567</code><code class="w"> </code><code class="o">%</code><code class="w"> </code><code class="mf">10.0</code><code class="p">;</code><code class="w">  </code><code class="c1">// approximately 4.567</code>
+</pre>
+
+<p>Rust also inherits C’s bitwise<a contenteditable="false" data-primary="operators" data-secondary="bitwise" data-type="indexterm" id="id1004"/><a contenteditable="false" data-primary="bitwise operators" data-type="indexterm" id="id1005"/><a contenteditable="false" data-primary="&amp; operator" data-type="indexterm" id="id1006"/><a contenteditable="false" data-primary="| operator" data-type="indexterm" id="id1007"/><a contenteditable="false" data-primary="^ operator" data-type="indexterm" id="id1008"/><a contenteditable="false" data-primary="&lt;&lt; operator" data-type="indexterm" id="id1009"/><a contenteditable="false" data-primary="&gt;&gt; operator" data-type="indexterm" id="id1010"/> integer operators, <code>&amp;</code>, <code>|</code>, <code>^</code>, <code>&lt;&lt;</code>, and <code>&gt;&gt;</code>. <a contenteditable="false" data-primary="! operator" data-type="indexterm" id="id1011"/><a contenteditable="false" data-primary="~ operator" data-type="indexterm" id="id1012"/>However, Rust uses <code>!</code> instead of <code>~</code> for bitwise NOT:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr48">
+<code class="kd">let</code><code class="w"> </code><code class="n">hi</code><code class="p">:</code><code class="w"> </code><code class="kt">u8</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mh">0xe0</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">lo</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">!</code><code class="n">hi</code><code class="p">;</code><code class="w">  </code><code class="c1">// 0x1f</code>
+</pre>
+
+<p>This means that <code>!n</code> can’t be used on an integer <code>n</code> to mean “n is zero.” For that, write <span class="keep-together"><code>n == 0</code>.</span></p>
+
+<p>Bit shifting is always sign-extending on signed integer types and zero-extending on unsigned integer types. Since Rust has unsigned integers, it does not need an unsigned shift operator, like Java’s <code>&gt;&gt;&gt;</code> operator.</p>
+
+<p>Bitwise operations have higher precedence than comparisons, unlike C, so if you write <code>x &amp; BIT != 0</code>, that means <code>(x &amp; BIT) != 0</code>, as you probably intended. This is much more useful than C’s interpretation, <code>x &amp; (BIT != 0)</code>, which tests the wrong bit!</p>
+
+<p><a contenteditable="false" data-primary="relational operators" data-type="indexterm" id="id1013"/><a contenteditable="false" data-primary="equality operators" data-type="indexterm" id="id1014"/><a contenteditable="false" data-primary="operators" data-secondary="equality" data-type="indexterm" id="id1015"/>Rust’s comparison<a contenteditable="false" data-primary="== operator" data-type="indexterm" id="id1016"/><a contenteditable="false" data-primary="!= operator" data-type="indexterm" id="id1017"/><a contenteditable="false" data-primary="&lt; operator" data-type="indexterm" id="id1018"/><a contenteditable="false" data-primary="&gt; operator" data-type="indexterm" id="id1019"/><a contenteditable="false" data-primary="&lt;= operator" data-type="indexterm" id="id1020"/><a contenteditable="false" data-primary="&gt;= operator" data-type="indexterm" id="id1021"/><a contenteditable="false" data-primary="comparison operators" data-type="indexterm" id="id1022"/><a contenteditable="false" data-primary="operators" data-secondary="comparison" data-type="indexterm" id="id1023"/> operators are <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, and <code>&gt;=</code>. Like the arithmetic operators, these can be applied to two numbers only if they’re the same type. Strings, tuples, arrays, slices, and vectors are ordered lexicographically. Comparing two references is the same as comparing their referents.</p>
+
+<p><a contenteditable="false" data-primary="&amp;&amp; operator" data-type="indexterm" id="id1024"/><a contenteditable="false" data-primary="|| operator" data-type="indexterm" id="id1025"/>Rust also has the two short-circuiting logical<a contenteditable="false" data-primary="logical operators" data-type="indexterm" id="id1026"/> operators <code>&amp;&amp;</code> and <code>||</code>. Both operands must have the exact type <code>bool</code>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Assignment"><div class="sect2" id="assignment">
+<h2>Assignment</h2>
+
+<p>The <code>=</code> operator<a contenteditable="false" data-primary="= operator" data-type="indexterm" id="id1027"/> can be used to assign to <code>mut</code> variables and their fields or elements. But assignment<a contenteditable="false" data-primary="assignment" data-secondary="expressions" data-type="indexterm" id="id1028"/><a contenteditable="false" data-primary="expressions" data-secondary="assignment" data-type="indexterm" id="id1029"/> is not as common in Rust as in other languages, since variables are immutable by default.</p>
+
+<p>As described in <a data-type="xref" href="ch04.html#ownership">Chapter 4</a>, if the value has a non-<code>Copy</code> type, assignment <em>moves</em> it into the destination. Ownership of the value is transferred from the source to the destination. The destination’s prior value, if any, is dropped.</p>
+
+<p><a contenteditable="false" data-primary="compound assignment operators" data-type="indexterm" id="id1030"/><a contenteditable="false" data-primary="assignment" data-secondary="compound assignment operators" data-type="indexterm" id="id1031"/><a contenteditable="false" data-primary="assignment operators" data-type="indexterm" id="id1032"/>Compound assignment is supported:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr49">
+<code class="n">total</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="n">item</code><code class="p">.</code><code class="n">price</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>This is equivalent to <code>total = total + item.price;</code>. Other operators are supported too: <code>-=</code>, <code>*=</code>, and so forth. The full list is given in <a data-type="xref" href="#expressions-operator-table">Table 6-2</a>, earlier in this chapter.</p>
+
+<p>Unlike C, Rust doesn’t support chaining assignment: you can’t write <code>a = b = 3</code> to assign the value <code>3</code> to both <code>a</code> and <code>b</code>. Assignment is rare enough in Rust that you won’t miss this shorthand.</p>
+
+<p>Rust does not have C’s increment and decrement operators <code>++</code> and <code>--</code>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Type Casts"><div class="sect2" id="type-casts">
+<h2>Type Casts</h2>
+
+<p>You can convert a value from one type to another using the <code>as</code> keyword.<a contenteditable="false" data-primary="casts" data-type="indexterm" id="id1033"/><a contenteditable="false" data-primary="expressions" data-secondary="type casts" data-type="indexterm" id="id1034"/><a contenteditable="false" data-primary="types" data-secondary="casts and" data-type="indexterm" id="id1035"/>. This is called a <em>type cast</em>.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr50">
+<code class="kd">let</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">17</code><code class="p">;</code><code class="w">              </code><code class="c1">// x is type i32</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">index</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="p">;</code><code class="w">  </code><code class="c1">// cast to usize</code>
+</pre>
+
+<p>Several kinds of casts are permitted:</p>
+
+<ul>
+	<li>
+	<p>Numbers may be cast from any of the built-in numeric types to any other.</p>
+
+	<p>Casting an integer to another integer type is always well-defined. Converting to a narrower type results in truncation. A signed integer cast to a wider type is sign-extended, an unsigned integer is zero-extended, and so on. In short, there are no surprises.</p>
+
+	<p>Converting from a floating-point type to an integer type rounds toward zero: the value of <code>-1.99 as i32</code> is <code>-1</code>. <span data-claim-test="saturating-float-cast">If the value is too large to fit in the integer type, the cast produces the closest value that the integer type can represent: the value of <code>1e6 as u8</code> is <code>255</code>.</span></p>
+	</li>
+	<li>
+	<p>Values of type <code>bool</code> or <code>char</code>, or of a C-like <code>enum</code> type, may be cast to any integer type. (We’ll cover enums in <a data-type="xref" href="ch10.html#enums-and-patterns">Chapter 10</a>.)</p>
+
+	<p>Casting in the other direction is not allowed, as <code>bool</code>, <code>char</code>, and <code>enum</code> types all have restrictions on their values that would have to be enforced with run-time checks. For example, casting a <code>u16</code> to type <code>char</code> is banned because some <code>u16</code> <span class="keep-together">values</span>, like <code>0xd800</code>, correspond to Unicode surrogate code points and therefore would not make valid <code>char</code> values. There is a standard method, <code>char::from_u32()</code>, which performs the run-time check and returns an <code>Option&lt;char&gt;</code>; but more to the point, the need for this kind of conversion has grown rare. We typically convert whole strings or streams at once, and algorithms on Unicode text are often nontrivial and best left to libraries.</p>
+
+	<p>As an exception, a <code>u8</code> may be cast to type <code>char</code>, since all integers from 0 to 255 are valid Unicode code points for <code>char</code> to hold.</p>
+	</li>
+	<li>
+	<p>Some casts involving raw pointer types are also allowed. See <a data-type="xref" href="ch23.html#unsafe-code-raw-pointers">“Raw Pointers”</a>.</p>
+	</li>
+</ul>
+
+<p>A few conversions involving reference types are so straightforward that the language performs them even without a cast. One trivial example is converting a <code>mut</code> reference to a non-<code>mut</code> reference.</p>
+
+<p>Several more significant automatic conversions can happen, though:</p>
+
+<ul>
+	<li>
+	<p>Values of type <code>&amp;String</code> auto-convert to type <code>&amp;str</code> without a cast.</p>
+	</li>
+	<li>
+	<p>Values of type <code>&amp;Vec&lt;i32&gt;</code> auto-convert to <code>&amp;[i32]</code>.</p>
+	</li>
+	<li>
+	<p>Values of type <code>&amp;Box&lt;Chessboard&gt;</code> auto-convert to <code>&amp;Chessboard</code>.</p>
+	</li>
+</ul>
+
+<p>These are called <em>deref coercions<a contenteditable="false" data-primary="Deref coercions" data-type="indexterm" id="id1036"/></em>, because they apply to types that implement the <code>Deref</code> built-in trait. The purpose of <code>Deref</code> coercion is to make smart pointer types, like <code>Box</code>, behave as much like the underlying value as possible. Using a <code>Box&lt;Chessboard&gt;</code> is mostly just like using a plain <code>Chessboard</code>, thanks to <code>Deref</code>.</p>
+
+<p>User-defined types can implement the <code>Deref</code> trait, too. When you need to write your own smart pointer type, see <a data-type="xref" href="ch13.html#deref-and-derefmut">“Deref and DerefMut”</a>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Closures"><div class="sect2" id="expressions-closures">
+<h2>Closures</h2>
+
+<p>Rust has <em>closures<a contenteditable="false" data-primary="closures" data-type="indexterm" id="id1037"/><a contenteditable="false" data-primary="expressions" data-secondary="closures" data-type="indexterm" id="id1038"/></em>, lightweight function-like values. A closure usually consists of an argument list, given between vertical bars, followed by an expression.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr51">
+<code class="kd">let</code><code class="w"> </code><code class="n">is_even</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">x</code><code class="o">|</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">%</code><code class="w"> </code><code class="mi">2</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">is_even</code><code class="p">(</code><code class="mi">14</code><code class="p">),</code><code class="w"> </code><code class="kc">true</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Rust infers the closure’s argument types and return type. You can also write them out explicitly, as you would for a function. If you do specify a return type, then the body of the closure must be a block, for the sake of syntactic sanity:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-expr52">
+<code class="kd">let</code><code class="w"> </code><code class="n">is_even</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="kt">u64</code><code class="o">|</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="nc">x</code><code class="w"> </code><code class="o">%</code><code class="w"> </code><code class="mi">2</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w">  </code><code class="c1">// error</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">is_even</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="kt">u64</code><code class="o">|</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">%</code><code class="w"> </code><code class="mi">2</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">};</code><code class="w">  </code><code class="c1">// ok</code>
+</pre>
+
+<p>Closures are one of Rust’s most delightful features, and there is a great deal more to be said about them. We shall say it in <a data-type="xref" href="ch14.html#closures">Chapter 14</a>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Onward"><div class="sect1" id="onward">
+<h1>Onward</h1>
+
+<p>Expressions are what we think of as “running code.” They’re the part of a Rust program that compiles to machine instructions. Yet they are a small fraction of the whole language.</p>
+
+<p>The same is true in most programming languages. The first job of a program is to run, but that’s not its only job. Programs have to communicate. They have to be testable. They have to stay organized and flexible so that they can continue to evolve. They have to interoperate with code and services built by other teams. And even just to run, programs in a statically typed language like Rust need some more tools for organizing data than just tuples and arrays.</p>
+
+<p>Coming up, we’ll spend several chapters talking about features in this area: modules and crates, which give your program structure, and then structs and enums, which do the same for your data<a contenteditable="false" data-startref="ix_expressions_ch6" data-type="indexterm" id="id1039"/>.</p>
+
+<p>First, we’ll dedicate a few pages to the important topic of what to do when things go wrong.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

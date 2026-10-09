@@ -1,0 +1,178 @@
+<?xml version='1.0' encoding='utf-8'?>
+<package xmlns="http://www.idpf.org/2007/opf" unique-identifier="id" version="3.0" prefix="rendition: http://www.idpf.org/vocab/rendition/#">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">
+    <meta property="dcterms:modified">2026-07-25T23:46:35Z</meta>
+    <meta name="generator" content="Ebook-lib 0.18.1"/>
+    <dc:identifier id="id">9781098176228</dc:identifier>
+    <dc:title>Programming Rust 3Rd</dc:title>
+    <dc:language>en</dc:language>
+    <meta name="cover" content="cover-img"></meta>
+  </metadata>
+  <manifest>
+    <item href="media/cover.png" id="cover-img" media-type="image/png" properties="cover-image"/>
+    <item href="cover.html" id="cover_html" media-type="text/html"/>
+    <item href="titlepage01.html" id="titlepage01_html" media-type="text/html"/>
+    <item href="copyright-page01.html" id="copyright-page01_html" media-type="text/html"/>
+    <item href="preface01.html" id="preface01_html" media-type="text/html"/>
+    <item href="ch01.html" id="ch01_html" media-type="text/html"/>
+    <item href="ch02.html" id="ch02_html" media-type="text/html"/>
+    <item href="ch03.html" id="ch03_html" media-type="text/html"/>
+    <item href="ch04.html" id="ch04_html" media-type="text/html"/>
+    <item href="ch05.html" id="ch05_html" media-type="text/html"/>
+    <item href="ch06.html" id="ch06_html" media-type="text/html"/>
+    <item href="ch07.html" id="ch07_html" media-type="text/html"/>
+    <item href="ch08.html" id="ch08_html" media-type="text/html"/>
+    <item href="ch09.html" id="ch09_html" media-type="text/html"/>
+    <item href="ch10.html" id="ch10_html" media-type="text/html"/>
+    <item href="ch11.html" id="ch11_html" media-type="text/html"/>
+    <item href="ch12.html" id="ch12_html" media-type="text/html"/>
+    <item href="ch13.html" id="ch13_html" media-type="text/html"/>
+    <item href="ch14.html" id="ch14_html" media-type="text/html"/>
+    <item href="ch15.html" id="ch15_html" media-type="text/html"/>
+    <item href="ch16.html" id="ch16_html" media-type="text/html"/>
+    <item href="ch17.html" id="ch17_html" media-type="text/html"/>
+    <item href="ch18.html" id="ch18_html" media-type="text/html"/>
+    <item href="ch19.html" id="ch19_html" media-type="text/html"/>
+    <item href="ch20.html" id="ch20_html" media-type="text/html"/>
+    <item href="ch21.html" id="ch21_html" media-type="text/html"/>
+    <item href="ch22.html" id="ch22_html" media-type="text/html"/>
+    <item href="ch23.html" id="ch23_html" media-type="text/html"/>
+    <item href="ch24.html" id="ch24_html" media-type="text/html"/>
+    <item href="ix01.html" id="ix01_html" media-type="text/html"/>
+    <item href="colophon01.html" id="colophon01_html" media-type="text/html"/>
+    <item href="assets/1F642.png" id="assets_1F642_png" media-type="image/png"/>
+    <item href="assets/cover.png" id="assets_cover_png" media-type="image/png"/>
+    <item href="assets/pru3_0201.png" id="assets_pru3_0201_png" media-type="image/png"/>
+    <item href="assets/pru3_0202.png" id="assets_pru3_0202_png" media-type="image/png"/>
+    <item href="assets/pru3_0203.png" id="assets_pru3_0203_png" media-type="image/png"/>
+    <item href="assets/pru3_0204.png" id="assets_pru3_0204_png" media-type="image/png"/>
+    <item href="assets/pru3_0205.png" id="assets_pru3_0205_png" media-type="image/png"/>
+    <item href="assets/pru3_0206.png" id="assets_pru3_0206_png" media-type="image/png"/>
+    <item href="assets/pru3_0207.png" id="assets_pru3_0207_png" media-type="image/png"/>
+    <item href="assets/pru3_0301.png" id="assets_pru3_0301_png" media-type="image/png"/>
+    <item href="assets/pru3_0302.png" id="assets_pru3_0302_png" media-type="image/png"/>
+    <item href="assets/pru3_0303.png" id="assets_pru3_0303_png" media-type="image/png"/>
+    <item href="assets/pru3_0401.png" id="assets_pru3_0401_png" media-type="image/png"/>
+    <item href="assets/pru3_0402.png" id="assets_pru3_0402_png" media-type="image/png"/>
+    <item href="assets/pru3_0403.png" id="assets_pru3_0403_png" media-type="image/png"/>
+    <item href="assets/pru3_0404.png" id="assets_pru3_0404_png" media-type="image/png"/>
+    <item href="assets/pru3_0405.png" id="assets_pru3_0405_png" media-type="image/png"/>
+    <item href="assets/pru3_0406.png" id="assets_pru3_0406_png" media-type="image/png"/>
+    <item href="assets/pru3_0407.png" id="assets_pru3_0407_png" media-type="image/png"/>
+    <item href="assets/pru3_0408.png" id="assets_pru3_0408_png" media-type="image/png"/>
+    <item href="assets/pru3_0409.png" id="assets_pru3_0409_png" media-type="image/png"/>
+    <item href="assets/pru3_0410.png" id="assets_pru3_0410_png" media-type="image/png"/>
+    <item href="assets/pru3_0411.png" id="assets_pru3_0411_png" media-type="image/png"/>
+    <item href="assets/pru3_0412.png" id="assets_pru3_0412_png" media-type="image/png"/>
+    <item href="assets/pru3_0413.png" id="assets_pru3_0413_png" media-type="image/png"/>
+    <item href="assets/pru3_0501.png" id="assets_pru3_0501_png" media-type="image/png"/>
+    <item href="assets/pru3_0502.png" id="assets_pru3_0502_png" media-type="image/png"/>
+    <item href="assets/pru3_0503.png" id="assets_pru3_0503_png" media-type="image/png"/>
+    <item href="assets/pru3_0504.png" id="assets_pru3_0504_png" media-type="image/png"/>
+    <item href="assets/pru3_0505.png" id="assets_pru3_0505_png" media-type="image/png"/>
+    <item href="assets/pru3_0506.png" id="assets_pru3_0506_png" media-type="image/png"/>
+    <item href="assets/pru3_0507.png" id="assets_pru3_0507_png" media-type="image/png"/>
+    <item href="assets/pru3_0508.png" id="assets_pru3_0508_png" media-type="image/png"/>
+    <item href="assets/pru3_0509.png" id="assets_pru3_0509_png" media-type="image/png"/>
+    <item href="assets/pru3_0510.png" id="assets_pru3_0510_png" media-type="image/png"/>
+    <item href="assets/pru3_0511.png" id="assets_pru3_0511_png" media-type="image/png"/>
+    <item href="assets/pru3_0801.png" id="assets_pru3_0801_png" media-type="image/png"/>
+    <item href="assets/pru3_0802.png" id="assets_pru3_0802_png" media-type="image/png"/>
+    <item href="assets/pru3_0803.png" id="assets_pru3_0803_png" media-type="image/png"/>
+    <item href="assets/pru3_0901.png" id="assets_pru3_0901_png" media-type="image/png"/>
+    <item href="assets/pru3_1001.png" id="assets_pru3_1001_png" media-type="image/png"/>
+    <item href="assets/pru3_1002.png" id="assets_pru3_1002_png" media-type="image/png"/>
+    <item href="assets/pru3_1003.png" id="assets_pru3_1003_png" media-type="image/png"/>
+    <item href="assets/pru3_1004.png" id="assets_pru3_1004_png" media-type="image/png"/>
+    <item href="assets/pru3_1005.png" id="assets_pru3_1005_png" media-type="image/png"/>
+    <item href="assets/pru3_1006.png" id="assets_pru3_1006_png" media-type="image/png"/>
+    <item href="assets/pru3_1101.png" id="assets_pru3_1101_png" media-type="image/png"/>
+    <item href="assets/pru3_1102.png" id="assets_pru3_1102_png" media-type="image/png"/>
+    <item href="assets/pru3_1301.png" id="assets_pru3_1301_png" media-type="image/png"/>
+    <item href="assets/pru3_1401.png" id="assets_pru3_1401_png" media-type="image/png"/>
+    <item href="assets/pru3_1402.png" id="assets_pru3_1402_png" media-type="image/png"/>
+    <item href="assets/pru3_1403.png" id="assets_pru3_1403_png" media-type="image/png"/>
+    <item href="assets/pru3_1404.png" id="assets_pru3_1404_png" media-type="image/png"/>
+    <item href="assets/pru3_1501.png" id="assets_pru3_1501_png" media-type="image/png"/>
+    <item href="assets/pru3_1601.png" id="assets_pru3_1601_png" media-type="image/png"/>
+    <item href="assets/pru3_1602.png" id="assets_pru3_1602_png" media-type="image/png"/>
+    <item href="assets/pru3_1603.png" id="assets_pru3_1603_png" media-type="image/png"/>
+    <item href="assets/pru3_1604.png" id="assets_pru3_1604_png" media-type="image/png"/>
+    <item href="assets/pru3_1605.png" id="assets_pru3_1605_png" media-type="image/png"/>
+    <item href="assets/pru3_1701.png" id="assets_pru3_1701_png" media-type="image/png"/>
+    <item href="assets/pru3_1702.png" id="assets_pru3_1702_png" media-type="image/png"/>
+    <item href="assets/pru3_1703.png" id="assets_pru3_1703_png" media-type="image/png"/>
+    <item href="assets/pru3_1801.png" id="assets_pru3_1801_png" media-type="image/png"/>
+    <item href="assets/pru3_1901.png" id="assets_pru3_1901_png" media-type="image/png"/>
+    <item href="assets/pru3_1902.png" id="assets_pru3_1902_png" media-type="image/png"/>
+    <item href="assets/pru3_1903.png" id="assets_pru3_1903_png" media-type="image/png"/>
+    <item href="assets/pru3_1904.png" id="assets_pru3_1904_png" media-type="image/png"/>
+    <item href="assets/pru3_1905.png" id="assets_pru3_1905_png" media-type="image/png"/>
+    <item href="assets/pru3_1906.png" id="assets_pru3_1906_png" media-type="image/png"/>
+    <item href="assets/pru3_1907.png" id="assets_pru3_1907_png" media-type="image/png"/>
+    <item href="assets/pru3_1908.png" id="assets_pru3_1908_png" media-type="image/png"/>
+    <item href="assets/pru3_1909.png" id="assets_pru3_1909_png" media-type="image/png"/>
+    <item href="assets/pru3_1910.png" id="assets_pru3_1910_png" media-type="image/png"/>
+    <item href="assets/pru3_1911.png" id="assets_pru3_1911_png" media-type="image/png"/>
+    <item href="assets/pru3_2001.png" id="assets_pru3_2001_png" media-type="image/png"/>
+    <item href="assets/pru3_2002.png" id="assets_pru3_2002_png" media-type="image/png"/>
+    <item href="assets/pru3_2101.png" id="assets_pru3_2101_png" media-type="image/png"/>
+    <item href="assets/pru3_2102.png" id="assets_pru3_2102_png" media-type="image/png"/>
+    <item href="assets/pru3_2103.png" id="assets_pru3_2103_png" media-type="image/png"/>
+    <item href="assets/pru3_2104.png" id="assets_pru3_2104_png" media-type="image/png"/>
+    <item href="assets/pru3_2201.png" id="assets_pru3_2201_png" media-type="image/png"/>
+    <item href="assets/pru3_2202.png" id="assets_pru3_2202_png" media-type="image/png"/>
+    <item href="assets/pru3_2203.png" id="assets_pru3_2203_png" media-type="image/png"/>
+    <item href="assets/pru3_2301.png" id="assets_pru3_2301_png" media-type="image/png"/>
+    <item href="assets/pru3_2302.png" id="assets_pru3_2302_png" media-type="image/png"/>
+    <item href="assets/pru3_2303.png" id="assets_pru3_2303_png" media-type="image/png"/>
+    <item href="assets/pru3_2304.png" id="assets_pru3_2304_png" media-type="image/png"/>
+    <item href="assets/pru3_2305.png" id="assets_pru3_2305_png" media-type="image/png"/>
+    <item href="assets/pru3_2306.png" id="assets_pru3_2306_png" media-type="image/png"/>
+    <item href="assets/pru3_2307.png" id="assets_pru3_2307_png" media-type="image/png"/>
+    <item href="css_assets/titlepage_footer_ebook.png" id="css_assets_titlepage_footer_ebook_png" media-type="image/png"/>
+    <item href="DejaVuSans-Bold.otf" id="DejaVuSans-Bold_otf" media-type="font/otf"/>
+    <item href="DejaVuSerif.otf" id="DejaVuSerif_otf" media-type="font/otf"/>
+    <item href="epub.css" id="epub_css" media-type="text/css"/>
+    <item href="toc01.html" id="toc01_html" media-type="text/html"/>
+    <item href="toc.ncx" id="toc_ncx" media-type="application/x-dtbncx+xml"/>
+    <item href="UbuntuMono-BoldItalic.otf" id="UbuntuMono-BoldItalic_otf" media-type="font/otf"/>
+    <item href="UbuntuMono-Bold.otf" id="UbuntuMono-Bold_otf" media-type="font/otf"/>
+    <item href="UbuntuMono-Italic.otf" id="UbuntuMono-Italic_otf" media-type="font/otf"/>
+    <item href="UbuntuMono-Regular.otf" id="UbuntuMono-Regular_otf" media-type="font/otf"/>
+    <item href="nav.xhtml" id="nav" media-type="application/xhtml+xml" properties="nav"/>
+  </manifest>
+  <spine toc="ncx">
+    <itemref idref="cover_html"/>
+    <itemref idref="titlepage01_html"/>
+    <itemref idref="copyright-page01_html"/>
+    <itemref idref="preface01_html"/>
+    <itemref idref="ch01_html"/>
+    <itemref idref="ch02_html"/>
+    <itemref idref="ch03_html"/>
+    <itemref idref="ch04_html"/>
+    <itemref idref="ch05_html"/>
+    <itemref idref="ch06_html"/>
+    <itemref idref="ch07_html"/>
+    <itemref idref="ch08_html"/>
+    <itemref idref="ch09_html"/>
+    <itemref idref="ch10_html"/>
+    <itemref idref="ch11_html"/>
+    <itemref idref="ch12_html"/>
+    <itemref idref="ch13_html"/>
+    <itemref idref="ch14_html"/>
+    <itemref idref="ch15_html"/>
+    <itemref idref="ch16_html"/>
+    <itemref idref="ch17_html"/>
+    <itemref idref="ch18_html"/>
+    <itemref idref="ch19_html"/>
+    <itemref idref="ch20_html"/>
+    <itemref idref="ch21_html"/>
+    <itemref idref="ch22_html"/>
+    <itemref idref="ch23_html"/>
+    <itemref idref="ch24_html"/>
+    <itemref idref="ix01_html"/>
+    <itemref idref="colophon01_html"/>
+    <itemref idref="toc01_html"/>
+  </spine>
+</package>

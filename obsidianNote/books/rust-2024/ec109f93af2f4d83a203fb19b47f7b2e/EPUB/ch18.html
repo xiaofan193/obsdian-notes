@@ -1,0 +1,1283 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch18.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 18. Input and Output">
+        <div class="chapter" id="input-and-output">
+<h1><span class="label">Chapter 18. </span>Input and Output</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id2150"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the eighteenth chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>Doolittle: What concrete evidence do you have that you exist?</p>
+
+<p>Bomb #20: Hmmmm... well... I think, therefore I am.</p>
+
+<p>Doolittle: That’s good. That’s very good. But how do you know that anything else exists?</p>
+
+<p>Bomb #20: My sensory apparatus reveals it to me.</p>
+
+<p data-type="attribution"><em>Dark Star</em></p>
+</blockquote>
+
+<p>Input and output are the limbs that turn the disembodied logic of a program into something that can reach out and interact with the world. Most of the time, that means working with filesystems and network interfaces, but there are more exotic types of I/O, too.</p>
+
+<p>As it often strives to do, Rust’s standard library makes the easy cases easy. Reading a UTF-8 formatted text file (or HTML document, or CSV, or what have you) is as easy as calling <code>std::fs::read_to_string</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io-read_to_string">
+<code class="kd">let</code><code class="w"> </code><code class="n">contents</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fs</code><code class="p">::</code><code class="n">read_to_string</code><code class="p">(</code><code class="s">"file.txt"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"Unable to read file"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Convenience functions like this make it easy to write lots of programs, but they’re all built on top of a relatively simple foundation of two I/O traits: <code>Read</code> and <code>Write</code>. In this chapter, we’ll demonstrate how to use these traits to read and write files, and how to work with the filesystem, the terminal, and the network.</p>
+
+<section data-type="sect1" data-pdf-bookmark="Readers and Writers"><div class="sect1" id="readers-and-writers">
+<h1>Readers and Writers</h1>
+
+<p><em>Readers</em> are values that your program<a contenteditable="false" data-primary="input and output" data-secondary="readers and writers" data-type="indexterm" id="ix_io_read_write"/> can read bytes from. They implement the <code>std::io::Read</code> trait. Examples include:</p>
+
+<ul>
+	<li>
+	<p>Files opened using <code>std::fs::File::open(filename)</code></p>
+	</li>
+	<li>
+	<p><code>std::net::TcpStream</code>s, for receiving data over the network</p>
+	</li>
+	<li>
+	<p><code>std::io::stdin()</code>, for reading from the process’s standard input stream</p>
+	</li>
+	<li>
+	<p><span data-claim-test="cursor-vec-u8"><code>std::io::Cursor&lt;&amp;[u8]&gt;</code> and <code>std::io::Cursor&lt;Vec&lt;u8&gt;&gt;</code> values, which are readers that “read” from a byte array or vector that’s already in memory</span></p>
+	</li>
+</ul>
+
+<p><em>Writers<a contenteditable="false" data-primary="writers" data-type="indexterm" id="id2151"/></em> are values that your program can write bytes to. They implement the <code>std::io::Write</code> trait. Examples include:</p>
+
+<ul>
+	<li>
+	<p>Files opened using <code>std::fs::File::create(filename)</code></p>
+	</li>
+	<li>
+	<p><code>std::net::TcpStream</code>s, for sending data over the network</p>
+	</li>
+	<li>
+	<p><code>std::io::stdout()</code> and <code>std::io:stderr()</code>, for writing to the terminal</p>
+	</li>
+	<li>
+	<p><code>Vec&lt;u8&gt;</code>, a writer whose <code>write</code> methods append to the vector</p>
+	</li>
+	<li>
+	<p><code>std::io::Cursor&lt;Vec&lt;u8&gt;&gt;</code>, which is similar but lets you both read and write data, and seek to different positions within the vector</p>
+	</li>
+	<li>
+	<p><span data-claim-test="cursor-mut-u8-cannot-grow"><code>std::io::Cursor&lt;&amp;mut [u8]&gt;</code>, which is much like <code>std::io::Cursor&lt;Vec&lt;u8&gt;&gt;</code>, except that it can’t grow the buffer, since it’s just a slice of some existing byte array</span></p>
+	</li>
+</ul>
+
+<p>Since the <code>Read</code> and <code>Write</code> traits<a contenteditable="false" data-primary="Read trait" data-type="indexterm" id="id2152"/> are part of the standard library, they are used throughout the Rust ecosystem, and it’s quite common to write generic code that works across a variety of input or output channels. For example, here’s a function that copies all bytes from any reader to any writer:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io0">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">ErrorKind</code><code class="p">,</code><code class="w"> </code><code class="n">Read</code><code class="p">,</code><code class="w"> </code><code class="n">Write</code><code class="p">};</code><code class="w"/>
+
+<code class="k">const</code><code class="w"> </code><code class="n">DEFAULT_BUF_SIZE</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">8</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">1024</code><code class="p">;</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">copy</code><code class="o">&lt;</code><code class="n">R</code><code class="p">,</code><code class="w"> </code><code class="n">W</code><code class="o">&gt;</code><code class="p">(</code><code class="n">reader</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">R</code><code class="p">,</code><code class="w"> </code><code class="n">writer</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">W</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">R</code><code class="p">:</code><code class="w"> </code><code class="nc">Read</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">?</code><code class="nb">Sized</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">W</code><code class="p">:</code><code class="w"> </code><code class="nc">Write</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">?</code><code class="nb">Sized</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="n">DEFAULT_BUF_SIZE</code><code class="p">];</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">written</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">len</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">read</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="mi">0</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">written</code><code class="p">),</code><code class="w"/>
+<code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">len</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">len</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="k">ref</code><code class="w"> </code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">e</code><code class="p">.</code><code class="n">kind</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">ErrorKind</code><code class="p">::</code><code class="n">Interrupted</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">continue</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">};</code><code class="w"/>
+<code class="w">        </code><code class="n">writer</code><code class="p">.</code><code class="n">write_all</code><code class="p">(</code><code class="o">&amp;</code><code class="n">buf</code><code class="p">[</code><code class="o">..</code><code class="n">len</code><code class="p">])</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="n">written</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="n">len</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u64</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is a simplified implementation of <code>std::io::copy()</code> from<a contenteditable="false" data-primary="copy method" data-type="indexterm" id="id2153"/> Rust’s standard library. Since it’s generic, you can use it to copy data from a <code>File</code> to a <code>TcpStream</code>, from <code>Stdin</code> to an in-memory <code>Vec&lt;u8&gt;</code>, etc.</p>
+
+<p>If the error-handling code here is unclear, revisit <a data-type="xref" href="ch07.html#error-handling">Chapter 7</a>. We’ll be using the <code>Result</code> type constantly in the pages ahead; it’s important to have a good grasp of how it works.</p>
+
+<p>The <code>std::io</code> traits <code>Read</code> and <code>Write</code>, along with <code>BufRead</code> and <code>Seek</code>, are so commonly used that there’s a <code>prelude</code> module containing only those traits:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io-prelude">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">prelude</code><code class="p">::</code><code class="o">*</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>You’ll see this once or twice in this chapter. We also make a habit of importing the <code>std::io</code> module<a contenteditable="false" data-primary="io module" data-type="indexterm" id="id2154"/> itself:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io1">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">ErrorKind</code><code class="p">,</code><code class="w"> </code><code class="n">Read</code><code class="p">,</code><code class="w"> </code><code class="n">Write</code><code class="p">};</code><code class="w"/>
+</pre>
+
+<p>The <code>self</code> keyword here declares <code>io</code> as an alias to the <code>std::io</code> module. That way, <code>std::io::Result</code> and <code>std::io::Error</code> can be written more concisely as <code>io::Result</code> and <code>io::Error</code>, and so on.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Readers"><div class="sect2" id="readers">
+<h2>Readers</h2>
+
+<p><code>std::io::Read</code> has several methods for reading<a contenteditable="false" data-primary="readers" data-type="indexterm" id="ix_readers_ch18"/> data. All of them take the reader itself by <code>mut</code> reference.</p>
+
+<dl>
+	<dt><code>reader.read(&amp;mut buffer)</code></dt>
+	<dd>
+	<p>Reads<a contenteditable="false" data-primary="Read trait" data-secondary="read method" data-type="indexterm" id="id2155"/> some bytes from the data source and stores them in the given <code>buffer</code>. The type of the <code>buffer</code> argument is <code>&amp;mut [u8]</code>. This reads up to <code>buffer.len()</code> bytes.</p>
+
+	<p>The return type is <code>io::Result&lt;u64&gt;</code>, which is a type alias for <code>Result&lt;u64, io::Error&gt;</code>. On success, the <code>u64</code> value is the number of bytes read—which may be equal to or less than <code>buffer.len()</code>, <em>even if there’s more data to come,</em> at the whim of the data source. <code>Ok(0)</code> means there is no more input to read.</p>
+
+	<p>On error, <code>.read()</code> returns an <code>io::Error</code>. This error type has a <code>.kind()</code> method that returns an error code of type <code>io::ErrorKind</code>, an enum with members like <code>PermissionDenied</code> and <code>ConnectionReset</code>. Most indicate serious errors that can’t be ignored, but one kind of error should be handled specially. <code>io::ErrorKind::Interrupted</code> corresponds to the Unix error code <code>EINTR</code>, which means the read happened to be interrupted by a signal. Unless the program is designed to do something clever with signals, it should just retry the read. The code for <code>copy()</code>, in the preceding section, shows an example of this.</p>
+
+	<p>As you can see, the <code>.read()</code> method is very low level, even inheriting quirks of the underlying operating system. If you’re implementing the <code>Read</code> trait for a new type of data source, this gives you a lot of leeway. If you’re trying to read some data, it’s a pain. Therefore, Rust provides several higher-level convenience methods. All of them have default implementations in terms of <code>.read()</code>. They all handle <code>ErrorKind::Interrupted</code>, so you don’t have to.</p>
+	</dd>
+	<dt><code>reader.read_to_end(&amp;mut byte_vec)</code></dt>
+	<dd>
+	<p>Reads<a contenteditable="false" data-primary="Read trait" data-secondary="read_to_end method" data-type="indexterm" id="id2156"/> all remaining input from this reader, appending it to <code>byte_vec</code>, which is a <code>Vec&lt;u8&gt;</code>. Returns an <code>io::Result&lt;usize&gt;</code>, the number of bytes read.</p>
+
+	<p>There is no limit on the amount of data this method will pile into the vector, so don’t use it on an untrusted source. (You can impose a limit using the <code>.take()</code> method, described in the next list.)</p>
+	</dd>
+	<dt><code>reader.read_to_string(&amp;mut string)</code></dt>
+	<dd>
+	<p>This<a contenteditable="false" data-primary="Read trait" data-secondary="read_to_string method" data-type="indexterm" id="id2157"/> is the same, but appends the data to the given <code>String</code>. If the stream isn’t valid UTF-8, this returns an <code>ErrorKind::InvalidData</code> error.</p>
+
+	<p>In some programming languages, byte input and character input are handled by different types. These days, UTF-8 is so dominant that Rust acknowledges this de facto standard and supports UTF-8 everywhere. Other character sets are supported with the open source <code>encoding</code> crate.</p>
+	</dd>
+	<dt><code>reader.read_exact(&amp;mut buf)</code></dt>
+	<dd>
+	<p>Reads<a contenteditable="false" data-primary="Read trait" data-secondary="read_exact method" data-type="indexterm" id="id2158"/> exactly enough data to fill the given buffer. The argument type is <code>&amp;[u8]</code>. If the reader runs out of data before reading <code>buf.len()</code> bytes, this returns an <code>ErrorKind::UnexpectedEof</code> error.</p>
+	</dd>
+</dl>
+
+<p>Those are the main methods of the <code>Read</code> trait. In addition, there are three adapter methods that take the <code>reader</code> by value, transforming it into an iterator or a different reader:</p>
+
+<dl>
+	<dt><code>reader.bytes()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="adapter methods for readers" data-secondary="bytes method" data-type="indexterm" id="id2159"/><a contenteditable="false" data-primary="Read trait" data-secondary="bytes method" data-type="indexterm" id="id2160"/> an iterator over the bytes of the input stream. The item type is <code>io::Result&lt;u8&gt;</code>, so an error check is required for every byte. Furthermore, this calls <code>reader.read()</code> once per byte, which will be very inefficient if the reader is not buffered.</p>
+	</dd>
+	<dt><code>reader.chain(reader2)</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="adapter methods for readers" data-secondary="chain method" data-type="indexterm" id="id2161"/><a contenteditable="false" data-primary="Read trait" data-secondary="chain method" data-type="indexterm" id="id2162"/> a new reader that produces all the input from <code>reader</code>, followed by all the input from <code>reader2</code>.</p>
+	</dd>
+	<dt><code>reader.take(n)</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="adapter methods for readers" data-secondary="take method" data-type="indexterm" id="id2163"/><a contenteditable="false" data-primary="Read trait" data-secondary="take method" data-type="indexterm" id="id2164"/> a new reader that reads from the same source as <code>reader</code>, but is limited to <code>n</code> bytes of input.</p>
+	</dd>
+</dl>
+
+<p>There is no method for closing a reader. Readers and writers typically implement <code>Drop</code> so<a contenteditable="false" data-primary="Drop trait" data-type="indexterm" id="id2165"/> that they are closed automatically.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Buffered Readers"><div class="sect2" id="buffered-readers">
+<h2>Buffered Readers</h2>
+
+<p>For efficiency, readers<a contenteditable="false" data-primary="buffered readers" data-type="indexterm" id="ix_buffered_reader"/><a contenteditable="false" data-primary="readers" data-secondary="buffered" data-type="indexterm" id="ix_reader_buff"/> and writers can be <em>buffered</em>, which simply means they have a chunk of memory (a buffer) that holds some input or output data in memory. This saves on system calls, as shown in <a data-type="xref" href="#buffered-reader-figure">Figure 18-1</a>. The application reads data<a contenteditable="false" data-primary="BufReader type" data-type="indexterm" id="id2166"/> from the <code>BufReader</code>, in this example by calling its <code>.read_line()</code> method. The <code>BufReader</code> in turn gets its input in larger chunks from the operating system.</p>
+
+<p>This picture is not to scale. The actual default size of a <code>BufReader</code>’s buffer is several kilobytes, so a single system <code>read</code> can serve hundreds of <code>.read_line()</code> calls. This matters because system calls are slow.</p>
+
+<p>(As the picture shows, the operating system has a buffer too, for the same reason: system calls are slow, but reading data from a disk is slower.)</p>
+
+<figure><div id="buffered-reader-figure" class="figure"><img alt="The picture shows, below, in a horizontal strip, bytes as they appear in a file on disk; above, a BufReader holds a slice of those same bytes in memory. To the left, we see a String, the result of the program having read some bytes out of the BufReader. To the right, the operating system holds some more of the fill in its own read-ahead cache." src="assets/pru3_1801.png" width="600" height="293"/>
+<h6><span class="label">Figure 18-1. </span>A buffered file reader</h6>
+</div></figure>
+
+<p><a contenteditable="false" data-primary="BufRead trait" data-type="indexterm" id="id2167"/>Buffered readers implement both <code>Read</code> and a second trait, <code>BufRead</code>, which adds the following methods:</p>
+
+<dl>
+	<dt><code>reader.read_line(&amp;mut line)</code></dt>
+	<dd>
+	<p>Reads<a contenteditable="false" data-primary="BufRead trait" data-secondary="read_line method" data-type="indexterm" id="id2168"/> a line of text and appends it to <code>line</code>, which is a <code>String</code>. The newline character <code>'\n'</code> at the end of the line is included in <code>line</code>. If the input has Windows-style line endings, <code>"\r\n"</code>, both characters are included in <code>line</code>.</p>
+
+	<p>The return value is an <code>io::Result&lt;usize&gt;</code>, the number of bytes read, including the line ending, if any.</p>
+
+	<p>If the reader is at the end of the input, this leaves <code>line</code> unchanged and returns <code>Ok(0)</code>.</p>
+	</dd>
+	<dt><code>reader.lines()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Read trait" data-secondary="lines method" data-type="indexterm" id="id2169"/> an iterator over the lines of the input. The item type is <code>io::Result&lt;String&gt;</code>. Newline characters are <em>not</em> included in the strings. If the input has Windows-style line endings, <code>"\r\n"</code>, both characters are stripped.</p>
+
+	<p>This method is almost always what you want for text input. The next two sections show some examples of its use.</p>
+	</dd>
+	<dt><code>reader.read_until(stop_byte, &amp;mut byte_vec)</code>, <code>reader.split(stop​_byte)</code></dt>
+	<dd>
+	<p>These<a contenteditable="false" data-primary="BufRead trait" data-secondary="read_until method" data-type="indexterm" id="id2170"/><a contenteditable="false" data-primary="BufRead trait" data-secondary="split method" data-type="indexterm" id="id2171"/> are just like <code>.read_line()</code> and <code>.lines()</code>, but byte-oriented, producing <code>Vec&lt;u8&gt;</code>s instead of <code>String</code>s. You choose the delimiter <code>stop_byte</code>.</p>
+	</dd>
+</dl>
+
+<p><code>BufRead</code> also provides a pair of low-level methods<a contenteditable="false" data-primary="BufRead trait" data-secondary="consume method" data-type="indexterm" id="id2172"/><a contenteditable="false" data-primary="BufRead trait" data-secondary="fill_buf method" data-type="indexterm" id="id2173"/><a contenteditable="false" data-primary="fill_buf method" data-type="indexterm" id="id2174"/><a contenteditable="false" data-primary="consume method" data-type="indexterm" id="id2175"/>, <code>.fill_buf()</code> and <code>.consume(n)</code>, for direct access to the reader’s internal buffer. For more about these methods, see the online documentation.</p>
+
+<p>The next two sections cover buffered readers in more detail.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Reading Lines"><div class="sect2" id="reading-lines">
+<h2>Reading Lines</h2>
+
+<p>Here is a function<a contenteditable="false" data-primary="readers" data-secondary="reading lines" data-type="indexterm" id="ix_readers_read-lines"/> that implements the Unix <code>grep</code> utility<a contenteditable="false" data-primary="grep utility" data-type="indexterm" id="id2176"/>. It searches many lines of text, typically piped in from another command, for a given string:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io2">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">prelude</code><code class="p">::</code><code class="o">*</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">grep</code><code class="p">(</code><code class="n">target</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">line_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="n">stdin</code><code class="p">().</code><code class="n">lines</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">line</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="n">target</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{line}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The function is straightforward: it loops over the lines coming from standard input. Because this iterator produces <code>Result</code> values, we use the <code>?</code> operator to check for errors.</p>
+
+<p>Suppose we want to take our <code>grep</code> program a step further and add support for searching files on disk. We can make this function generic:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io3">
+<code class="k">fn</code><code class="w"> </code><code class="nf">grep</code><code class="o">&lt;</code><code class="n">R</code><code class="o">&gt;</code><code class="p">(</code><code class="n">target</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">reader</code><code class="p">:</code><code class="w"> </code><code class="nc">R</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">R</code><code class="p">:</code><code class="w"> </code><code class="nc">BufRead</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">line_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">lines</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">line</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="n">target</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{line}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Now we can pass it either an <code>StdinLock</code> or a buffered <code>File</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io5">
+<code class="n">grep</code><code class="p">(</code><code class="o">&amp;</code><code class="n">target</code><code class="p">,</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="n">stdin</code><code class="p">().</code><code class="n">lock</code><code class="p">())</code><code class="o">?</code><code class="p">;</code><code class="w">  </code><code class="c1">// ok</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">f</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">File</code><code class="p">::</code><code class="n">open</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="n">grep</code><code class="p">(</code><code class="o">&amp;</code><code class="n">target</code><code class="p">,</code><code class="w"> </code><code class="n">BufReader</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">f</code><code class="p">))</code><code class="o">?</code><code class="p">;</code><code class="w">  </code><code class="c1">// also ok</code>
+</pre>
+
+<p>Note that a <code>File</code> is not automatically buffered. <code>File</code> implements <code>Read</code> but not <code>BufRead</code>. However, it’s easy to create a buffered reader for a <code>File</code>, or any other unbuffered reader. <code>BufReader::new(reader)</code> does this. (To set the size of the buffer, use <code>BufReader::with_capacity(size, reader)</code>.)</p>
+
+<p>In most languages, files are buffered by default. If you want unbuffered input or output, you have to figure out how to turn buffering off. In Rust, <code>File</code> and <code>BufReader</code> are two separate library features, because sometimes you want files without buffering, and sometimes you want buffering without files (for example, you may want to buffer input from the network).</p>
+
+<p>The full program, including error handling and some crude argument parsing, is shown here<a contenteditable="false" data-startref="ix_readers_read-lines" data-type="indexterm" id="id2177"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io6">
+<code class="c1">// grep - Search stdin or some files for lines matching a given string.</code>
+
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fs</code><code class="p">::</code><code class="n">File</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">prelude</code><code class="p">::</code><code class="o">*</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">BufReader</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">path</code><code class="p">::</code><code class="n">PathBuf</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">grep</code><code class="o">&lt;</code><code class="n">R</code><code class="o">&gt;</code><code class="p">(</code><code class="n">target</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">reader</code><code class="p">:</code><code class="w"> </code><code class="nc">R</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">R</code><code class="p">:</code><code class="w"> </code><code class="nc">BufRead</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">line_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">lines</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">line</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="n">target</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{line}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">grep_main</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(),</code><code class="w"> </code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">Error</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Get the command-line arguments. The first argument is the</code>
+<code class="w">    </code><code class="c1">// string to search for; the rest are filenames.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">args</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">().</code><code class="n">skip</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">target</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">next</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">s</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">s</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="s">"usage: grep PATTERN FILE..."</code><code class="p">)</code><code class="o">?</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">files</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">PathBuf</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="n">PathBuf</code><code class="p">::</code><code class="n">from</code><code class="p">).</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">files</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">grep</code><code class="p">(</code><code class="o">&amp;</code><code class="n">target</code><code class="p">,</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="n">stdin</code><code class="p">().</code><code class="n">lock</code><code class="p">())</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">files</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">f</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">File</code><code class="p">::</code><code class="n">open</code><code class="p">(</code><code class="n">file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="n">grep</code><code class="p">(</code><code class="o">&amp;</code><code class="n">target</code><code class="p">,</code><code class="w"> </code><code class="n">BufReader</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">f</code><code class="p">))</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">result</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">grep_main</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">result</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"{err}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code><code class="p">::</code><code class="n">process</code><code class="p">::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Collecting Lines"><div class="sect2" id="collecting-lines">
+<h2>Collecting Lines</h2>
+
+<p>Several reader<a contenteditable="false" data-primary="readers" data-secondary="collecting lines" data-type="indexterm" id="id2178"/> methods, including <code>.lines()</code>, return iterators that produce <code>Result</code> values. The first time you want to collect all the lines of a file into one big vector, you’ll run into a problem getting rid of the <code>Result</code>s:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io7">
+<code class="c1">// ok, but not what you want</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">results</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">lines</code><code class="p">().</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+
+<code class="c1">// error: can't convert collection of Results to Vec&lt;String&gt;</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">lines</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">lines</code><code class="p">().</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>The second try doesn’t compile: what would happen to the errors? The straightforward solution is to write a <code>for</code> loop and check each item for errors:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io8">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[];</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">line_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">lines</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">lines</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">line_result</code><code class="o">?</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Not bad; but it would be nice to use <code>.collect()</code> here<a contenteditable="false" data-primary="collect method" data-type="indexterm" id="id2179"/>, and it turns out that we can. We just have to know which type to ask for:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io9">
+<code class="kd">let</code><code class="w"> </code><code class="n">lines</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">lines</code><code class="p">().</code><code class="n">collect</code><code class="p">::</code><code class="o">&lt;</code><code class="n">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;&gt;&gt;</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>How does this work? The standard library contains an implementation of <code>FromIterator</code> for <code>Result</code>—easy to overlook in the online documentation—that makes this possible:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io10">
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">E</code><code class="p">,</code><code class="w"> </code><code class="n">C</code><code class="o">&gt;</code><code class="w"> </code><code class="n">FromIterator</code><code class="o">&lt;</code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">E</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">C</code><code class="p">,</code><code class="w"> </code><code class="n">E</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">C</code><code class="p">:</code><code class="w"> </code><code class="nc">FromIterator</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This requires some careful reading, but it’s a nice trick. Assume <code>C</code> is any collection type, like <code>Vec</code> or <code>HashSet</code>. As long we already know how to build a <code>C</code> from an iterator of <code>T</code> values, we can build a <code>Result&lt;C, E&gt;</code> from an iterator producing <code>Result&lt;T, E&gt;</code> values. We just need to draw values from the iterator and build the collection from the <code>Ok</code> results, but if we ever see an <code>Err</code>, stop and pass that along.</p>
+
+<p>In other words, <code>io::Result&lt;Vec&lt;String&gt;&gt;</code> is a collection type, so the <code>.collect()</code> method can create and populate values of that type<a contenteditable="false" data-startref="ix_reader_buff" data-type="indexterm" id="id2180"/><a contenteditable="false" data-startref="ix_readers_ch18" data-type="indexterm" id="id2181"/><a contenteditable="false" data-startref="ix_buffered_reader" data-type="indexterm" id="id2182"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Writers"><div class="sect2" id="writers">
+<h2>Writers</h2>
+
+<p>As we’ve seen, input is mostly done using methods. Output<a contenteditable="false" data-primary="writers" data-type="indexterm" id="ix_writers_ch18"/> is a bit different.</p>
+
+<p>Throughout the book, we’ve used <code>println!()</code> to produce<a contenteditable="false" data-primary="println! macro" data-type="indexterm" id="id2183"/> plain-text output:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io11">
+<code class="fm">println!</code><code class="p">(</code><code class="s">"Hello, world!"</code><code class="p">);</code><code class="w"/>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"The greatest common divisor of {numbers:?} is {d}"</code><code class="p">);</code><code class="w"/>
+<code class="fm">println!</code><code class="p">();</code><code class="w">  </code><code class="c1">// print a blank line</code>
+</pre>
+
+<p>There’s also a <code>print!()</code> macro<a contenteditable="false" data-primary="print! macro" data-type="indexterm" id="id2184"/>, which does not add a newline character at the end, and <code>eprintln!</code> and <code>eprint!</code> macros that write to the standard error stream. The formatting codes for all of these are the same as those for the <code>format!</code> macro, described in <a data-type="xref" href="ch17.html#formatting-values">“Formatting Values”</a>.</p>
+
+<p>To send output to a writer, use the <code>write!()</code> and <code>writeln!()</code> macros<a contenteditable="false" data-primary="writeln! macro" data-type="indexterm" id="id2185"/><a contenteditable="false" data-primary="write! macro" data-type="indexterm" id="id2186"/>. They are the same as <code>print!()</code> and <code>println!()</code>, except for two differences:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io12">
+<code class="fm">writeln!</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">stderr</code><code class="p">(),</code><code class="w"> </code><code class="s">"error: world not helloable"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="fm">writeln!</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">byte_vec</code><code class="p">,</code><code class="w"> </code><code class="s">"The greatest common divisor of {numbers:?} is {d}"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>One difference is that the <code>write</code> macros each take an extra first argument, a writer. The other is that they return a <code>Result</code>, so errors must be handled. That’s why we used the <code>?</code> operator at the end of each line.</p>
+
+<p>The <code>print</code> macros don’t return a <code>Result</code>; they simply panic if the write fails. Since they write to the terminal, this is rare.</p>
+
+<p>The <code>Write</code> trait has these methods:</p>
+
+<dl>
+	<dt><code>writer.write(&amp;buf)</code></dt>
+	<dd>
+	<p>Writes<a contenteditable="false" data-primary="Write trait" data-secondary="write method" data-type="indexterm" id="id2187"/> some of the bytes in the slice <code>buf</code> to the underlying stream. It returns an <code>io::Result&lt;usize&gt;</code>. On success, this gives the number of bytes written, which may be less than <code>buf.len()</code>, at the whim of the stream.</p>
+
+	<p>Like <code>Reader::read()</code>, this is a low-level method that you should avoid using directly.</p>
+	</dd>
+	<dt><code>writer.write_all(&amp;buf)</code></dt>
+	<dd>
+	<p>Writes<a contenteditable="false" data-primary="Write trait" data-secondary="write_all method" data-type="indexterm" id="id2188"/> all the bytes in the slice <code>buf</code>. Returns <code>Result&lt;()&gt;</code>.</p>
+	</dd>
+	<dt><code>writer.flush()</code></dt>
+	<dd>
+	<p>Flushes<a contenteditable="false" data-primary="Write trait" data-secondary="flush method" data-type="indexterm" id="id2189"/> any buffered data to the underlying stream. Returns <code>Result&lt;()&gt;</code>.</p>
+
+	<p>Note that while the <code>println!</code> and <code>eprintln!</code> macros automatically flush the stdout and stderr stream, the <code>print!</code> and <code>eprint!</code> macros do not. You may have to call <code>flush()</code> manually when using them.</p>
+	</dd>
+</dl>
+
+<p>Like readers, writers are closed automatically when they are dropped.</p>
+
+<p>Just as <code>BufReader::new(reader)</code> adds a buffer to any reader, <code>BufWriter::new(writer)</code><a contenteditable="false" data-primary="BufWriter" data-type="indexterm" id="id2190"/> adds a buffer to any writer:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io13">
+<code class="kd">let</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">File</code><code class="p">::</code><code class="n">create</code><code class="p">(</code><code class="s">"tmp.txt"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">writer</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">BufWriter</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">file</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>To set the size of the buffer, use <code>BufWriter::with_capacity(size, writer)</code>.</p>
+
+<p>When a <code>BufWriter</code> is dropped, all remaining buffered data is written to the underlying writer. However, if an error occurs during this write, the error is <em>ignored</em>. (Since this happens inside <code>BufWriter</code>’s <code>.drop()</code> method, there is no useful place to report the error.) To make sure your application notices all output errors, manually <code>.flush()</code> buffered writers before dropping them<a contenteditable="false" data-startref="ix_writers_ch18" data-type="indexterm" id="id2191"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Files"><div class="sect2" id="files">
+<h2>Files</h2>
+
+<p>We’ve already seen two ways to open<a contenteditable="false" data-primary="readers" data-secondary="files" data-type="indexterm" id="id2192"/><a contenteditable="false" data-primary="writers" data-secondary="files" data-type="indexterm" id="id2193"/><a contenteditable="false" data-primary="files" data-secondary="reading and writing" data-type="indexterm" id="id2194"/> a file:</p>
+
+<dl>
+	<dt><code>File::open(filename)</code></dt>
+	<dd>
+	<p>Opens<a contenteditable="false" data-primary="File::open" data-type="indexterm" id="id2195"/> an existing file for reading. It returns an <code>io::Result&lt;File&gt;</code>, and it’s an error if the file doesn’t exist.</p>
+	</dd>
+	<dt><code>File::create(filename)</code></dt>
+	<dd>
+	<p>Creates<a contenteditable="false" data-primary="File::create" data-type="indexterm" id="id2196"/> a new file for writing. If a file exists with the given filename, it is truncated.</p>
+	</dd>
+</dl>
+
+<p>Note that the <code>File</code> type is in the filesystem module, <code>std::fs</code>, not <code>std::io</code>.</p>
+
+<p>When neither of these fits the bill, you can use <code>OpenOptions</code> to specify<a contenteditable="false" data-primary="OpenOptions struct" data-type="indexterm" id="id2197"/> the exact desired behavior:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io14">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fs</code><code class="p">::</code><code class="n">OpenOptions</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">log</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">OpenOptions</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">append</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w">  </code><code class="c1">// if file exists, add to the end</code>
+<code class="w">    </code><code class="p">.</code><code class="n">open</code><code class="p">(</code><code class="s">"server.log"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">OpenOptions</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">write</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">create_new</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w">  </code><code class="c1">// fail if file exists</code>
+<code class="w">    </code><code class="p">.</code><code class="n">open</code><code class="p">(</code><code class="s">"new_file.txt"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The methods <code>.append()</code>, <code>.write()</code>, <code>.create_new()</code>, and so on are designed to be chained like this: each one returns <code>self</code>. This method-chaining design pattern is common enough to have a name in Rust: it’s called a <em>builder</em>. <code>std::process::Command</code> is another example. For more details on <code>OpenOptions</code>, see the online documentation.</p>
+
+<p>Once a <code>File</code> has been opened, it behaves like any other reader or writer. You can add a buffer if needed. The <code>File</code> will be closed automatically when you drop it.</p>
+
+<p>In real-world code, you might want to consider using the <code>fs-err</code> crate. It works just like <code>std::fs</code>, except that it produces more detailed error messages. Its API is intentionally identical, so simply listing it as a dependency in your <em>Cargo.toml</em> file and changing your code’s imports is enough:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io-fs-err">
+<code class="k">use</code><code class="w"> </code><code class="n">fs_err</code><code class="p">::</code><code class="n">OpenOptions</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">OpenOptions</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">write</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">create_new</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">open</code><code class="p">(</code><code class="s">"new_file.txt"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>With <code>std::fs::OpenOptions</code>, this might fail with the error <code>File exists (os error 17)</code>, which is not very informative. <code>fs_err::OpenOptions</code> uses a little extra memory during each operation to produce messages that include more information:</p>
+
+<pre class="console" data-code-language="console" data-testing-pragma="oneliners" data-type="programlisting" id="test-io-fs-err2">
+<code class="go">failed to open file `new_file.txt`: File exists (os error 17)</code>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Seeking"><div class="sect2" id="seeking">
+<h2>Seeking</h2>
+
+<p><code>File</code> also implements<a contenteditable="false" data-primary="File type" data-type="indexterm" id="id2198"/> the <code>Seek</code> trait<a contenteditable="false" data-primary="writers" data-secondary="Seek trait" data-type="indexterm" id="id2199"/><a contenteditable="false" data-primary="readers" data-secondary="Seek trait" data-type="indexterm" id="id2200"/><a contenteditable="false" data-primary="Seek trait" data-type="indexterm" id="id2201"/>, which means you can hop around within a <code>File</code> rather than reading or writing in a single pass from the beginning to the end. <code>Seek</code> is defined like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io15">
+<code class="k">pub</code><code class="w"> </code><code class="k">trait</code><code class="w"> </code><code class="n">Seek</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">seek</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">pos</code><code class="p">:</code><code class="w"> </code><code class="nc">SeekFrom</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">enum</code><code class="w"> </code><code class="nc">SeekFrom</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Start</code><code class="p">(</code><code class="kt">u64</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">End</code><code class="p">(</code><code class="kt">i64</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Current</code><code class="p">(</code><code class="kt">i64</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Thanks to the enum, the <code>seek</code> method is nicely expressive: use <code>file.seek(SeekFrom::Start(0))</code> to rewind to the beginning and use <code>file.seek(SeekFrom::Current(-8))</code> to go back a few bytes, and so on.</p>
+
+<p>Seeking within a file is slow. Unless the file is stored entirely in memory, you should expect it to take as long as reading several megabytes of data.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Other Reader and Writer Types"><div class="sect2" id="other-reader-and-writer-types">
+<h2>Other Reader and Writer Types</h2>
+
+<p>So far, this chapter has used <code>File</code> as its example workhorse<a contenteditable="false" data-primary="writers" data-secondary="other types" data-type="indexterm" id="ix_writer_other"/><a contenteditable="false" data-primary="readers" data-secondary="other types" data-type="indexterm" id="ix_reader_other"/>, but there are many other useful reader and writer types:</p>
+
+<dl>
+	<dt><code>io::stdin()</code></dt>
+	<dd>
+	<p>Returns a reader for the standard input stream. Its type is <code>io::Stdin</code>. Since<a contenteditable="false" data-primary="Stdin type" data-type="indexterm" id="id2202"/> this is shared by all threads, each read acquires and releases a mutex.</p>
+
+	<p><code>Stdin</code> has a <code>.lock()</code> method that acquires the mutex and returns an <code>io::StdinLock</code>, a buffered<a contenteditable="false" data-primary="StdinLock type" data-type="indexterm" id="id2203"/> reader that holds the mutex until it’s dropped. Individual operations on the <code>StdinLock</code> therefore avoid the mutex overhead.</p>
+	</dd>
+	<dt><code>io::stdout()</code>, <code>io::stderr()</code></dt>
+	<dd>
+	<p>Return<a contenteditable="false" data-primary="Stderr type" data-type="indexterm" id="id2204"/> <code>Stdout</code> and <code>Stderr</code> writer<a contenteditable="false" data-primary="Stdout type" data-type="indexterm" id="id2205"/> types for the standard output and standard error streams. These too have mutexes and <code>.lock()</code> methods.</p>
+	</dd>
+	<dt><code>Vec&lt;u8&gt;</code></dt>
+	<dd>
+	<p>Implements <code>Write</code>. Writing<a contenteditable="false" data-primary="Vec&lt;u8&gt;" data-type="indexterm" id="id2206"/> to a <code>Vec&lt;u8&gt;</code> extends the vector with the new data.</p>
+
+	<p>(<span data-claim-test="string-does-not-implement-write"><code>String</code>, however, does <em>not</em> implement <code>Write</code>.</span> <span data-claim-test="build-string-write">To build a string using <code>Write</code>, first write to a <code>Vec&lt;u8&gt;</code>, and then use <code>String::from_utf8(vec)</code> to convert the vector to a string.</span>)</p>
+	</dd>
+	<dt><code>Cursor::new(buf)</code></dt>
+	<dd>
+	<p>Creates<a contenteditable="false" data-primary="Cursor::new" data-type="indexterm" id="id2207"/> a <code>Cursor</code>, a buffered reader that reads from <code>buf</code>. This is how you create a reader that reads from a <code>String</code>. The argument <code>buf</code> can be any type that implements <code>AsRef&lt;[u8]&gt;</code>, so you can also pass a <code>&amp;[u8]</code>, <code>&amp;str</code>, or <code>Vec&lt;u8&gt;</code>.</p>
+
+	<p><code>Cursor</code>s are trivial internally. They have just two fields: <code>buf</code> itself and an integer, the offset in <code>buf</code> where the next read will start. The position is initially 0.</p>
+
+	<p>Cursors implement <code>Read</code>, <code>BufRead</code>, and <code>Seek</code>. If the type of <code>buf</code> is <code>&amp;mut [u8]</code> or <code>Vec&lt;u8&gt;</code>, then the <code>Cursor</code> also implements <code>Write</code>. Writing to a cursor overwrites bytes in <code>buf</code> starting at the current position. <span data-claim-test="write-past-end-of-slice">If you try to write past the end of a <code>&amp;mut [u8]</code>, you’ll get a partial write or an <code>io::Error</code>.</span> <span data-claim-test="write-past-end-of-vec">Using a cursor to write past the end of a <code>Vec&lt;u8&gt;</code> is fine, though: it grows the vector.</span> <code>Cursor&lt;&amp;mut [u8]&gt;</code> and <code>Cursor&lt;Vec&lt;u8&gt;&gt;</code> thus implement all four of the <code>std::io::prelude</code> traits.</p>
+	</dd>
+	<dt><code>std::net::TcpStream</code></dt>
+	<dd>
+	<p>Represents<a contenteditable="false" data-primary="streams" data-secondary="TcpStream" data-type="indexterm" id="id2208"/><a contenteditable="false" data-primary="TcpStream" data-type="indexterm" id="id2209"/> a TCP network connection. Since TCP enables two-way communication, it’s both a reader and a writer.</p>
+
+	<p>The constructor <code>TcpStream::connect(("hostname", PORT))</code> tries to connect to a server and returns an <code>io::Result&lt;TcpStream&gt;</code>.</p>
+	</dd>
+	<dt><code>std::process::Command</code></dt>
+	<dd>
+	<p>Supports spawning a child process<a contenteditable="false" data-primary="Command type" data-type="indexterm" id="id2210"/><a contenteditable="false" data-primary="child process" data-type="indexterm" id="id2211"/> and piping data to its standard input, like so:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io17">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">process</code><code class="p">::{</code><code class="n">Command</code><code class="p">,</code><code class="w"> </code><code class="n">Stdio</code><code class="p">};</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">child</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Command</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"grep"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="s">"-e"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">arg</code><code class="p">(</code><code class="s">"a.*e.*i.*o.*u"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">stdin</code><code class="p">(</code><code class="n">Stdio</code><code class="p">::</code><code class="n">piped</code><code class="p">())</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">spawn</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">to_child</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">child</code><code class="p">.</code><code class="n">stdin</code><code class="p">.</code><code class="n">take</code><code class="p">().</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">word</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">my_words</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">writeln!</code><code class="p">(</code><code class="n">to_child</code><code class="p">,</code><code class="w"> </code><code class="s">"{word}"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+<code class="nb">drop</code><code class="p">(</code><code class="n">to_child</code><code class="p">);</code><code class="w">  </code><code class="c1">// close grep's stdin, so it will exit</code>
+<code class="n">child</code><code class="p">.</code><code class="n">wait</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+	<p>The type<a contenteditable="false" data-primary="ChildStdin type" data-type="indexterm" id="id2212"/> of <code>child.stdin</code> is <code>Option&lt;std::process::ChildStdin&gt;</code>; here we’ve used <code>.stdin(Stdio::piped())</code> when setting up the child process, so <code>child.stdin</code> is definitely populated when <code>.spawn()</code> succeeds. If we hadn’t, <code>child.stdin</code> would be <code>None</code>.</p>
+
+	<p><code>Command</code> also has similar methods <code>.stdout()</code> and <code>.stderr()</code>, which can be used to request readers in <code>child.stdout</code> and <code>child.stderr</code>.</p>
+	</dd>
+	<dt><code>std::io::pipe()</code></dt>
+	<dd>
+	<p>Creates a pipe, a one-way channel for bytes, implemented by the operating system. On Unix, it’s a thin wrapper around the <code>pipe</code> system call; on Windows, it wraps <code>CreatePipe</code>. It returns a <code>Result&lt;(PipeReader, PipeWriter)&gt;</code>: on success, a paired reader and writer. Any bytes written to the writer are stored in the pipe until they are consumed by reading from the reader.</p>
+
+	<p><code>std::process::Command</code> has enough convenience methods for creating command pipelines that you usually won’t need to call <code>std::io::pipe</code> yourself. However, we’ll show one use for a pipe in <a data-type="xref" href="ch21.html#futures-chapter">Chapter 21</a></p>
+	</dd>
+</dl>
+
+<p>The <code>std::io</code> module also offers a few functions that return trivial readers and writers:</p>
+
+<dl>
+	<dt><code>io::sink()</code></dt>
+	<dd>
+	<p>This is the no-op writer. All the write methods return <code>Ok</code>, but the data is just discarded.</p>
+	</dd>
+	<dt><code>io::empty()</code></dt>
+	<dd>
+	<p>This is the no-op reader. Reading always succeeds, but returns end-of-input.</p>
+	</dd>
+</dl>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Binary Data, Compression, and Serialization"><div class="sect2" id="binary-data-compression-and-serialization">
+<h2>Binary Data, Compression, and Serialization</h2>
+
+<p>Many open source<a contenteditable="false" data-primary="writers" data-secondary="binary data, compression, serialization" data-type="indexterm" id="ix_writer_binary-comp-serial"/><a contenteditable="false" data-primary="readers" data-secondary="binary data, compression, serialization" data-type="indexterm" id="ix_reader_binary-comp-serial"/> crates build on the <code>std::io</code> framework to offer extra features.</p>
+
+<p>The <code>byteorder</code> crate<a contenteditable="false" data-primary="byteorder crate" data-type="indexterm" id="id2213"/> offers <code>ReadBytesExt</code> and <code>WriteBytesExt</code> traits<a contenteditable="false" data-primary="WriteBytesExt trait" data-type="indexterm" id="id2214"/><a contenteditable="false" data-primary="ReadBytesExt trait" data-type="indexterm" id="id2215"/> that add methods to all readers and writers for binary<a contenteditable="false" data-primary="binary input/output" data-type="indexterm" id="id2216"/> input and output:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io18">
+<code class="k">use</code><code class="w"> </code><code class="n">byteorder</code><code class="p">::{</code><code class="n">LittleEndian</code><code class="p">,</code><code class="w"> </code><code class="n">ReadBytesExt</code><code class="p">,</code><code class="w"> </code><code class="n">WriteBytesExt</code><code class="p">};</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">n</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">read_u32</code><code class="p">::</code><code class="o">&lt;</code><code class="n">LittleEndian</code><code class="o">&gt;</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="n">writer</code><code class="p">.</code><code class="n">write_i64</code><code class="p">::</code><code class="o">&lt;</code><code class="n">LittleEndian</code><code class="o">&gt;</code><code class="p">(</code><code class="n">n</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">i64</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The <code>flate2</code> crate<a contenteditable="false" data-primary="flate2 crate" data-type="indexterm" id="id2217"/> provides adapter methods for reading<a contenteditable="false" data-primary="compression" data-type="indexterm" id="id2218"/> and writing <code>gzip</code>ped data:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io19">
+<code class="k">use</code><code class="w"> </code><code class="n">flate2</code><code class="p">::</code><code class="n">read</code><code class="p">::</code><code class="n">GzDecoder</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">File</code><code class="p">::</code><code class="n">open</code><code class="p">(</code><code class="s">"access.log.gz"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"> </code>
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">gzip_reader</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">GzDecoder</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">file</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The <code>serde</code> crate<a contenteditable="false" data-primary="serde library/crate" data-type="indexterm" id="id2219"/>, and its associated format crates<a contenteditable="false" data-primary="serde_json crate" data-type="indexterm" id="id2220"/> such as <code>serde_json</code>, implement serialization<a contenteditable="false" data-primary="serialization" data-type="indexterm" id="id2221"/> and deserialization: they convert back and forth between Rust structs and bytes. We mentioned this once before, in <a data-type="xref" href="ch11.html#traits-and-other-peoples-types">“Traits and Other People’s Types”</a>. Now we can take a closer look.</p>
+
+<p>Suppose we have some data—the map for a text adventure game—stored in a <code>HashMap</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-serde-std-types">
+<code class="k">type</code><code class="w"> </code><code class="nc">RoomId</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code class="p">;</code><code class="w">                       </code><code class="c1">// each room has a unique name</code>
+<code class="k">type</code><code class="w"> </code><code class="nc">RoomExits</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="p">(</code><code class="kt">char</code><code class="p">,</code><code class="w"> </code><code class="n">RoomId</code><code class="p">)</code><code class="o">&gt;</code><code class="p">;</code><code class="w">       </code><code class="c1">// ...and a list of exits</code>
+<code class="k">type</code><code class="w"> </code><code class="nc">RoomMap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">HashMap</code><code class="o">&lt;</code><code class="n">RoomId</code><code class="p">,</code><code class="w"> </code><code class="n">RoomExits</code><code class="o">&gt;</code><code class="p">;</code><code class="w">  </code><code class="c1">// room names and exits, simple</code>
+
+<code class="c1">// Create a simple map.</code>
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">map</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">RoomMap</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="n">map</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="s">"Cobble Crawl"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="fm">vec!</code><code class="p">[(</code><code class="sc">'W'</code><code class="p">,</code><code class="w"> </code><code class="s">"Debris Room"</code><code class="p">.</code><code class="n">to_string</code><code class="p">())],</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+<code class="n">map</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="s">"Debris Room"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="sc">'E'</code><code class="p">,</code><code class="w"> </code><code class="s">"Cobble Crawl"</code><code class="p">.</code><code class="n">to_string</code><code class="p">()),</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="sc">'W'</code><code class="p">,</code><code class="w"> </code><code class="s">"Sloping Canyon"</code><code class="p">.</code><code class="n">to_string</code><code class="p">()),</code><code class="w"/>
+<code class="w">    </code><code class="p">],</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>Turning this data into JSON for output is a single line of code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-serde-map">
+<code class="n">serde_json</code><code class="p">::</code><code class="n">to_writer</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">stdout</code><code class="p">(),</code><code class="w"> </code><code class="o">&amp;</code><code class="n">map</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>Internally, <code>serde_json::to_writer</code> uses the <code>serialize</code> method of the <code>serde::Serialize</code> trait. The library attaches this trait to all types that it knows how to serialize, and that includes all of the types that appear in our data: strings, characters, tuples, vectors, and <code>HashMap</code>s.</p>
+
+<p><code>serde</code> is flexible. In this program, the output is JSON data, because we chose the <code>serde_json</code> serializer. Other formats, like MessagePack, are also available. Likewise, you could send this output to a file, a <code>Vec&lt;u8&gt;</code>, or any other writer. The preceding code prints the data on <code>stdout</code>. Here it is:</p>
+
+<pre class="json" data-code-language="json" data-type="programlisting">
+<code class="p">{</code><code class="nt">"Debris Room"</code><code class="p">:[[</code><code class="s2">"E"</code><code class="p">,</code><code class="s2">"Cobble Crawl"</code><code class="p">],[</code><code class="s2">"W"</code><code class="p">,</code><code class="s2">"Sloping Canyon"</code><code class="p">]],</code><code class="nt">"Cobble Crawl"</code><code class="p">:</code><code class="w"/>
+<code class="p">[[</code><code class="s2">"W"</code><code class="p">,</code><code class="s2">"Debris Room"</code><code class="p">]]}</code><code class="w"/>
+</pre>
+
+<p><code>serde</code> also includes support for deriving the two key <code>serde</code> traits:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-serde-derive">
+<code class="cp">#[derive(Serialize, Deserialize)]</code><code class="w"/>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Player</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">location</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">items</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">health</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This <code>#[derive]</code> attribute can make your compiles take a bit longer, so you need to explicitly ask <code>serde</code> to support it when you list it as a dependency in your <em>Cargo.toml</em> file. Here’s what we used for the preceding code:</p>
+
+<pre class="toml" data-code-language="toml" data-type="programlisting">
+<code class="k">[dependencies]</code><code class="w"/>
+<code class="n">serde</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"1.0.228"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"derive"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="n">serde_json</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.150"</code><code class="w"/>
+</pre>
+
+<p>See the <code>serde</code> documentation for more details. In short, the build system autogenerates implementations of <code>serde::Serialize</code> and <code>serde::Deserialize</code> for <code>Player</code>, so that serializing a <code>Player</code> value is simple:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-serde-serialize-player">
+<code class="n">serde_json</code><code class="p">::</code><code class="n">to_writer</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">stdout</code><code class="p">(),</code><code class="w"> </code><code class="o">&amp;</code><code class="n">player</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The output looks like this<a contenteditable="false" data-startref="ix_reader_binary-comp-serial" data-type="indexterm" id="id2222"/><a contenteditable="false" data-startref="ix_writer_binary-comp-serial" data-type="indexterm" id="id2223"/><a contenteditable="false" data-startref="ix_io_read_write" data-type="indexterm" id="id2224"/>:</p>
+
+<pre class="json" data-code-language="json" data-type="programlisting">
+<code class="p">{</code><code class="nt">"location"</code><code class="p">:</code><code class="s2">"Cobble Crawl"</code><code class="p">,</code><code class="nt">"items"</code><code class="p">:[</code><code class="s2">"a wand"</code><code class="p">],</code><code class="nt">"health"</code><code class="p">:</code><code class="mi">3</code><code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Files and Directories"><div class="sect1" id="files-and-directories">
+<h1>Files and Directories</h1>
+
+<p>Now that we’ve shown how to work with readers and writers, the next few sections cover Rust’s features for working with files<a contenteditable="false" data-primary="input and output" data-secondary="files and directories" data-type="indexterm" id="ix_io_files_dir_ch18"/><a contenteditable="false" data-primary="files" data-type="indexterm" id="ix_files_ch18"/> and directories, which live in the <code>std::path</code> and <code>std::fs</code> modules. All of these features involve working with filenames, so we’ll start with the filename types.</p>
+
+<section data-type="sect2" data-pdf-bookmark="OsStr and Path"><div class="sect2" id="osstr-and-path">
+<h2>OsStr and Path</h2>
+
+<p>Inconveniently<a contenteditable="false" data-primary="Path type" data-type="indexterm" id="ix_path_type"/><a contenteditable="false" data-primary="OsStr string type" data-type="indexterm" id="ix_osstr_string"/><a contenteditable="false" data-primary="files" data-secondary="OsStr and Path" data-type="indexterm" id="ix_files_osstr-path"/>, your operating system does not force filenames to be valid Unicode. Here are two Linux shell commands that create text files. Only the first uses a valid<a contenteditable="false" data-primary="UTF-8" data-secondary="OsStr and" data-type="indexterm" id="ix_utf-8_osstr"/> UTF-8 filename:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code><code class="nb">echo</code><code class="w"> </code><code class="s2">"hello world"</code><code class="w"> </code>&gt;<code class="w"> </code>ô.txt<code class="w"/>
+<code class="gp">$ </code><code class="nb">echo</code><code class="w"> </code><code class="s2">"O brave new world, that has such filenames in't"</code><code class="w"> </code>&gt;<code class="w"> </code><code class="s1">$'\xf4'</code>.txt<code class="w"/>
+</pre>
+
+<p>Both commands pass without comment, because the Linux kernel doesn’t know UTF-8 from Ogg Vorbis. To the kernel, any string of bytes (excluding null bytes and slashes) is an acceptable filename. It’s a similar story on Windows<a contenteditable="false" data-primary="Windows" data-secondary="OsStr and" data-type="indexterm" id="id2225"/>: almost any string of 16-bit “wide characters” is an acceptable filename, even strings that are not valid UTF-16. The same is true of other strings the operating system handles, like command-line arguments and environment variables.</p>
+
+<p>Rust strings are always valid Unicode. Filenames are <em>almost</em> always Unicode in practice, but Rust has to cope somehow with the rare case where they aren’t. This is why Rust has <code>std::ffi::OsStr</code> and <code>OsString</code>.</p>
+
+<p><code>OsStr</code> is a string type that’s a superset of UTF-8. Its job is to be able to represent all filenames, command-line arguments, and environment variables on the current system, <em>whether they’re valid Unicode<a contenteditable="false" data-primary="Unicode" data-secondary="OsStr and" data-type="indexterm" id="id2226"/> or not.</em> On Unix, an <code>OsStr</code> can hold any sequence of bytes. On Windows, an <code>OsStr</code> is stored using an extension of UTF-8 that can encode any sequence of 16-bit values, including unmatched surrogates.</p>
+
+<p>So we have two string types: <code>str</code> for actual Unicode strings; and <code>OsStr</code> for whatever nonsense your operating system can dish out. We’ll introduce one more: <code>std::path::Path</code>, for filenames. This one is purely a convenience. <code>Path</code> is exactly like <code>OsStr</code>, but it adds many handy filename-related methods, which we’ll cover in the next section. Use <code>Path</code> for both absolute and relative paths. For an individual component of a path, use <code>OsStr</code>.</p>
+
+<p>Lastly, for each string type, there’s a corresponding <em>owning<a contenteditable="false" data-primary="owning type" data-type="indexterm" id="id2227"/></em> type: a <code>String</code> owns a heap-allocated <code>str</code>, a <code>std::ffi::OsString</code> owns a heap-allocated <code>OsStr</code>, and a <code>std::path::PathBuf</code> owns a heap-allocated <code>Path</code>. <a data-type="xref" href="#table1801">Table 18-1</a> outlines some of the features of each type<a contenteditable="false" data-primary="String and str types" data-secondary="filename types" data-type="indexterm" id="id2228"/><a contenteditable="false" data-primary="types" data-secondary="filename" data-type="indexterm" id="id2229"/><a contenteditable="false" data-primary="filename types" data-type="indexterm" id="id2230"/>.</p>
+
+<table id="table1801">
+	<caption><span class="label">Table 18-1. </span>Filename types</caption>
+	<thead>
+		<tr class="header">
+			<th> </th>
+			<th style="text-align: left;">str</th>
+			<th style="text-align: left;">OsStr</th>
+			<th style="text-align: left;">Path</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td>Dynamically sized type, always passed by reference</td>
+			<td style="text-align: left;">Yes</td>
+			<td style="text-align: left;">Yes</td>
+			<td style="text-align: left;">Yes</td>
+		</tr>
+		<tr class="even">
+			<td>Can contain any Unicode text</td>
+			<td style="text-align: left;">Yes</td>
+			<td style="text-align: left;">Yes</td>
+			<td style="text-align: left;">Yes</td>
+		</tr>
+		<tr class="odd">
+			<td>Looks just like UTF-8, normally</td>
+			<td style="text-align: left;">Yes</td>
+			<td style="text-align: left;">Yes</td>
+			<td style="text-align: left;">Yes</td>
+		</tr>
+		<tr class="even">
+			<td>Can contain non-Unicode data</td>
+			<td style="text-align: left;">No</td>
+			<td style="text-align: left;">Yes</td>
+			<td style="text-align: left;">Yes</td>
+		</tr>
+		<tr class="odd">
+			<td>Text processing methods</td>
+			<td style="text-align: left;">Yes</td>
+			<td style="text-align: left;">No</td>
+			<td style="text-align: left;">No</td>
+		</tr>
+		<tr class="even">
+			<td>Filename-related methods</td>
+			<td style="text-align: left;">No</td>
+			<td style="text-align: left;">No</td>
+			<td style="text-align: left;">Yes</td>
+		</tr>
+		<tr class="odd">
+			<td>Owned, growable, heap-allocated equivalent</td>
+			<td style="text-align: left;"><code>String</code></td>
+			<td style="text-align: left;"><code>OsString</code></td>
+			<td style="text-align: left;"><code>PathBuf</code></td>
+		</tr>
+		<tr class="even">
+			<td>Convert to owned type</td>
+			<td style="text-align: left;"><code>.to_string()</code></td>
+			<td style="text-align: left;"><code>.to_os_string()</code></td>
+			<td style="text-align: left;"><code>.to_path_buf()</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>All three of these types implement a common trait<a contenteditable="false" data-primary="AsRef trait" data-type="indexterm" id="id2231"/>, <code>AsRef&lt;Path&gt;</code>, so we can easily declare a generic function that accepts “any filename type” as an argument. This uses a technique we showed in <a data-type="xref" href="ch13.html#asref-and-asmut">“AsRef and AsMut”</a>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io20">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">path</code><code class="p">::</code><code class="n">Path</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">swizzle_file</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="p">(</code><code class="n">path_arg</code><code class="p">:</code><code class="w"> </code><code class="nc">P</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">P</code><code class="p">:</code><code class="w"> </code><code class="nb">AsRef</code><code class="o">&lt;</code><code class="n">Path</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">path</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">path_arg</code><code class="p">.</code><code class="n">as_ref</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>All the standard functions and methods that take <code>path</code> arguments use this technique, so you can freely pass string literals to any of them<a contenteditable="false" data-startref="ix_utf-8_osstr" data-type="indexterm" id="id2232"/><a contenteditable="false" data-startref="ix_files_osstr-path" data-type="indexterm" id="id2233"/><a contenteditable="false" data-startref="ix_osstr_string" data-type="indexterm" id="id2234"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Path and PathBuf Methods"><div class="sect2" id="path-and-pathbuf-methods">
+<h2>Path and PathBuf Methods</h2>
+
+<p><code>Path</code> offers the following methods<a contenteditable="false" data-primary="files" data-secondary="Path and PathBuf types" data-type="indexterm" id="ix_files_path_pathbuf"/>, among others:</p>
+
+<dl>
+	<dt><code>Path::new(str)</code></dt>
+	<dd>
+	<p>Converts<a contenteditable="false" data-primary="Path::new method" data-type="indexterm" id="id2235"/> a <code>&amp;str</code> or <code>&amp;OsStr</code> to a <code>&amp;Path</code>. This doesn’t copy the string. The new <code>&amp;Path</code> points to the same bytes as the original <code>&amp;str</code> or <code>&amp;OsStr</code>:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io21">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">path</code><code class="p">::</code><code class="n">Path</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">home_dir</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home/fwolfe"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+	<p>(The similar method <code>OsStr::new(str)</code> converts a <code>&amp;str</code> to a <code>&amp;OsStr</code>.)</p>
+	</dd>
+	<dt><code>path.parent()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Path type" data-secondary="parent method" data-type="indexterm" id="id2236"/> the path’s parent directory, if any. The return type is <code>Option&lt;&amp;Path&gt;</code>.</p>
+
+	<p>This doesn’t copy the path. The parent directory of <code>path</code> is always a substring of <code>path</code>:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io22">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home/fwolfe/program.txt"</code><code class="p">).</code><code class="n">parent</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home/fwolfe"</code><code class="p">)),</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+	</dd>
+	<dt><code>path.file_name()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Path type" data-secondary="file_name method" data-type="indexterm" id="id2237"/> the last component of <code>path</code>, if any. The return type is <code>Option&lt;&amp;OsStr&gt;</code>.</p>
+
+	<p>In the typical case, where <code>path</code> consists of a directory, then a slash, and then a filename, this returns the filename:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io23">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ffi</code><code class="p">::</code><code class="n">OsStr</code><code class="p">;</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home/fwolfe/program.txt"</code><code class="p">).</code><code class="n">file_name</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">OsStr</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"program.txt"</code><code class="p">)),</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+	</dd>
+	<dt><code>path.is_absolute()</code>, <code>path.is_relative()</code></dt>
+	<dd>
+	<p>These<a contenteditable="false" data-primary="Path type" data-secondary="is_absolute method" data-type="indexterm" id="id2238"/><a contenteditable="false" data-primary="Path type" data-secondary="is_relative method" data-type="indexterm" id="id2239"/> tell whether the file is absolute, like the Unix path <em>/usr/bin/advent</em> or the Windows path <em>C:\Program Files</em>, or relative, like <em>src/main.rs</em>.</p>
+	</dd>
+	<dt><code>path1.join(path2)</code></dt>
+	<dd>
+	<p>Joins<a contenteditable="false" data-primary="PathBuf type" data-type="indexterm" id="id2240"/><a contenteditable="false" data-primary="Path type" data-secondary="join method" data-type="indexterm" id="id2241"/> two paths, returning a new <code>PathBuf</code>:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io24">
+<code class="kd">let</code><code class="w"> </code><code class="n">path1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/usr/share/dict"</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">path1</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">"words"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/usr/share/dict/words"</code><code class="p">),</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+	<p>If <code>path2</code> is an absolute path, this just returns a copy of <code>path2</code>, so this method can be used to convert any path to an absolute path:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io25">
+<code class="kd">let</code><code class="w"> </code><code class="n">abs_path</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">::</code><code class="n">current_dir</code><code class="p">()</code><code class="o">?</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="n">any_path</code><code class="p">);</code><code class="w"/>
+</pre>
+	</dd>
+	<dt><code>path.components()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Path type" data-secondary="components method" data-type="indexterm" id="id2242"/> an iterator over the components of the given path, from left to right. The item type of this iterator is <code>std::path::Component</code>, an enum that can represent all the different pieces that can appear in filenames:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io26">
+<code class="k">pub</code><code class="w"> </code><code class="k">enum</code><code class="w"> </code><code class="nc">Component</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Prefix</code><code class="p">(</code><code class="n">PrefixComponent</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="p">),</code><code class="w">  </code><code class="c1">// a drive letter or share (on Windows)</code>
+<code class="w">    </code><code class="n">RootDir</code><code class="p">,</code><code class="w">                      </code><code class="c1">// the root directory, `/` or `\`</code>
+<code class="w">    </code><code class="n">CurDir</code><code class="p">,</code><code class="w">                       </code><code class="c1">// the `.` special directory</code>
+<code class="w">    </code><code class="n">ParentDir</code><code class="p">,</code><code class="w">                    </code><code class="c1">// the `..` special directory</code>
+<code class="w">    </code><code class="n">Normal</code><code class="p">(</code><code class="o">&amp;'</code><code class="na">a</code><code class="w"> </code><code class="n">OsStr</code><code class="p">),</code><code class="w">            </code><code class="c1">// plain file and directory names</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+	<p>For example, the Windows path <em>\\venice\Music\A Love Supreme\04-Psalm.mp3</em> consists of a <code>Prefix</code> representing <em>\\venice\Music</em>, followed by a <code>RootDir</code>, and then two <code>Normal</code> components representing <em>A Love Supreme</em> and <em>04-Psalm.mp3</em>.</p>
+
+	<p>For details, see <a href="https://oreil.ly/mtHCk">the online documentation</a>.</p>
+	</dd>
+	<dt><code>path.ancestors()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Path type" data-secondary="ancestors method" data-type="indexterm" id="id2243"/> an iterator that walks from <code>path</code> up to the root. Each item produced is a <code>Path</code>: first <code>path</code> itself, then its parent, then its grandparent, and so on:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-path-ancestors">
+<code class="kd">let</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home/jimb/calendars/calendar-18x18.pdf"</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">file</code><code class="p">.</code><code class="n">ancestors</code><code class="p">().</code><code class="n">collect</code><code class="p">::</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;&gt;</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="fm">vec!</code><code class="p">[</code><code class="w"/>
+<code class="w">        </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home/jimb/calendars/calendar-18x18.pdf"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home/jimb/calendars"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home/jimb"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/home"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">Path</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"/"</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="p">],</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+	<p><span data-claim-test="ancestors-repeated-parent">This is much like calling <code>parent</code> repeatedly until it returns <code>None</code>. The final item is always a root or prefix path.</span></p>
+	</dd>
+</dl>
+
+<p>These methods work on strings in memory. <code>Path</code>s also have some methods that query the filesystem: <wbr/><code>.exists()</code>, <wbr/><code>.is_file()</code>, <wbr/><code>.is_dir()</code>, <wbr/><code>.read_dir()</code>, <wbr/><code>.canonicalize()</code>, and so on. See the online documentation to learn more.</p>
+
+<p>There are three methods for converting <code>Path</code>s to strings. Each one allows for the possibility of invalid UTF-8 in the <code>Path</code>:</p>
+
+<dl>
+	<dt><code>path.to_str()</code></dt>
+	<dd>
+	<p>Converts<a contenteditable="false" data-primary="Path type" data-secondary="to_str method" data-type="indexterm" id="id2244"/> a <code>Path</code> to a string, as an <code>Option&lt;&amp;str&gt;</code>. If <code>path</code> isn’t valid UTF-8, this returns <code>None</code>:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io27">
+<code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">file_str</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">path</code><code class="p">.</code><code class="n">to_str</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{file_str}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w">  </code><code class="c1">// ...otherwise skip this weirdly named file</code>
+</pre>
+	</dd>
+	<dt><code>path.to_string_lossy()</code></dt>
+	<dd>
+	<p>This<a contenteditable="false" data-primary="Path type" data-secondary="to_string_lossy method" data-type="indexterm" id="id2245"/> is basically the same thing, but it manages to return some sort of string in all cases. If <code>path</code> isn’t valid UTF-8, these methods make a copy, replacing each invalid byte sequence with the Unicode replacement character, U+FFFD ('�').</p>
+
+	<p>The return type is <code>std::borrow::Cow&lt;str&gt;</code>: an either borrowed or owned string. To get a <code>String</code> from this value, use its <code>.to_owned()</code> method. (For more about <code>Cow</code>, see <a data-type="xref" href="ch13.html#cow">“Borrow and ToOwned at Work: The Humble Cow”</a>.)</p>
+	</dd>
+	<dt><code>path.display()</code></dt>
+	<dd>
+	<p>This<a contenteditable="false" data-primary="Path type" data-secondary="display method" data-type="indexterm" id="id2246"/> is for printing paths:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-io28">
+<code class="fm">println!</code><code class="p">(</code><code class="s">"Download found. You put it in: {}"</code><code class="p">,</code><code class="w"> </code><code class="n">dir_path</code><code class="p">.</code><code class="n">display</code><code class="p">());</code><code class="w"/>
+</pre>
+
+	<p>The value this returns isn’t a string, but it implements <code>std::fmt::Display</code>, so it can be used with <code>format!()</code>, <code>println!()</code>, and friends. If the path isn’t valid UTF-8, the output may contain the � character<a contenteditable="false" data-startref="ix_files_path_pathbuf" data-type="indexterm" id="id2247"/><a contenteditable="false" data-startref="ix_path_type" data-type="indexterm" id="id2248"/>.</p>
+	</dd>
+</dl>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Filesystem Access Functions"><div class="sect2" id="filesystem-access-functions">
+<h2>Filesystem Access Functions</h2>
+
+<p><a data-type="xref" href="#table-std-fs-functions">Table 18-2</a> shows some of the functions<a contenteditable="false" data-primary="functions" data-secondary="filesystem access" data-type="indexterm" id="ix_functions_file_access"/><a contenteditable="false" data-primary="files" data-secondary="filesystem access functions" data-type="indexterm" id="ix_files_access"/> in <code>std::fs</code> and<a contenteditable="false" data-primary="filesystems" data-type="indexterm" id="id2249"/><a contenteditable="false" data-primary="fs module" data-type="indexterm" id="id2250"/> their approximate equivalents on Unix and Windows. All of these functions return <code>io::Result</code> values. They are <code>Result&lt;()&gt;</code> unless otherwise noted.</p>
+
+<table id="table-std-fs-functions">
+	<caption><span class="label">Table 18-2. </span>Summary of filesystem access functions</caption>
+	<thead>
+		<tr>
+			<th> </th>
+			<th>Rust function</th>
+			<th>Unix</th>
+			<th>Windows</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<th rowspan="5">Creating and<br/>
+			deleting</th>
+			<td><code>create_dir(path)</code></td>
+			<td><code>mkdir()</code></td>
+			<td><code>CreateDirectory()</code></td>
+		</tr>
+		<tr>
+			<td><code>create_dir_all(path)</code></td>
+			<td>like <code>mkdir -p</code></td>
+			<td>like <code>mkdir</code></td>
+		</tr>
+		<tr>
+			<td><code>remove_dir(path)</code></td>
+			<td><code>rmdir()</code></td>
+			<td><code>RemoveDirectory()</code></td>
+		</tr>
+		<tr>
+			<td><code>remove_dir_all(path)</code></td>
+			<td>like <code>rm -r</code></td>
+			<td>like <code>rmdir /s</code></td>
+		</tr>
+		<tr>
+			<td><code>remove_file(path)</code></td>
+			<td><code>unlink()</code></td>
+			<td><code>DeleteFile()</code></td>
+		</tr>
+		<tr>
+			<th rowspan="3">Copying, moving,<br/>
+			and linking</th>
+			<td><code>copy(src_path, dest_path)<br/>
+			  -&gt; Result&lt;u64&gt;</code></td>
+			<td>like <code>cp -p</code></td>
+			<td><code>CopyFileEx()</code></td>
+		</tr>
+		<tr>
+			<td><code>rename(src_path, dest_path)</code></td>
+			<td><code>rename()</code></td>
+			<td><code>MoveFileEx()</code></td>
+		</tr>
+		<tr>
+			<td><code>hard_link(src_path, dest_path)</code></td>
+			<td><code>link()</code></td>
+			<td><code>CreateHardLink()</code></td>
+		</tr>
+		<tr>
+			<th rowspan="5">Inspecting</th>
+			<td><code>canonicalize(path)<br/>
+			  -&gt; Result&lt;PathBuf&gt;</code></td>
+			<td><code>realpath()</code></td>
+			<td><code>GetFinalPathNameByHandle()</code></td>
+		</tr>
+		<tr>
+			<td><code>metadata(path)<br/>
+			  -&gt; Result&lt;Metadata&gt;</code></td>
+			<td><code>stat()</code></td>
+			<td><code>GetFileInformationByHandle()</code></td>
+		</tr>
+		<tr>
+			<td><code>symlink_metadata(path)<br/>
+			  -&gt; Result&lt;Metadata&gt;</code></td>
+			<td><code>lstat()</code></td>
+			<td><code>GetFileInformationByHandle()</code></td>
+		</tr>
+		<tr>
+			<td><code>read_dir(path)<br/>
+			  -&gt; Result&lt;ReadDir&gt;</code></td>
+			<td><code>opendir()</code></td>
+			<td><code>FindFirstFile()</code></td>
+		</tr>
+		<tr>
+			<td><code>read_link(path)<br/>
+			  -&gt; Result&lt;PathBuf&gt;</code></td>
+			<td><code>readlink()</code></td>
+			<td><code>FSCTL_GET_REPARSE_POINT</code></td>
+		</tr>
+		<tr>
+			<th>Permissions</th>
+			<td><code>set_permissions(path, perm)</code></td>
+			<td><code>chmod()</code></td>
+			<td><code>SetFileAttributes()</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>(The number returned by <code>copy()</code> is the size of the copied file, in bytes. For creating symbolic links, see <a data-type="xref" href="#platform-specific-features">“Platform-Specific Features”</a>.)</p>
+
+<p>As you can see, Rust strives to provide portable functions that work predictably on Windows as well as macOS, Linux, and other Unix systems.</p>
+
+<p>A full tutorial on filesystems is beyond the scope of this book, but if you’re curious about any of these functions, you can easily find more about them online. We’ll show some examples in the next section.</p>
+
+<p>All of these functions are implemented by calling out to the operating system. For example, <code>std::fs::canonicalize(path)</code> does not merely use string processing to eliminate <code>.</code> and <code>..</code> from the given <code>path</code>. It resolves relative paths using the current working directory, and it chases symbolic links. It’s an error if the path doesn’t exist.</p>
+
+<p>The <code>Metadata</code> type that’s produced by <code>std::fs::metadata(path)</code> and <code>std::fs::symlink_metadata(path)</code> contains such information as the file type and size, permissions, and timestamps. As always, consult the documentation for details.</p>
+
+<p>As a convenience, the <code>Path</code> type has a few of these built in as methods: <code>path.metadata()</code>, for example, is the same thing<a contenteditable="false" data-startref="ix_files_access" data-type="indexterm" id="id2251"/><a contenteditable="false" data-startref="ix_functions_file_access" data-type="indexterm" id="id2252"/> as <code>std::fs::metadata(path)</code>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Reading Directories"><div class="sect2" id="reading-directories">
+<h2>Reading Directories</h2>
+
+<p>To list the contents of a directory<a contenteditable="false" data-primary="files" data-secondary="reading directories" data-type="indexterm" id="ix_files_dir_read"/><a contenteditable="false" data-primary="directories" data-secondary="reading" data-type="indexterm" id="ix_dir_read"/>, use <code>std::fs::read_dir</code> or, equivalently, the <code>.read_dir()</code> method<a contenteditable="false" data-primary="read_dir method" data-type="indexterm" id="id2253"/> of a <code>Path</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io29">
+<code class="k">for</code><code class="w"> </code><code class="n">entry_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">path</code><code class="p">.</code><code class="n">read_dir</code><code class="p">()</code><code class="o">?</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">entry_result</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_name</code><code class="p">().</code><code class="n">to_string_lossy</code><code class="p">());</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Note the two uses of <code>?</code> in this code. The first line checks for errors opening the directory. The second line checks for errors reading the next entry.</p>
+
+<p>The type of <code>entry</code> is <code>std::fs::DirEntry</code>, and it’s a struct<a contenteditable="false" data-primary="DirEntry struct" data-type="indexterm" id="id2254"/> with just a few methods:</p>
+
+<dl>
+	<dt><code>entry.file_name()</code></dt>
+	<dd>
+	<p>The<a contenteditable="false" data-primary="DirEntry struct" data-secondary="file_name method" data-type="indexterm" id="id2255"/> name of the file or directory, as an <code>OsString</code>.</p>
+	</dd>
+	<dt><code>entry.path()</code></dt>
+	<dd>
+	<p>This<a contenteditable="false" data-primary="DirEntry struct" data-secondary="path method" data-type="indexterm" id="id2256"/> is the same, but with the original path joined to it, producing a new <code>PathBuf</code>. If the directory we’re listing is <code>"/home/jimb"</code>, and <code>entry.file_name()</code> is <code>".emacs"</code>, then <code>entry.path()</code> would return <code>PathBuf::from("/home/jimb/.emacs")</code>.</p>
+	</dd>
+	<dt><code>entry.file_type()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="DirEntry struct" data-secondary="file_type method" data-type="indexterm" id="id2257"/> an <code>io::Result&lt;FileType&gt;</code>. <code>FileType</code> has <wbr/><code>.is_file()</code>, <wbr/><code>.is_dir()</code>, and <wbr/><code>.is_symlink()</code> methods.</p>
+	</dd>
+	<dt><code>entry.metadata()</code></dt>
+	<dd>
+	<p>Gets<a contenteditable="false" data-primary="DirEntry struct" data-secondary="metadata method" data-type="indexterm" id="id2258"/> the rest of the metadata about this entry.</p>
+	</dd>
+</dl>
+
+<p><span data-claim-test="special-dirs-omitted">The special directories <code>.</code> and <code>..</code> are <em>not</em> listed when reading a directory.</span></p>
+
+<p>Here’s a more substantial example. The following code recursively copies a directory tree from one place to another on disk:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io30">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fs</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">path</code><code class="p">::</code><code class="n">Path</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// Copies the existing directory `src` to the target path `dst`.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">copy_dir_to</code><code class="p">(</code><code class="n">src</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">,</code><code class="w"> </code><code class="n">dst</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="n">dst</code><code class="p">.</code><code class="n">is_dir</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">fs</code><code class="p">::</code><code class="n">create_dir</code><code class="p">(</code><code class="n">dst</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">entry_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">src</code><code class="p">.</code><code class="n">read_dir</code><code class="p">()</code><code class="o">?</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">entry_result</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">file_type</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">entry</code><code class="p">.</code><code class="n">file_type</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="n">copy_to</code><code class="p">(</code><code class="o">&amp;</code><code class="n">entry</code><code class="p">.</code><code class="n">path</code><code class="p">(),</code><code class="w"> </code><code class="o">&amp;</code><code class="n">file_type</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">dst</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="n">entry</code><code class="p">.</code><code class="n">file_name</code><code class="p">()))</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>A separate function, <code>copy_to</code>, copies individual directory entries<a contenteditable="false" data-startref="ix_dir_read" data-type="indexterm" id="id2259"/><a contenteditable="false" data-startref="ix_files_dir_read" data-type="indexterm" id="id2260"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io31">
+<code class="sd">/// Copies whatever is at `src` to the target path `dst`.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">copy_to</code><code class="p">(</code><code class="n">src</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">,</code><code class="w"> </code><code class="n">src_type</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">fs</code><code class="p">::</code><code class="n">FileType</code><code class="p">,</code><code class="w"> </code><code class="n">dst</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">src_type</code><code class="p">.</code><code class="n">is_file</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">fs</code><code class="p">::</code><code class="n">copy</code><code class="p">(</code><code class="n">src</code><code class="p">,</code><code class="w"> </code><code class="n">dst</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">src_type</code><code class="p">.</code><code class="n">is_dir</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">copy_dir_to</code><code class="p">(</code><code class="n">src</code><code class="p">,</code><code class="w"> </code><code class="n">dst</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="p">::</code><code class="n">other</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="fm">format!</code><code class="p">(</code><code class="s">"don't know how to copy: {}"</code><code class="p">,</code><code class="w"> </code><code class="n">src</code><code class="p">.</code><code class="n">display</code><code class="p">()),</code><code class="w"/>
+<code class="w">        </code><code class="p">));</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Platform-Specific Features"><div class="sect2" id="platform-specific-features">
+<h2>Platform-Specific Features</h2>
+
+<p>So far, our <code>copy_to</code> function can copy files<a contenteditable="false" data-primary="files" data-secondary="platform-specific features" data-type="indexterm" id="ix_files_platform"/> and directories. Suppose we also want to support symbolic links on Unix.</p>
+
+<p>There is no portable way to create symbolic links that work on both Unix and Windows<a contenteditable="false" data-primary="Windows" data-secondary="files and directories" data-type="indexterm" id="id2261"/>, but the standard library offers a Unix<a contenteditable="false" data-primary="Unix" data-secondary="files and directories" data-type="indexterm" id="ix_unix_files_dir"/>-specific <code>symlink</code> function<a contenteditable="false" data-primary="symlink method" data-type="indexterm" id="ix_symlink"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io32">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">os</code><code class="p">::</code><code class="n">unix</code><code class="p">::</code><code class="n">fs</code><code class="p">::</code><code class="n">symlink</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>With this, our job is easy. We need only add a branch to the <code>if</code> expression in <code>copy_to</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io33">
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">src_type</code><code class="p">.</code><code class="n">is_symlink</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">target</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">src</code><code class="p">.</code><code class="n">read_link</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="n">symlink</code><code class="p">(</code><code class="n">target</code><code class="p">,</code><code class="w"> </code><code class="n">dst</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>This will work as long as we compile our program only for Unix systems, such as Linux and macOS.</p>
+
+<p>The <code>std::os</code> module<a contenteditable="false" data-primary="os module" data-type="indexterm" id="id2262"/> contains various platform-specific features, like <code>symlink</code>. The actual body of <code>std::os</code> in the standard library looks like this (taking some poetic license):</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io34">
+<code class="sd">//! OS-specific functionality.</code>
+
+<code class="cp">#[cfg(unix)]</code><code class="w">                    </code><code class="k">pub</code><code class="w"> </code><code class="k">mod</code><code class="w"> </code><code class="nn">unix</code><code class="p">;</code><code class="w"/>
+<code class="cp">#[cfg(windows)]</code><code class="w">                 </code><code class="k">pub</code><code class="w"> </code><code class="k">mod</code><code class="w"> </code><code class="nn">windows</code><code class="p">;</code><code class="w"/>
+<code class="cp">#[cfg(target_os = </code><code class="s">"ios"</code><code class="cp">)]</code><code class="w">       </code><code class="k">pub</code><code class="w"> </code><code class="k">mod</code><code class="w"> </code><code class="nn">ios</code><code class="p">;</code><code class="w"/>
+<code class="cp">#[cfg(target_os = </code><code class="s">"linux"</code><code class="cp">)]</code><code class="w">     </code><code class="k">pub</code><code class="w"> </code><code class="k">mod</code><code class="w"> </code><code class="nn">linux</code><code class="p">;</code><code class="w"/>
+<code class="cp">#[cfg(target_os = </code><code class="s">"macos"</code><code class="cp">)]</code><code class="w">     </code><code class="k">pub</code><code class="w"> </code><code class="k">mod</code><code class="w"> </code><code class="nn">macos</code><code class="p">;</code><code class="w"/>
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>The <code>#[cfg]</code> attribute<a contenteditable="false" data-primary="#[cfg] attribute" data-type="indexterm" id="id2263"/><a contenteditable="false" data-primary="#[cfg] attribute" data-primary-sortas="cfg attribute" data-type="indexterm" id="id2264"/> indicates conditional compilation: each of these modules exists only on some platforms. This is why our modified program, using <code>std::os::unix</code>, will successfully compile only for Unix: on other platforms, <code>std::os::unix</code> doesn’t exist.</p>
+
+<p>If we want our code to compile on all platforms, with support for symbolic links on Unix, we must use <code>#[cfg]</code> in our program as well. In this case, it’s easiest to import <code>symlink</code> on Unix, while defining our own <code>symlink</code> stub on other systems:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io35">
+<code class="cp">#[cfg(unix)]</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">os</code><code class="p">::</code><code class="n">unix</code><code class="p">::</code><code class="n">fs</code><code class="p">::</code><code class="n">symlink</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// Stub implementation of `symlink` for platforms that don't provide it.</code>
+<code class="cp">#[cfg(not(unix))]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">symlink</code><code class="o">&lt;</code><code class="n">P</code><code class="p">:</code><code class="w"> </code><code class="nb">AsRef</code><code class="o">&lt;</code><code class="n">Path</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">Q</code><code class="p">:</code><code class="w"> </code><code class="nb">AsRef</code><code class="o">&lt;</code><code class="n">Path</code><code class="o">&gt;&gt;</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">src</code><code class="p">:</code><code class="w"> </code><code class="nc">P</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">_dst</code><code class="p">:</code><code class="w"> </code><code class="nc">Q</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Err</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="p">::</code><code class="n">other</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="fm">format!</code><code class="p">(</code><code class="s">"can't copy symbolic link: {}"</code><code class="p">,</code><code class="w"> </code><code class="n">src</code><code class="p">.</code><code class="n">as_ref</code><code class="p">().</code><code class="n">display</code><code class="p">()),</code><code class="w"/>
+<code class="w">    </code><code class="p">))</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>It turns out that <code>symlink</code> is something of a special case. Most Unix-specific features are not standalone functions but rather extension traits that add new methods to standard library types. (We covered extension traits in <a data-type="xref" href="ch11.html#traits-and-other-peoples-types">“Traits and Other People’s Types”</a>.) There’s a <code>prelude</code> module<a contenteditable="false" data-primary="prelude module" data-type="indexterm" id="id2265"/> that can be used to enable all of these extensions at once:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io36">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">os</code><code class="p">::</code><code class="n">unix</code><code class="p">::</code><code class="n">prelude</code><code class="p">::</code><code class="o">*</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p><span data-claim-test="unix-prelude">For example, on Unix, this adds a <code>.mode()</code> method to <code>std::fs::Permissions</code>, providing access to the underlying <code>u32</code> value that represents permissions on Unix. Similarly, it extends <code>std::fs::Metadata</code> with accessors for the fields of the underlying <code>struct stat</code> value—such as <code>.uid()</code>, the user ID of the file’s owner.</span></p>
+
+<p>All told, what’s in <code>std::os</code> is pretty basic. Much more platform-specific functionality is available via third-party crates, like <a href="https://oreil.ly/UkEzd"><code>winreg</code></a> for accessing the Windows registry<a contenteditable="false" data-startref="ix_unix_files_dir" data-type="indexterm" id="id2266"/><a contenteditable="false" data-startref="ix_symlink" data-type="indexterm" id="id2267"/><a contenteditable="false" data-startref="ix_files_platform" data-type="indexterm" id="id2268"/><a contenteditable="false" data-startref="ix_files_ch18" data-type="indexterm" id="id2269"/><a contenteditable="false" data-startref="ix_io_files_dir_ch18" data-type="indexterm" id="id2270"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Networking"><div class="sect1" id="networking">
+<h1>Networking</h1>
+
+<p>A tutorial on networking<a contenteditable="false" data-primary="networking" data-type="indexterm" id="ix_network"/><a contenteditable="false" data-primary="input and output" data-secondary="networking" data-type="indexterm" id="ix_io_network"/> is well beyond the scope of this book. However, if you already know a bit about network programming this section will help you get started with networking in Rust.</p>
+
+<p>For low-level networking code, start with the <code>std::net</code> module, which provides cross-platform support for TCP and UDP networking. Use the <code>native_tls</code> crate<a contenteditable="false" data-primary="native_tls crate" data-type="indexterm" id="id2271"/> for SSL/TLS support.</p>
+
+<p>These modules provide the building blocks for straightforward, blocking input and output over the network. You can write a simple server in a few lines of code, using <code>std::net</code> and<a contenteditable="false" data-primary="net module" data-type="indexterm" id="id2272"/> spawning a thread for each connection. For example, here’s an “echo” server:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io37">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">net</code><code class="p">::</code><code class="n">TcpListener</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::{</code><code class="n">io</code><code class="p">,</code><code class="w"> </code><code class="n">thread</code><code class="p">};</code><code class="w"/>
+
+<code class="sd">/// Accepts connections forever, spawning a thread for each one.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">echo_main</code><code class="p">(</code><code class="n">addr</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">listener</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">TcpListener</code><code class="p">::</code><code class="n">bind</code><code class="p">(</code><code class="n">addr</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"listening on {addr}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// Wait for a client to connect.</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">stream</code><code class="p">,</code><code class="w"> </code><code class="n">addr</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">listener</code><code class="p">.</code><code class="n">accept</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"connection received from {addr}"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Spawn a thread to handle this client.</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">write_stream</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">stream</code><code class="p">.</code><code class="n">try_clone</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="n">thread</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="c1">// Echo everything we receive from `stream` back to it.</code>
+<code class="w">            </code><code class="n">io</code><code class="p">::</code><code class="n">copy</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">stream</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">write_stream</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error in client thread: "</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="fm">println!</code><code class="p">(</code><code class="s">"connection closed"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">});</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">echo_main</code><code class="p">(</code><code class="s">"127.0.0.1:17007"</code><code class="p">).</code><code class="n">expect</code><code class="p">(</code><code class="s">"error: "</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>An echo server simply repeats back everything you send to it. This kind of code is not so different from what you’d write in Java or Python. (We’ll cover <code>std::thread::spawn()</code> in <a href="ch19.html#threads">the next chapter</a>.)</p>
+
+<p>However, for high-performance servers, you’ll need to use asynchronous input and output. <a data-type="xref" href="ch20.html#asynchronous-programming">Chapter 20</a> covers Rust’s support for asynchronous programming.</p>
+
+<p>Higher-level protocols are supported by third-party crates. For example, the <code>reqwest</code> crate<a contenteditable="false" data-primary="reqwest crate" data-type="indexterm" id="id2273"/> offers a beautiful API for HTTP clients. Here is a complete command-line program that fetches any document with an <code>http:</code> or <code>https:</code> URL and dumps it to your terminal. This code was written using <code>reqwest = "0.13.4"</code>, with its <code>"blocking"</code> feature enabled. <code>reqwest</code> also provides an asynchronous interface.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-io38">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">http_get_main</code><code class="p">(</code><code class="n">url</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(),</code><code class="w"> </code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">Error</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Send the HTTP request and get a response.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">response</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reqwest</code><code class="p">::</code><code class="n">blocking</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="n">url</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="n">response</code><code class="p">.</code><code class="n">status</code><code class="p">().</code><code class="n">is_success</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Err</code><code class="p">(</code><code class="fm">format!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="n">response</code><code class="p">.</code><code class="n">status</code><code class="p">()))</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Read the response body and write it to stdout.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">stdout</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="n">stdout</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">io</code><code class="p">::</code><code class="n">copy</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">response</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">stdout</code><code class="p">.</code><code class="n">lock</code><code class="p">())</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">().</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="mi">2</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"usage: http-get URL"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">http_get_main</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">[</code><code class="mi">1</code><code class="p">])</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"error: {err}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>actix-web</code> framework<a contenteditable="false" data-primary="actix-web framework" data-type="indexterm" id="id2274"/> for HTTP servers offers high-level touches such as the <code>Service</code> and <code>Transform</code> traits, which help you compose an app from pluggable parts. The <code>websocket</code> crate implements the WebSocket protocol. And so on. Rust is a young language with a busy open source ecosystem. Support for networking<a contenteditable="false" data-startref="ix_io_network" data-type="indexterm" id="id2275"/><a contenteditable="false" data-startref="ix_network" data-type="indexterm" id="id2276"/><a contenteditable="false" data-startref="ix_io_ch18" data-type="indexterm" id="id2277"/> is rapidly expanding.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,1301 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch23.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 23. Unsafe Code">
+        <div class="chapter" id="unsafe-code">
+<h1><span class="label">Chapter 23. </span>Unsafe Code</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id2518"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the twenty-third chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>Let no one think of me that I am humble or weak or passive;<br/>
+Let them understand I am of a different kind:<br/>
+dangerous to my enemies, loyal to my friends.<br/>
+To such a life glory belongs.</p>
+
+<p data-type="attribution">Euripides, <em>Medea</em></p>
+</blockquote>
+
+<p>The secret<a contenteditable="false" data-primary="unsafe code" data-type="indexterm" id="ix_unsafe_code_ch22"/> joy of systems programming is that, underneath every single safe language and carefully designed abstraction is a swirling maelstrom of wildly unsafe machine language and bit fiddling. You can write that in Rust, too.</p>
+
+<p>The language we’ve presented up to this point in the book ensures your programs are free of memory errors and data races entirely automatically, through types, lifetimes, bounds checks, and so on. But this sort of automated reasoning has its limits; there are many valuable techniques that Rust cannot recognize as safe.</p>
+
+<p><em>Unsafe code</em> lets you tell Rust, “I am opting to use features whose safety you cannot guarantee.” By marking off a block of code as unsafe, you acquire the ability to call <code>unsafe</code> functions in the standard library, dereference raw pointers, and call functions written in other languages like C and C‍++, among other powers. Rust’s other safety checks still apply: type checks, lifetime checks, and bounds checks on indices all occur normally. Unsafe code just enables a small set of additional features.</p>
+
+<p>This ability to step outside the boundaries of safe Rust is what makes it possible to implement many of Rust’s most fundamental features in Rust itself, just as C and C‍++ are used to implement their own standard libraries. Unsafe code is what allows the <code>Vec</code> type to manage its buffer efficiently; the <code>std::io</code> module to talk to the operating system; and the <code>std::thread</code> and <code>std::sync</code> modules to provide concurrency <span class="keep-together">primitives.</span></p>
+
+<p>This chapter covers the essentials of working with unsafe features:</p>
+
+<ul>
+	<li>
+	<p>Intentionally skip consistency and bounds checks when you know they’re unnecessary and hurting performance by calling unsafe functions like <code>from_utf8_unchecked</code>.</p>
+	</li>
+	<li>
+	<p>Bypass the type system to do things like reinterpreting a <code>&amp;[u8]</code> as a <code>&amp;[u32]</code>.</p>
+	</li>
+	<li>
+	<p>Write your own memory management and concurrency primitives, like <code>Vec</code> and <code>Arc</code>, without relying on Rust’s standard library.</p>
+	</li>
+	<li>
+	<p>Use advanced, CPU-specific instructions, compiler intrinsics, and other features the compiler can’t prove are safe.</p>
+	</li>
+	<li>
+	<p>Wrap your unsafe code in a safe API that ensures end users—and your future self—can take advantage of the benefits of your work without violating Rust’s safety guarantees.</p>
+	</li>
+</ul>
+
+<section data-type="sect1" data-pdf-bookmark="Unsafe from What?"><div class="sect1" id="unsafe-from-what">
+<h1>Unsafe from What?</h1>
+
+<p>At the start<a contenteditable="false" data-primary="unsafe code" data-secondary="unsafe feature" data-type="indexterm" id="ix_unsafe_feature"/> of this book, we showed a C program that crashes in a surprising way because it fails to follow one of the rules prescribed by the C standard. A similar program can be written in Rust:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-crash-rs">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">a</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">ptr</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">raw</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">a</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">*</code><code class="n">ptr</code><code class="p">.</code><code class="n">add</code><code class="p">(</code><code class="mi">4</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mh">0x7ffff7d48a38</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Running this program results in similarly surprising results:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>build<code class="w"/>
+<code class="go">   Compiling unsafe-samples v0.1.0</code>
+<code class="go">    Finished debug [unoptimized + debuginfo] target(s) in 0.44s</code>
+<code class="gp">$ </code>../../target/debug/crash<code class="w"/>
+<code class="go">crash: Error: .netrc file is readable by others.</code>
+<code class="go">crash: Remove password or make file unreadable by others.</code>
+<code class="go">Segmentation fault (core dumped)</code>
+<code class="gp">$</code>
+</pre>
+
+<p>This program uses the <code>&amp;raw mut</code> operator to get a raw pointer of type <code>*mut usize</code> pointing to the local variable <code>a</code>, then uses the <code>add</code> method<a contenteditable="false" data-primary="raw pointers" data-secondary="add and sub methods" data-type="indexterm" id="id2519"/> to produce a pointer four words further along in memory. This happens to be where <code>main</code>’s return address is stored. The program overwrites the return address with a constant, such that returning from <code>main</code> behaves in a surprising way. What makes this crash possible is the program’s incorrect use of unsafe features—in this case, the ability to dereference raw pointers.</p>
+
+<p>An unsafe feature is one that imposes a <em>contract<a contenteditable="false" data-primary="contracts" data-secondary="unsafe feature and" data-type="indexterm" id="id2520"/></em>: rules that Rust cannot enforce automatically, but which you must nonetheless follow to avoid <em>undefined behavior</em>.</p>
+
+<p>A contract goes beyond the usual type checks and lifetime checks, imposing further rules specific to that unsafe feature. Typically, Rust itself doesn’t know about the contract at all; it’s just explained in the feature’s documentation. For example, the raw pointer type has a contract forbidding you to dereference<a contenteditable="false" data-primary="dereferencing" data-secondary="raw pointers" data-type="indexterm" id="id2521"/><a contenteditable="false" data-primary="raw pointers" data-secondary="dereferencing" data-type="indexterm" id="id2522"/> a pointer that has been advanced beyond the end of its original referent. The expression <code>*ptr.add(3) = ...</code> in this example breaks this contract. But, as the transcript shows, Rust compiles the program without complaint: its safety checks do not detect this violation. When you use unsafe features, you, as the programmer, bear the responsibility for checking that your code adheres to their contracts.</p>
+
+<p>Lots of features have rules you should follow to use them correctly, but such rules are not contracts in the sense we mean here unless the possible consequences include undefined behavior. Undefined<a contenteditable="false" data-primary="undefined behavior" data-type="indexterm" id="id2523"/> behavior is behavior Rust assumes will never happen, like overwriting a function call’s return address with something else. Code that passes Rust’s usual safety checks and complies with the contracts of the unsafe features it uses cannot possibly do such a thing. Since the program violates the raw pointer contract, its behavior is undefined, and it goes off the rails.</p>
+
+<p>If your code exhibits undefined behavior, you have broken your half of your bargain with Rust, and Rust declines to predict the consequences. Dredging up irrelevant error messages from the depths of system libraries and crashing is one possible consequence; handing control of your computer over to an attacker is another. The effects could vary from one release of Rust to the next, without warning. Sometimes, however, undefined behavior has no visible consequences. For example, if the <code>main</code> function never returned (if, perhaps, it called <code>std::process::exit</code> to terminate the program early), then the corrupted return address probably wouldn’t matter.</p>
+
+<p>You may only use unsafe features within an <code>unsafe</code> block or an <code>unsafe</code> function; we’ll explain both in the sections that follow. This makes it harder to use unsafe features unknowingly: by forcing you to write an <code>unsafe</code> block or function, Rust makes sure you have acknowledged that your code may have additional rules to follow<a contenteditable="false" data-startref="ix_unsafe_feature" data-type="indexterm" id="id2524"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="unsafe Blocks"><div class="sect1" id="unsafe-blocks">
+<h1>unsafe Blocks</h1>
+
+<p>An <code>unsafe</code> block<a contenteditable="false" data-primary="unsafe blocks" data-type="indexterm" id="ix_unsafe_block"/><a contenteditable="false" data-primary="unsafe code" data-secondary="unsafe blocks" data-type="indexterm" id="ix_unsafe_code_block"/><a contenteditable="false" data-primary="blocks" data-secondary="unsafe" data-type="indexterm" id="ix_block_unsafe"/> looks just like an ordinary Rust block preceded by the <code>unsafe</code> keyword, with the difference that you can use unsafe features in the block:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-1">
+<code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">String</code><code class="p">::</code><code class="n">from_utf8_unchecked</code><code class="p">(</code><code class="n">ascii</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Without the <code>unsafe</code> keyword in front of the block, Rust would object to the use of <code>from_utf8_unchecked</code>, which is an <code>unsafe</code> function. Blocks marked with <code>unsafe</code> segregate code that requires extra scrutiny due to its ability to cause undefined behavior from the rest of the program. Small amounts of unsafe code can be wrapped in safe interfaces which enable their use without fearing undefined behavior, at a reduced cost in time and effort compared to simply using <code>unsafe</code> everywhere.</p>
+
+<p>Like an ordinary Rust block, the value of an <code>unsafe</code> block is that of its final expression, or <code>()</code> if it doesn’t have one. The call to <code>String::from_utf8_unchecked</code> in this example provides the value of the block.</p>
+
+<p>An <code>unsafe</code> block unlocks five additional options for you:</p>
+
+<ul>
+	<li>
+	<p>You can call <code>unsafe</code> functions. Each <code>unsafe</code> function must specify its own contract, depending on its purpose.</p>
+	</li>
+	<li>
+	<p>You can dereference<a contenteditable="false" data-primary="dereferencing" data-secondary="raw pointers" data-type="indexterm" id="id2525"/><a contenteditable="false" data-primary="raw pointers" data-secondary="dereferencing" data-type="indexterm" id="id2526"/> raw pointers. Safe code can pass raw pointers around, compare them, and create them by conversion from references (or even from integers), but only unsafe code can actually use them to access memory. We’ll cover raw pointers in detail and explain how to use them safely in <a data-type="xref" href="#unsafe-code-raw-pointers">“Raw Pointers”</a>.</p>
+	</li>
+	<li>
+	<p>You can access the fields<a contenteditable="false" data-primary="unions" data-type="indexterm" id="id2527"/> of <code>union</code>s, which are unsafe because, unlike <code>enum</code>s, the compiler can’t be sure they contain valid bit patterns for their respective types.</p>
+	</li>
+	<li>
+	<p>You can access<a contenteditable="false" data-primary="mutable statics" data-type="indexterm" id="id2528"/> mutable <code>static</code> variables. As explained in <a data-type="xref" href="ch19.html#global-variables">“Global Variables”</a>, Rust can’t be sure when threads are using mutable <code>static</code> variables<a contenteditable="false" data-primary="static keyword" data-type="indexterm" id="id2529"/>, so their contract requires you to ensure all access is properly synchronized.</p>
+	</li>
+	<li>
+	<p>You can access functions and variables declared through Rust’s foreign<a contenteditable="false" data-primary="foreign functions" data-secondary="unsafe code and" data-type="indexterm" id="id2530"/> function interface. These are considered <code>unsafe</code> even when immutable, since they are visible to code written in other languages that may not respect Rust’s safety rules.</p>
+	</li>
+</ul>
+
+<p>Restricting unsafe features to <code>unsafe</code> blocks doesn’t really prevent you from doing whatever you want. It’s perfectly possible to just stick an <code>unsafe</code> block into your code and move on. The benefit of the rule lies mainly in drawing human attention to code whose safety Rust can’t guarantee:</p>
+
+<ul>
+	<li>
+	<p>You won’t accidentally use unsafe features and then discover you were responsible for contracts you didn’t even know existed.</p>
+	</li>
+	<li>
+	<p>An <code>unsafe</code> block attracts more attention from reviewers. Some projects even have automation to ensure this, flagging code changes that affect <code>unsafe</code> blocks for special attention.</p>
+	</li>
+	<li>
+	<p>When you’re considering writing an <code>unsafe</code> block, you can take a moment to ask yourself whether your task really requires such measures. If it’s for performance, do you have measurements to show that this is actually a bottleneck? Perhaps there is a good way to accomplish the same thing in safe Rust.</p>
+	</li>
+</ul>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Example: An Efficient ASCII String Type"><div class="sect1" id="example-an-efficient-ascii-string-type">
+<h1>Example: An Efficient ASCII String Type</h1>
+
+<p>Here’s the definition<a contenteditable="false" data-primary="text" data-secondary="ASCII" data-type="indexterm" id="ix_text_ascii"/><a contenteditable="false" data-primary="strings and text" data-secondary="unsafe code for conversion of Ascii into String" data-type="indexterm" id="ix_strings_ascii_unsafe"/><a contenteditable="false" data-primary="Ascii string type, unsafe code for conversion into String" data-type="indexterm" id="ix_ascii_unsafe"/><a contenteditable="false" data-primary="String and str types" data-secondary="Ascii" data-type="indexterm" id="ix_string_str_ascii"/><a contenteditable="false" data-primary="UTF-8" data-secondary="unsafe code and" data-type="indexterm" id="ix_utf-8_unsafe"/> of <code>Ascii</code>, a string type that ensures its contents are always valid ASCII. This type uses an unsafe feature to provide zero-cost conversion into <code>String</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-2">
+<code class="k">mod</code><code class="w"> </code><code class="nn">my_ascii</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// An ASCII-encoded string.</code>
+<code class="w">    </code><code class="cp">#[derive(Debug, Eq, PartialEq)]</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Ascii</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="c1">// This must hold only well-formed ASCII text:</code>
+<code class="w">        </code><code class="c1">// bytes from `0` to `0x7f`.</code>
+<code class="w">        </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="k">impl</code><code class="w"> </code><code class="n">Ascii</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="sd">/// Creates an `Ascii` from the ASCII text in `bytes`. Returns a</code>
+<code class="w">        </code><code class="sd">/// `NotAsciiError` error if `bytes` contains any non-ASCII</code>
+<code class="w">        </code><code class="sd">/// characters.</code>
+<code class="w">        </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">from_bytes</code><code class="p">(</code><code class="n">bytes</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">Ascii</code><code class="p">,</code><code class="w"> </code><code class="n">NotAsciiError</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">if</code><code class="w"> </code><code class="n">bytes</code><code class="p">.</code><code class="n">iter</code><code class="p">().</code><code class="n">any</code><code class="p">(</code><code class="o">|&amp;</code><code class="n">byte</code><code class="o">|</code><code class="w"> </code><code class="o">!</code><code class="n">byte</code><code class="p">.</code><code class="n">is_ascii</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="k">return</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">NotAsciiError</code><code class="p">(</code><code class="n">bytes</code><code class="p">));</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="n">Ascii</code><code class="p">(</code><code class="n">bytes</code><code class="p">))</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// When conversion fails, we give back the vector we couldn't convert.</code>
+<code class="w">    </code><code class="c1">// This should implement `std::error::Error`; omitted for brevity.</code>
+<code class="w">    </code><code class="cp">#[derive(Debug, Eq, PartialEq)]</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">NotAsciiError</code><code class="p">(</code><code class="k">pub</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Safe, efficient conversion, implemented using unsafe code.</code>
+<code class="w">    </code><code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="n">Ascii</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="nb">String</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">ascii</code><code class="p">:</code><code class="w"> </code><code class="nc">Ascii</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">String</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="c1">// SAFETY: This module enforces the invariant that `ascii.0`</code>
+<code class="w">            </code><code class="c1">// is ASCII, and all ASCII text is well-formed UTF-8.</code>
+<code class="w">            </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="nb">String</code><code class="p">::</code><code class="n">from_utf8_unchecked</code><code class="p">(</code><code class="n">ascii</code><code class="p">.</code><code class="mi">0</code><code class="p">)</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The key to this module is the definition of the <code>Ascii</code> type. The type itself is marked <code>pub</code>, to make it visible outside the <code>my_ascii</code> module. But the type’s <code>Vec&lt;u8&gt;</code> element is <em>not</em> public, so only the <code>my_ascii</code> module can construct an <code>Ascii</code> value or refer to its element. This leaves the module’s code in complete control over what may or may not appear there. As long as the public constructors and methods ensure that freshly created <code>Ascii</code> values are well-formed and remain so throughout their lives, then the rest of the program cannot violate that rule. And indeed, the public constructor <code>Ascii::from_bytes</code> carefully checks the vector it’s given before agreeing to construct an <code>Ascii</code> from it. For brevity’s sake, we don’t show any methods, but you can imagine a set of text-handling methods that ensure <code>Ascii</code> values always contain proper ASCII text, just as a <code>String</code>’s methods ensure that its contents remain well-formed UTF-8.</p>
+
+<p>This arrangement lets us implement <code>From&lt;Ascii&gt;</code> for <code>String</code> very efficiently. The unsafe function <code>String::from_utf8_unchecked</code> takes a byte vector and builds a <code>String</code> from it without checking whether its contents are well-formed UTF-8 text; the function’s contract holds its caller responsible for that. Fortunately, the rules enforced by the <code>Ascii</code> type are exactly what we need to satisfy <code>from_utf8_unchecked</code>’s contract. As we explained in <a data-type="xref" href="ch17.html#utf-8">“UTF-8”</a>, any block of ASCII text is also well-formed UTF-8, so an <code>Ascii</code>’s underlying <code>Vec&lt;u8&gt;</code> is immediately ready to serve as a <code>String</code>’s buffer.</p>
+
+<p>Nonetheless, we have marked the <code>unsafe</code> block in the <code>from</code> method with a <code>// SAFETY:</code> comment, as is customary, explaining why we think that particular use of unsafe code is correct.</p>
+
+<p>With the preceding definitions in place, we can take our <code>Ascii</code> string type for a spin:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-3">
+<code class="k">use</code><code class="w"> </code><code class="n">my_ascii</code><code class="p">::</code><code class="n">Ascii</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">bytes</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">b"ASCII and ye shall receive"</code><code class="p">.</code><code class="n">to_vec</code><code class="p">();</code><code class="w"/>
+
+<code class="c1">// This call entails no allocation or text copies, just a scan.</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">ascii</code><code class="p">:</code><code class="w"> </code><code class="nc">Ascii</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Ascii</code><code class="p">::</code><code class="n">from_bytes</code><code class="p">(</code><code class="n">bytes</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">unwrap</code><code class="p">();</code><code class="w">  </code><code class="c1">// We know these chosen bytes are ok.</code>
+
+<code class="c1">// This call is zero-cost: no allocation, copies, or scans.</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">string</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code class="p">::</code><code class="n">from</code><code class="p">(</code><code class="n">ascii</code><code class="p">);</code><code class="w"/>
+
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">string</code><code class="p">,</code><code class="w"> </code><code class="s">"ASCII and ye shall receive"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>No <code>unsafe</code> blocks are required to use <code>Ascii</code>. We have implemented a safe interface using unsafe operations and arranged to meet their contracts depending only on the module’s own code, not on its users’ behavior.</p>
+
+<p>An <code>Ascii</code> is nothing more than a wrapper around a <code>Vec&lt;u8&gt;</code>, hidden inside a module that enforces extra rules about its contents. A type of this sort is called a <em>newtype<a contenteditable="false" data-primary="newtypes" data-type="indexterm" id="id2531"/></em>, a common pattern in Rust. Rust’s own <code>String</code> type is defined in exactly the same way, except that its contents are restricted to be UTF-8, not ASCII. In fact, here’s the definition of <code>String</code> from the standard library:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-4">
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nb">String</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">vec</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This pattern, in which unsafe operations are wrapped in safe interfaces, is the mechanism that enables most Rust programs to avoid <code>unsafe</code> entirely while still allocating memory, interacting with filesystem APIs, and so forth. It is typically very efficient; at the machine level, with Rust’s types out of the picture, a newtype and its element have identical representations in memory, so constructing a newtype doesn’t require any machine instructions at all. In <code>Ascii::from_bytes</code>, the expression <code>Ascii(bytes)</code> simply deems the <code>Vec&lt;u8&gt;</code>’s representation to now hold an <code>Ascii</code> value. Similarly, <code>String::from_utf8_unchecked</code> probably requires no machine instructions when inlined: the <code>Vec&lt;u8&gt;</code> is now considered to be a <code>String</code><a contenteditable="false" data-startref="ix_utf-8_unsafe" data-type="indexterm" id="id2532"/><a contenteditable="false" data-startref="ix_unsafe_code_block" data-type="indexterm" id="id2533"/><a contenteditable="false" data-startref="ix_block_unsafe" data-type="indexterm" id="id2534"/><a contenteditable="false" data-startref="ix_unsafe_block" data-type="indexterm" id="id2535"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Unsafe Functions"><div class="sect1" id="unsafe-functions">
+<h1>Unsafe Functions</h1>
+
+<p>An <code>unsafe</code> function<a contenteditable="false" data-primary="unsafe code" data-secondary="unsafe functions" data-type="indexterm" id="ix_unsafe_code_functions"/><a contenteditable="false" data-primary="unsafe functions" data-type="indexterm" id="ix_unsafe_functions"/><a contenteditable="false" data-primary="functions" data-secondary="unsafe" data-type="indexterm" id="ix_functions_unsafe"/> definition looks like an ordinary function definition preceded by the <code>unsafe</code> keyword.</p>
+
+<p>Marking a function <code>unsafe</code> warns its callers that the function has a contract they must satisfy to avoid undefined behavior. You may call <code>unsafe</code> functions only within <code>unsafe</code> blocks.</p>
+
+<p>For example, here’s a new constructor for the <code>Ascii</code> type we introduced before that builds an <code>Ascii</code> from a byte vector without checking if its contents are valid ASCII:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-5">
+<code class="c1">// This must be placed inside the `my_ascii` module.</code>
+<code class="k">impl</code><code class="w"> </code><code class="n">Ascii</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Constructs an `Ascii` value from `bytes`, without checking</code>
+<code class="w">    </code><code class="sd">/// whether `bytes` actually contains well-formed ASCII.</code>
+<code class="w">    </code><code class="sd">///</code>
+<code class="w">    </code><code class="sd">/// This constructor is infallible, and returns an `Ascii` directly,</code>
+<code class="w">    </code><code class="sd">/// rather than a `Result&lt;Ascii, NotAsciiError&gt;` as the `from_bytes`</code>
+<code class="w">    </code><code class="sd">/// constructor does.</code>
+<code class="w">    </code><code class="sd">///</code>
+<code class="w">    </code><code class="sd">/// # Safety</code>
+<code class="w">    </code><code class="sd">///</code>
+<code class="w">    </code><code class="sd">/// The caller must ensure that `bytes` contains only ASCII</code>
+<code class="w">    </code><code class="sd">/// characters: bytes no greater than 0x7f. Otherwise, the effect is</code>
+<code class="w">    </code><code class="sd">/// undefined.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">unsafe</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">from_bytes_unchecked</code><code class="p">(</code><code class="n">bytes</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Ascii</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Ascii</code><code class="p">(</code><code class="n">bytes</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Presumably, code calling <code>Ascii::from_bytes_unchecked</code> already knows somehow that the vector in hand contains only ASCII characters, so the check that <code>Ascii::from_bytes</code> insists on carrying out would be a waste of time, and the caller would have to write code to handle <code>Err</code> results that it knows will never occur. <code>Ascii::from_bytes_unchecked</code> lets such a caller sidestep the checks and the error handling.</p>
+
+<p>But earlier we emphasized the importance of <code>Ascii</code>’s public constructors and methods ensuring that <code>Ascii</code> values are well-formed. Doesn’t <code>from_bytes_unchecked</code> fail to meet that responsibility?</p>
+
+<p>Not quite: <code>from_bytes_unchecked</code> meets its obligations by passing them on to its caller via its contract. The presence of this contract is what makes it correct to mark this function <code>unsafe</code>: despite the fact that the function itself carries out no unsafe operations, its callers must follow rules Rust cannot enforce automatically to avoid undefined behavior.</p>
+
+<p>Can you really cause undefined behavior by breaking the contract<a contenteditable="false" data-primary="contracts" data-secondary="unsafe functions and" data-type="indexterm" id="id2536"/> of <code>Ascii::from_bytes_unchecked</code>? Yes. You can construct a <code>String</code> holding ill-formed UTF-8 as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-bad-UTF8">
+<code class="c1">// Imagine that this vector is the result of some complicated process</code>
+<code class="c1">// that we expected to produce ASCII. Something went wrong!</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mh">0xf7</code><code class="p">,</code><code class="w"> </code><code class="mh">0xbf</code><code class="p">,</code><code class="w"> </code><code class="mh">0xbf</code><code class="p">,</code><code class="w"> </code><code class="mh">0xbf</code><code class="p">];</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">ascii</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// This unsafe function's contract is violated</code>
+<code class="w">    </code><code class="c1">// when `bytes` holds non-ASCII bytes.</code>
+<code class="w">    </code><code class="n">Ascii</code><code class="p">::</code><code class="n">from_bytes_unchecked</code><code class="p">(</code><code class="n">bytes</code><code class="p">)</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">bogus</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ascii</code><code class="p">.</code><code class="n">into</code><code class="p">();</code><code class="w"/>
+
+<code class="c1">// `bogus` now holds ill-formed UTF-8. Parsing its first character produces</code>
+<code class="c1">// a `char` that is not a valid Unicode code point. That's undefined</code>
+<code class="c1">// behavior, so the language doesn't say how this assertion should behave.</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">bogus</code><code class="p">.</code><code class="n">chars</code><code class="p">().</code><code class="n">next</code><code class="p">().</code><code class="n">unwrap</code><code class="p">()</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"> </code><code class="mh">0x1fffff</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>As it happens, the standard library’s <code>chars</code> iterator contains a debug-only check that detects the undefined behavior and aborts the process:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">thread 'bad_ascii' panicked at rust/library/core/src/char/methods.rs:239:18:</code>
+<code class="go">unsafe precondition(s) violated: invalid value for `char`</code>
+
+<code class="go">This indicates a bug in the program. This Undefined Behavior check is optional,</code>
+<code class="go">and cannot be relied on for safety.</code>
+<code class="go">thread caused non-unwinding panic. aborting.</code>
+</pre>
+
+<p>Checks like this one are disabled in release builds, for performance, and some kinds of undefined behavior are not subject to run-time checking at all. In those cases the consequences are truly unpredictable. In one version of Rust, this example produced the following entertaining error message:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">thread 'main' panicked at 'assertion failed: `(left == right)`</code>
+<code class="go">  left: `2097151`,</code>
+<code class="go"> right: `2097151`', src/main.rs:42:5</code>
+</pre>
+
+<p>Those two numbers seem equal to us, but this is not Rust’s fault; it’s the fault of the previous <code>unsafe</code> block. When we say that undefined behavior leads to unpredictable results, this is the kind of thing we mean<a contenteditable="false" data-startref="ix_ascii_unsafe" data-type="indexterm" id="id2537"/><a contenteditable="false" data-startref="ix_text_ascii" data-type="indexterm" id="id2538"/><a contenteditable="false" data-startref="ix_string_str_ascii" data-type="indexterm" id="id2539"/><a contenteditable="false" data-startref="ix_strings_ascii_unsafe" data-type="indexterm" id="id2540"/>.</p>
+
+<p>This illustrates two critical facts about bugs<a contenteditable="false" data-primary="bugs, unsafe code and" data-type="indexterm" id="id2541"/> and unsafe code:</p>
+
+<ul>
+	<li>
+	<p><em>Bugs that occur before the <code>unsafe</code> block can break contracts.</em> Whether an <code>unsafe</code> block causes undefined behavior can depend not just on the code in the block itself, but also on the code that supplies the values it operates on. Everything that your <code>unsafe</code> code relies on to satisfy contracts is safety-critical. The conversion from <code>Ascii</code> to <code>String</code> based on <code>String::from_utf8_unchecked</code> is well-defined only if the rest of the module properly maintains <code>Ascii</code>’s invariants.</p>
+	</li>
+	<li>
+	<p><em>The consequences of breaking a contract may appear after you leave the <code>unsafe</code> block.</em> The undefined behavior courted by failing to comply with an unsafe feature’s contract often does not occur within the <code>unsafe</code> block itself. Constructing a bogus <code>String</code> as shown before may not cause problems until much later in the program’s execution.</p>
+	</li>
+</ul>
+
+<p>Essentially, Rust’s type checker, borrow checker, and other static checks are inspecting your program and trying to construct proof that it cannot exhibit undefined behavior. When Rust compiles your program successfully, that means it succeeded in proving your code sound. An <code>unsafe</code> block is a gap in this proof: “This code,” you are saying to Rust, “is fine, trust me.” Whether your claim is true could depend on any part of the program that influences what happens in the <code>unsafe</code> block, and the consequences of being wrong could appear anywhere influenced by the <code>unsafe</code> block. Writing the <code>unsafe</code> keyword amounts to a reminder that you are not getting the full benefit of the language’s safety checks.</p>
+
+<p>Given the choice, you should naturally prefer to create safe interfaces, without contracts. These are much easier to work with, since users can count on Rust’s safety checks to ensure their code is free of undefined behavior. Even if your implementation uses unsafe features, it’s best to use Rust’s types, lifetimes, and module system to meet their contracts while using only what you can guarantee yourself, rather than passing responsibilities on to your callers.</p>
+
+<p>Unfortunately, it’s not unusual to come across unsafe functions in the wild whose documentation does not bother to explain their contracts. You are expected to infer the rules yourself, based on your experience and knowledge of how the code behaves. If you’ve ever uneasily wondered whether what you’re doing with a C or C‍++ API is OK, then you know what that’s like<a contenteditable="false" data-startref="ix_unsafe_functions" data-type="indexterm" id="id2542"/><a contenteditable="false" data-startref="ix_functions_unsafe" data-type="indexterm" id="id2543"/><a contenteditable="false" data-startref="ix_unsafe_code_functions" data-type="indexterm" id="id2544"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Marking Unsafe Code"><div class="sect1" id="marking-unsafe-code">
+<h1>Marking Unsafe Code</h1>
+
+<p>On most topics, the Rust compiler is happy to offer guidance, but on the subject of whether a function should be marked <code>unsafe</code>, Rust is silent. You can usually delete the <code>unsafe</code> from an <code>unsafe fn</code> without so much as a warning. When using unsafe code, it’s up to you to categorize functions correctly:</p>
+
+<ul>
+	<li>
+	<p>If it’s possible to misuse the function in a way that compiles fine but still causes undefined behavior, you must mark it as unsafe. The rules for using the function correctly are its contract; the existence of a contract is what makes the function unsafe.</p>
+	</li>
+	<li>
+	<p>Otherwise, the function is safe: no well-typed call to it can cause undefined behavior. It should not be marked <code>unsafe</code>.</p>
+	</li>
+</ul>
+
+<p>Whether the function uses unsafe features in its body is irrelevant; what matters is the presence of a contract. Before, we showed an unsafe function that uses no unsafe features, and a safe function that does use unsafe features.</p>
+
+<p>Marking a function <code>unsafe</code> means you’re providing a dangerous tool. It should come with a <code># Safety</code> section in the documentation, explaining how to use it correctly. An <code>unsafe</code> block means you’re using dangerous tools, ideally with a <code>// SAFETY:</code> comment explaining why your usage is correct. These are two different messages. Sometimes both messages (and both kinds of comment) are appropriate, so even in an <code>unsafe fn</code>, it makes sense to wrap unsafe code in an <code>unsafe</code> block. Rust warns if you don’t. You can upgrade the warning to an error with <code>#![deny(unsafe_op_in_unsafe_fn)]</code> in your crate root.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Undefined Behavior"><div class="sect1" id="undefined-behavior">
+<h1>Undefined Behavior</h1>
+
+<p>In the introduction<a contenteditable="false" data-primary="unsafe code" data-secondary="undefined behavior" data-type="indexterm" id="ix_unsafe_code_undefined_behave"/><a contenteditable="false" data-primary="undefined behavior" data-type="indexterm" id="ix_undefined_behave"/>, we said that the term <em>undefined behavior</em> refers to behavior that Rust assumes will never happen. Of course, we know from our experience with other languages that this kind of behavior happens all the time, by accident. The compiler’s authors are not naïve to this fact, but choosing to draw boundaries around what the compiler expects to happen allows it to produce much more efficient code.</p>
+
+<p>A compiler is a translator from one programming language to another. The Rust compiler takes a Rust program and translates it into an equivalent machine language program; that is, one which has the same visible behavior when executed, makes the same system calls, interacts with foreign libraries in equivalent ways, and so on. It’s a bit like a Turing test for programs: if you can’t tell whether you’re interacting with the original or the translation, then they’re equivalent.</p>
+
+<p>Optimizing compilers, like <code>rustc</code>, do their work by incrementally transforming your code. At every step, the compiler is trying to change the program behavior in good ways (making it run faster or use less memory) but not in bad ways (introducing bugs).</p>
+
+<p>Let’s look at an example of what happens when this process goes wrong. Consider the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-6">
+<code class="kd">let</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">10</code><code class="p">;</code><code class="w"/>
+<code class="n">very_trustworthy</code><code class="p">(</code><code class="o">&amp;</code><code class="n">i</code><code class="p">);</code><code class="w"/>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">100</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Even knowing nothing about the definition of <code>very_trustworthy</code>, we can see that it receives only a shared reference to <code>i</code>, so the call cannot change <code>i</code>’s value. Since the value passed to <code>println!</code> will always be <code>1000</code>, Rust can translate this code into machine language as if we had written:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-7">
+<code class="n">very_trustworthy</code><code class="p">(</code><code class="o">&amp;</code><code class="mi">10</code><code class="p">);</code><code class="w"/>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="mi">1000</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This transformed version has the same visible behavior as the original, and it’s probably a bit faster. But it makes sense to consider the performance of this version only if we agree it has the same meaning as the original. What if <code>very_trustworthy</code> were defined as follows?</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-8">
+<code class="c1">// This function takes a non-mut reference...</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">very_trustworthy</code><code class="p">(</code><code class="n">shared</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">i32</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// ... and breaks the rules by turning it into a mut reference</code>
+<code class="w">        </code><code class="c1">// via pointers. This is undefined behavior.</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">mutable</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">shared</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="kt">i32</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="kt">i32</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="o">*</code><code class="n">mutable</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">20</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This code breaks the rules for shared references: it changes the value of <code>i</code> to <code>20</code>, even though it should be frozen because <code>i</code> is borrowed for sharing. As it happens, Rust is smart enough to catch this particular ill-conceived hack, and by default, refuses to compile it. But Rust can’t detect all rule-breaking in unsafe code. What would happen if Rust couldn’t detect the problem here, and it simply compiled the code as usual? The transformation we made to the caller would have a very visible effect: if Rust transformed the code, the program would print <code>1000</code>; if it left the code alone and used the new value of <code>i</code>, it would print <code>2000</code>. Breaking the rules for shared references in <code>very_trustworthy</code> means that shared references won’t behave as expected in its callers.</p>
+
+<p>This sort of problem arises with almost every kind of transformation Rust might attempt. Even inlining a function into its call site assumes, among other things, that when the callee finishes, control flow returns to the call site. But we opened the chapter with an example of ill-behaved code that violates even that assumption.</p>
+
+<p>It’s basically impossible for Rust (or any other language) to assess whether a transformation to a program preserves its meaning unless it can trust the fundamental features of the language to behave as designed. And whether they do or not can depend not just on the code at hand, but on other, potentially distant, parts of the program. In order to do anything at all with your code, Rust must assume that the rest of your program is well-behaved.</p>
+
+<p>Here, then, are Rust’s rules<a contenteditable="false" data-primary="Rust" data-secondary="rules for well-behaved program" data-type="indexterm" id="id2545"/><a contenteditable="false" data-primary="well-behaved program, Rust’s rules for" data-type="indexterm" id="id2546"/> for well-behaved programs:</p>
+
+<ul>
+	<li>
+	<p>The program must not read uninitialized memory.</p>
+	</li>
+	<li>
+	<p>The program must not create invalid primitive values:</p>
+
+	<ul>
+		<li>References, boxes, or <code>fn</code> pointers that are <code>null</code></li>
+		<li><code>bool</code> values that are not either a <code>0</code> or <code>1</code></li>
+		<li><code>enum</code> values with invalid discriminant values</li>
+		<li><code>char</code> values that are not valid, nonsurrogate Unicode code points</li>
+		<li><code>str</code> values that are not well-formed UTF-8</li>
+		<li>Fat pointers with invalid vtables/slice lengths</li>
+		<li>Any value of the “never” type, written <code>!</code>, for functions that don’t return</li>
+	</ul>
+	</li>
+	<li>
+	<p>The rules for references explained in <a data-type="xref" href="ch05.html#references">Chapter 5</a> must be followed. No reference may outlive its referent; shared access is read-only access; and mutable access is exclusive access.</p>
+	</li>
+	<li>
+	<p>The program must not dereference null, incorrectly aligned, or dangling <span class="keep-together">pointers.</span></p>
+	</li>
+	<li>
+	<p>The program must not use a pointer to access memory outside the allocation with which the pointer is associated. We will explain this rule in detail in <a data-type="xref" href="#dereferencing-raw-pointers-safely">“Dereferencing Raw Pointers Safely”</a>.</p>
+	</li>
+	<li>
+	<p>The program must be free of data races. A data race occurs when two threads access the same memory location without synchronization, and at least one of the accesses is a write.</p>
+	</li>
+	<li>
+	<p>The program must not unwind across a call made from another language, via the foreign function interface, as explained in <a data-type="xref" href="ch07.html#unwinding">“Unwinding”</a>.</p>
+	</li>
+	<li>
+	<p>If the program uses any <code>unsafe</code> standard library features, it must comply with their contracts.</p>
+	</li>
+</ul>
+
+<p>Any violation of these rules constitutes undefined behavior and renders Rust’s efforts to optimize your program and translate it into machine language untrustworthy. If you break the last rule and pass ill-formed UTF-8 to <code>String::from_utf8_unchecked</code>, perhaps 2097151 is not so equal to 2097151 after all.</p>
+
+<p>In safe Rust code, the compiler enforces all of these rules. If your program compiles, you’re in good shape. Only when you use unsafe features do the rules become your responsibility.</p>
+
+<p>In C and C‍++, the fact that your program compiles without errors or warnings means much less; as we mentioned in the introduction to this book, even the best C and C‍++ programs written by well-respected projects that hold their code to high standards exhibit undefined behavior in practice<a contenteditable="false" data-startref="ix_undefined_behave" data-type="indexterm" id="id2547"/><a contenteditable="false" data-startref="ix_unsafe_code_undefined_behave" data-type="indexterm" id="id2548"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Unsafe Traits"><div class="sect1" id="unsafe-traits">
+<h1>Unsafe Traits</h1>
+
+<p>An <em>unsafe trait<a contenteditable="false" data-primary="unsafe code" data-secondary="unsafe traits" data-type="indexterm" id="ix_unsafe_code_traits"/><a contenteditable="false" data-primary="unsafe traits" data-type="indexterm" id="ix_unsafe_traits"/><a contenteditable="false" data-primary="traits" data-secondary="unsafe" data-type="indexterm" id="ix_traits_unsafe"/></em> is a trait that has a contract<a contenteditable="false" data-primary="contracts" data-secondary="unsafe traits and" data-type="indexterm" id="id2549"/> Rust cannot check or enforce that implementers must satisfy to avoid undefined behavior. To implement an unsafe trait, you must mark the implementation as unsafe. It is up to you to understand the trait’s contract and make sure your type satisfies it.</p>
+
+<p><code>std::marker::Send</code> and <code>std::marker::Sync</code> are the classic examples of unsafe traits<a contenteditable="false" data-primary="marker traits" data-type="indexterm" id="id2550"/><a contenteditable="false" data-primary="Send marker trait" data-type="indexterm" id="id2551"/><a contenteditable="false" data-primary="Sync type" data-type="indexterm" id="id2552"/>. These traits don’t define any methods, so they’re trivial to implement for any type you like. But they do have contracts: <code>Send</code> requires implementers to be safe to move to another thread, and <code>Sync</code> requires them to be safe to share among threads via shared references. Implementing <code>Send</code> for an inappropriate type, for example, would make <code>std::sync::Mutex</code> no longer safe from data races.</p>
+
+<p>The <code>bytemuck</code> crate provides some additional capabilities for “plain old data” types - that is, types for which there aren’t complex initialization and validity requirements. It does this partly through a trait called <code>Zeroable</code>, for types<a contenteditable="false" data-primary="Zeroable trait" data-type="indexterm" id="id2553"/> that can be safely initialized by setting all their bytes to zero. Clearly, zeroing a <code>usize</code> is fine, but zeroing a <code>&amp;T</code> gives you a null reference, which will cause a crash if dereferenced. For types that are <code>Zeroable</code>, some optimizations are possible: you can initialize an array of them quickly with the <code>write_bytes</code> method (Rust’s equivalent of <code>memset</code><a contenteditable="false" data-primary="memset (C function)" data-type="indexterm" id="id2554"/>) or use operating system calls that allocate zeroed pages.</p>
+
+<p>Like most marker traits, implementing <code>Zeroable</code> doesn’t require implementing any methods:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-zeroable-impl-for-types">
+<code class="k">unsafe</code><code class="w"> </code><code class="k">impl</code><code class="w"> </code><code class="n">Zeroable</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="kt">u8</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+<code class="k">unsafe</code><code class="w"> </code><code class="k">impl</code><code class="w"> </code><code class="n">Zeroable</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="kt">i32</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+<code class="k">unsafe</code><code class="w"> </code><code class="k">impl</code><code class="w"> </code><code class="n">Zeroable</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+<code class="c1">// and so on for all the integer types</code>
+</pre>
+
+<p>With these definitions, we can write a function that quickly allocates a vector of a given length containing a <code>Zeroable</code> type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-zeroable-zeroed_vector">
+<code class="k">use</code><code class="w"> </code><code class="n">bytemuck</code><code class="p">::</code><code class="n">Zeroable</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">zeroed_vector</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">(</code><code class="n">len</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nc">Zeroable</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">vec</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">::</code><code class="n">with_capacity</code><code class="p">(</code><code class="n">len</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="c1">// SAFETY: Writing to the spare capacity of vec is safe. Once we've</code>
+<code class="w">    </code><code class="c1">// initialized the storage with valid T values, set_len is OK.</code>
+<code class="w">    </code><code class="c1">// We know zero bytes make valid values because T is Zeroable.</code>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">vec</code><code class="p">.</code><code class="n">as_mut_ptr</code><code class="p">().</code><code class="n">write_bytes</code><code class="p">(</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">len</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">vec</code><code class="p">.</code><code class="n">set_len</code><code class="p">(</code><code class="n">len</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">vec</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This function starts by creating an empty <code>Vec</code> with the required capacity. Then it obtains a pointer of type <code>*mut T</code> pointing to the unoccupied buffer, and calls the pointer’s <code>write_bytes</code> method to fill it with zeros. (The <code>write_bytes</code> method treats <code>len</code> as a number of <code>T</code> elements, not a number of bytes, so this call does fill the entire buffer.) A vector’s <code>set_len</code> method changes its length without doing anything to the buffer; this is unsafe, because you must ensure that the newly enclosed buffer space actually contains properly initialized values of type <code>T</code>. But this is exactly what the <code>T: Zeroable</code> bound establishes: a block of zero bytes represents a valid <code>T</code> value. Our use of <code>set_len</code> is safe.</p>
+
+<p>Here, we put it to use:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-zeroable-use-vector">
+<code class="kd">let</code><code class="w"> </code><code class="n">v</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">zeroed_vector</code><code class="p">(</code><code class="mi">100_000</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">iter</code><code class="p">().</code><code class="n">all</code><code class="p">(</code><code class="o">|&amp;</code><code class="n">u</code><code class="o">|</code><code class="w"> </code><code class="n">u</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="p">));</code><code class="w"/>
+</pre>
+
+<p>Clearly, <code>Zeroable</code> must be an unsafe trait, since an implementation that doesn’t respect its contract can lead to undefined behavior:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-zeroable-null-deref">
+<code class="k">struct</code><code class="w"> </code><code class="nc">HoldsRef</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="p">(</code><code class="o">&amp;'</code><code class="na">a</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="kt">i32</code><code class="p">);</code><code class="w"/>
+
+<code class="k">unsafe</code><code class="w"> </code><code class="k">impl</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Zeroable</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">HoldsRef</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">v</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">HoldsRef</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">zeroed_vector</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="o">*</code><code class="n">v</code><code class="p">[</code><code class="mi">0</code><code class="p">].</code><code class="mi">0</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w">   </code><code class="c1">// crashes: dereferences null pointer</code>
+</pre>
+
+<p>Rust has no idea what <code>Zeroable</code> is meant to signify, so it can’t tell when it’s being implemented for an inappropriate type. As with any other unsafe feature, it’s up to you to understand and adhere to an unsafe trait’s <span class="keep-together">contract.</span></p>
+
+<p>Note that unsafe code must not depend on ordinary, safe traits being implemented correctly. For example, suppose there were an implementation of the <code>std::hash::Hasher</code> trait that simply returned a random hash value, with no relation to the values being hashed. The trait requires that hashing the same bits twice must produce the same hash value, but this implementation doesn’t meet that requirement; it’s simply incorrect. But because <code>Hasher</code> is not an unsafe trait, unsafe code must not exhibit undefined behavior when it uses this hasher. The <code>std::collections::​HashMap</code> type is carefully written to respect the contracts of the unsafe features it uses regardless of how the hasher behaves. Certainly, the table won’t function correctly: lookups will fail, and entries will appear and disappear at random. But the table will not exhibit undefined behavior<a contenteditable="false" data-startref="ix_unsafe_traits" data-type="indexterm" id="id2555"/><a contenteditable="false" data-startref="ix_traits_unsafe" data-type="indexterm" id="id2556"/><a contenteditable="false" data-startref="ix_unsafe_code_traits" data-type="indexterm" id="id2557"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Raw Pointers"><div class="sect1" id="unsafe-code-raw-pointers">
+<h1>Raw Pointers</h1>
+
+<p>A <em>raw pointer<a contenteditable="false" data-primary="raw pointers" data-type="indexterm" id="ix_raw_pointers_ch22"/><a contenteditable="false" data-primary="pointer types" data-secondary="raw pointers" data-type="indexterm" id="ix_pointer_raw"/></em> in Rust is an unconstrained pointer. You can use raw pointers to form all sorts of structures that Rust’s checked pointer types cannot, like doubly linked lists or arbitrary graphs of objects. But because raw pointers are so flexible, Rust cannot tell whether you are using them safely or not, so you can dereference them only in an <code>unsafe</code> block.</p>
+
+<p>Raw pointers are equivalent to C or C‍++ pointers<a contenteditable="false" data-primary="C" data-secondary="pointers in" data-type="indexterm" id="id2558"/><a contenteditable="false" data-primary="C++" data-secondary="pointers in" data-type="indexterm" id="id2559"/>, so they’re also useful for interacting with code written in those languages.</p>
+
+<p>There are two kinds of raw pointers<a contenteditable="false" data-primary="consts" data-secondary="*const T" data-type="indexterm" id="id2560"/>:</p>
+
+<ul>
+	<li>
+	<p>A <code>*mut T</code> is a raw<a contenteditable="false" data-primary="*mut T" data-type="indexterm" id="id2561"/> pointer to a <code>T</code> that permits modifying its referent.</p>
+	</li>
+	<li>
+	<p>A <code>*const T</code> is a raw<a contenteditable="false" data-primary="*const T" data-type="indexterm" id="id2562"/> pointer to a <code>T</code> that only permits reading its referent.</p>
+	</li>
+</ul>
+
+<p>(There is no plain <code>*T</code> type; you must always specify either <code>const</code> or <code>mut</code>.)</p>
+
+<p>You can create a raw pointer using <code>&amp;raw const</code> or <code>&amp;raw mut</code><a contenteditable="false" data-primary="&amp;raw const and &amp;raw mut" data-type="indexterm" id="id2563"/>, the pointer versions of the borrowing operators <code>&amp;</code> and <code>&amp;mut</code>; or by conversion from the corresponding reference type. To dereference a raw pointer, use the <code>*</code> operator<a contenteditable="false" data-primary="dereferencing" data-secondary="* operator" data-type="indexterm" id="id2564"/><a contenteditable="false" data-primary="* operator" data-secondary="dereferencing" data-type="indexterm" id="id2565"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-9">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">10</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">ptr_x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">raw</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">x</code><code class="p">;</code><code class="w">  </code><code class="c1">// using the `&amp;raw mut` operator</code>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">y</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="mi">20</code><code class="p">);</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">ptr_y</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="kt">i32</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;*</code><code class="n">y</code><code class="p">;</code><code class="w">  </code><code class="c1">// using conversion</code>
+
+<code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">*</code><code class="n">ptr_x</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="o">*</code><code class="n">ptr_y</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">x</code><code class="p">,</code><code class="w"> </code><code class="mi">30</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>No explicit conversion is needed to assign the reference <code>&amp;*y</code> to the pointer variable <code>ptr_y</code>; just specifying the type is enough. Rust implicitly coerces references to raw pointers (but not the other way around, of course).</p>
+
+<p>Unlike boxes and references, raw pointers<a contenteditable="false" data-primary="null pointers" data-type="indexterm" id="id2566"/> can be null, like <code>NULL</code> in C or <code>nullptr</code> in <span class="keep-together">C‍++:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-10">
+<code class="k">fn</code><code class="w"> </code><code class="nf">option_to_raw</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">(</code><code class="n">opt</code><code class="p">:</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;&amp;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">opt</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ptr</code><code class="p">::</code><code class="n">null</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">r</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">r</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="fm">assert!</code><code class="p">(</code><code class="o">!</code><code class="n">option_to_raw</code><code class="p">(</code><code class="nb">Some</code><code class="p">(</code><code class="o">&amp;</code><code class="p">(</code><code class="s">"pea"</code><code class="p">,</code><code class="w"> </code><code class="s">"pod"</code><code class="p">))).</code><code class="n">is_null</code><code class="p">());</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">option_to_raw</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">(</code><code class="nb">None</code><code class="p">),</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ptr</code><code class="p">::</code><code class="n">null</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>This example has no <code>unsafe</code> blocks: creating raw pointers, passing them around, and comparing them are all safe. Only dereferencing a raw pointer is unsafe.</p>
+
+<p>A raw pointer to a dynamically sized type is a fat pointer<a contenteditable="false" data-primary="fat pointer" data-type="indexterm" id="id2567"/>, just as the corresponding reference or <code>Box</code> type would be. A <code>*const [u8]</code> pointer includes a length along with the address, and a <code>*mut dyn Write</code> includes a pointer to the vtable.</p>
+
+<p>Although Rust implicitly dereferences safe pointer types in various situations, raw pointer dereferences must be explicit:</p>
+
+<ul>
+	<li>
+	<p>The <code>.</code> operator will not implicitly dereference a raw pointer; you must write <code>(*raw).field</code> or <code>(*raw).method(...)</code>.</p>
+	</li>
+	<li>
+	<p>Raw pointers do not implement <code>Deref</code>, so deref coercions<a contenteditable="false" data-primary="Deref coercions" data-type="indexterm" id="id2568"/> do not apply to them.</p>
+	</li>
+	<li>
+	<p>Operators like <code>==</code> and <code>&lt;</code> compare<a contenteditable="false" data-primary="&lt; operator" data-type="indexterm" id="id2569"/><a contenteditable="false" data-primary="== operator" data-type="indexterm" id="id2570"/> raw pointers as addresses: two raw pointers are equal if they point to the same location in memory. Similarly, hashing a raw pointer hashes the address it points to, not the value of its referent.</p>
+	</li>
+	<li>
+	<p>Formatting<a contenteditable="false" data-primary="values" data-secondary="formatting" data-type="indexterm" id="id2571"/> traits like <code>std::fmt::Display</code> follow<a contenteditable="false" data-primary="formatting values" data-secondary="Display trait" data-type="indexterm" id="id2572"/><a contenteditable="false" data-primary="Display formatting trait" data-type="indexterm" id="id2573"/> references automatically, but don’t handle raw pointers at all. The exceptions are <code>std::fmt::Debug</code> and <code>std::fmt::Pointer</code>, which<a contenteditable="false" data-primary="formatting values" data-secondary="Pointer trait" data-type="indexterm" id="id2574"/><a contenteditable="false" data-primary="Pointer formatting trait" data-type="indexterm" id="id2575"/> show raw pointers<a contenteditable="false" data-primary="Debug formatting trait" data-type="indexterm" id="id2576"/> as hexadecimal addresses, without dereferencing them.</p>
+	</li>
+</ul>
+
+<p>The <code>as</code> operator permits almost every plausible conversion from references to raw pointers or between two raw pointer types. However, you may need to break up a complex conversion into a series of simpler steps. For example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ptr_coercions_fail">
+<code class="o">&amp;</code><code class="fm">vec!</code><code class="p">[</code><code class="mi">42_</code><code class="k">u8</code><code class="p">]</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="nb">String</code><code class="p">;</code><code class="w">  </code><code class="c1">// error: invalid conversion</code>
+<code class="o">&amp;</code><code class="fm">vec!</code><code class="p">[</code><code class="mi">42_</code><code class="k">u8</code><code class="p">]</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="nb">String</code><code class="p">;</code><code class="w">  </code><code class="c1">// permitted</code>
+</pre>
+
+<p>Note that the <code>as</code> operator doesn’t work in the other direction, converting raw pointers to references. Such conversions would be unsafe, and <code>as</code> is a safe operation. Instead, you must dereference the raw pointer (in an <code>unsafe</code> block) and then borrow the resulting value. This makes it clear where the reference is being borrowed.</p>
+
+<p>Be very careful when you do this: a reference produced this way has an unconstrained lifetime<a contenteditable="false" data-primary="references (pointer type)" data-secondary="constraints on" data-type="indexterm" id="id2577"/><a contenteditable="false" data-primary="lifetime" data-secondary="reference constraints" data-type="indexterm" id="id2578"/>: there’s no limit on how long it can live, since the raw pointer gives Rust nothing to base such a decision on. In <a data-type="xref" href="ch24.html#a-safe-interface-to-libgit2">“A Safe Interface to libgit2”</a>, we show several examples of how to properly constrain lifetimes.</p>
+
+<p>Many types have <code>as_ptr</code> and <code>as_mut_ptr</code> methods<a contenteditable="false" data-primary="as_mut_ptr method" data-type="indexterm" id="id2579"/><a contenteditable="false" data-primary="as_ptr method" data-type="indexterm" id="id2580"/> that return a raw pointer to their contents. For example, array slices and strings return pointers to their first elements. Owning pointer types like <code>Box</code>, <code>Rc</code>, and <code>Arc</code> have <code>into_raw</code> and <code>from_raw</code> functions that convert to and from raw pointers. Some of these methods’ contracts impose surprising requirements, so check their documentation before using them.</p>
+
+<p>You can also construct raw pointers by conversion from integers<a contenteditable="false" data-primary="integers" data-secondary="converting to raw pointers" data-type="indexterm" id="id2581"/>, although the only integers you can trust for this are generally those you got from a pointer in the first place.</p>
+
+<p>Raw pointers are neither <code>Send</code> nor <code>Sync</code>. Rust assumes that types containing raw pointers are not thread-safe unless you explicitly implement <code>Send</code> and/or <code>Sync</code>, as discussed in <a data-type="xref" href="#unsafe-traits">“Unsafe Traits”</a>.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Dereferencing Raw Pointers Safely"><div class="sect2" id="dereferencing-raw-pointers-safely">
+<h2>Dereferencing Raw Pointers Safely</h2>
+
+<p>Here<a contenteditable="false" data-primary="raw pointers" data-secondary="dereferencing" data-type="indexterm" id="ix_raw_pointer_deref"/><a contenteditable="false" data-primary="dereferencing" data-secondary="raw pointers" data-type="indexterm" id="ix_deref_raw_pointer"/> are some common-sense guidelines for using raw pointers safely:</p>
+
+<ul>
+	<li>
+	<p>Dereferencing null pointers or dangling pointers is undefined behavior.</p>
+	</li>
+	<li>
+	<p>Dereferencing pointers that are not properly aligned for their referent type is undefined behavior.</p>
+	</li>
+	<li>
+	<p>Reading uninitialized memory is always undefined behavior. Assigning to uninitialized memory, <code>*ptr = value</code>, is undefined behavior too, if the type of <code>*ptr</code> has a destructor! You can initialize the memory safely using <code>ptr.write(value)</code>, as we’ll see later in this chapter.</p>
+	</li>
+	<li>
+	<p>You may borrow values out of a dereferenced raw pointer only if doing so obeys the rules for reference safety explained in <a data-type="xref" href="ch05.html#references">Chapter 5</a>: no reference may outlive its referent, shared access is read-only access, and mutable access is exclusive access. (This rule is easy to violate by accident, since raw pointers are often used to create data structures with nonstandard sharing or ownership.)</p>
+	</li>
+	<li>
+	<p>You may use a raw pointer’s referent only if it is a well-formed value of its type. For example, you must ensure that dereferencing a <code>*const char</code> yields a proper, nonsurrogate Unicode code point.</p>
+	</li>
+	<li>
+	<p>If you assign to a raw pointer’s referent, you must not violate the invariants of any type of which the referent is a part. For example, if you have a <code>*mut u8</code> pointing to a byte of a <code>String</code>, you may only store values in that <code>u8</code> that leave the <code>String</code> holding well-formed UTF-8.</p>
+	</li>
+	<li>
+	<p>A pointer’s <code>add</code> and <code>sub</code> methods must only be used to produce new pointers within the same variable or heap allocation, or one byte past the end. Going outside the bounds of the allocation is undefined behavior. (This is the rule we broke in the crashing example at the beginning of this chapter. We’ll discuss <code>add</code> in detail later and show how to use it constructively.)</p>
+	</li>
+	<li>
+	<p>Likewise, if you do pointer arithmetic by converting a pointer to an integer, doing arithmetic on the integer, and then converting it back to a pointer, the result must point into the same allocation. If it doesn’t, dereferencing it is undefined behavior.</p>
+	</li>
+</ul>
+
+<p>These are essentially the same rules you must follow when using pointers in C or C‍++, and the same rules that Rust enforces automatically when you use references.</p>
+
+<p>The reason for not violating types’ invariants should be clear. Many of Rust’s standard types use unsafe code in their implementation, but still provide safe interfaces on the assumption that Rust’s safety checks, module system, and visibility rules will be respected. Using raw pointers to circumvent these protective measures can lead to undefined behavior.</p>
+
+<p>The complete, exact contract for raw pointers is not easily stated and may change as the language evolves. But the principles outlined here should keep you in safe <span class="keep-together">territory.</span></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Example: RefWithFlag"><div class="sect2" id="example-refwithflag">
+<h2>Example: RefWithFlag</h2>
+
+<p>Here’s an example<a contenteditable="false" data-primary="RefWithFlag&lt;'a, T&gt;" data-type="indexterm" id="ix_refwithflag_example"/><a contenteditable="false" data-primary="raw pointers" data-secondary="RefWithFlag example" data-type="indexterm" id="ix_raw_pointer_refwithflag"/> of how to take a classic<sup><a data-type="noteref" id="id2582-marker" href="ch23.html#id2582">1</a></sup> bit-level hack made possible by raw pointers and wrap it up as a completely safe Rust type. This module defines a type, <code>RefWithFlag&lt;'a, T&gt;</code>, that holds both a <code>&amp;'a T</code> and a <code>bool</code>, like the tuple <code>(&amp;'a T, bool)</code> and yet still manages to occupy only one machine word instead of two. This sort of technique is used regularly in garbage collectors and virtual machines, where certain types—say, the type representing an object—are so numerous that adding even a single word to each value would drastically increase memory use:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-11">
+<code class="k">mod</code><code class="w"> </code><code class="nn">ref_with_flag</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">marker</code><code class="p">::</code><code class="n">PhantomData</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// A `&amp;T` and a `bool`, wrapped up in a single word.</code>
+<code class="w">    </code><code class="sd">/// The type `T` must require at least two-byte alignment.</code>
+<code class="w">    </code><code class="sd">///</code>
+<code class="w">    </code><code class="sd">/// If you're the kind of programmer who's never met a pointer whose</code>
+<code class="w">    </code><code class="sd">/// 2⁰-bit you didn't want to steal, well, now you can do it safely!</code>
+<code class="w">    </code><code class="sd">/// ("But it's not nearly as exciting this way...")</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">RefWithFlag</code><code class="o">&lt;'</code><code class="na">a</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">ptr_and_bit</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">behaves_like</code><code class="p">:</code><code class="w"> </code><code class="nc">PhantomData</code><code class="o">&lt;&amp;'</code><code class="na">a</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w">  </code><code class="c1">// occupies no space</code>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="k">impl</code><code class="o">&lt;'</code><code class="na">a</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="o">'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="n">RefWithFlag</code><code class="o">&lt;'</code><code class="na">a</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">(</code><code class="n">ptr</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">a</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w"> </code><code class="n">flag</code><code class="p">:</code><code class="w"> </code><code class="kt">bool</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">const</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="fm">assert!</code><code class="p">(</code><code class="n">align_of</code><code class="p">::</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">().</code><code class="n">is_multiple_of</code><code class="p">(</code><code class="mi">2</code><code class="p">));</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">ptr</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ptr</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="n">RefWithFlag</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="n">ptr_and_bit</code><code class="p">:</code><code class="w"> </code><code class="nc">ptr</code><code class="p">.</code><code class="n">map_addr</code><code class="p">(</code><code class="o">|</code><code class="n">addr</code><code class="o">|</code><code class="w"> </code><code class="n">addr</code><code class="w"> </code><code class="o">|</code><code class="w"> </code><code class="n">flag</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="w">                </code><code class="n">behaves_like</code><code class="p">:</code><code class="w"> </code><code class="nc">PhantomData</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">get_ref</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">a</code><code class="w"> </code><code class="nc">T</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">ptr</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">ptr_and_bit</code><code class="p">.</code><code class="n">map_addr</code><code class="p">(</code><code class="o">|</code><code class="n">addr</code><code class="o">|</code><code class="w"> </code><code class="n">addr</code><code class="w"> </code><code class="o">&amp;</code><code class="w"> </code><code class="o">!</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="c1">// SAFETY: We have just recreated the original `ptr` from the constructor.</code>
+<code class="w">            </code><code class="c1">// Now we will reborrow the original reference. We know the value is still</code>
+<code class="w">            </code><code class="c1">// there, since the original reference had lifetime 'a, and borrows</code>
+<code class="w">            </code><code class="c1">// prevent moves and drops. (We know 'a hasn't expired; Rust ensures that</code>
+<code class="w">            </code><code class="c1">// no lifetime in scope is ever expired. It's an error to call this</code>
+<code class="w">            </code><code class="c1">// method on `self` after the 'a in its type expires.)</code>
+<code class="w">            </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="o">&amp;*</code><code class="n">ptr</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">get_flag</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="bp">self</code><code class="p">.</code><code class="n">ptr_and_bit</code><code class="p">.</code><code class="n">addr</code><code class="p">()</code><code class="w"> </code><code class="o">&amp;</code><code class="w"> </code><code class="mi">1</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="mi">0</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This code takes advantage of the fact that many types must be placed at even addresses in memory: since an even address’s least significant bit is always zero, we can store something else there and then reliably reconstruct the original address just by masking off the bottom bit. Not all types qualify; for example, the types <code>u8</code> and <code>(bool, [i8; 2])</code> can be placed at any address. But we can check the type’s alignment on construction and refuse types that won’t work.</p>
+
+<p>You can use <code>RefWithFlag</code> like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-12">
+<code class="k">use</code><code class="w"> </code><code class="n">ref_with_flag</code><code class="p">::</code><code class="n">RefWithFlag</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">vec</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">10</code><code class="p">,</code><code class="w"> </code><code class="mi">20</code><code class="p">,</code><code class="w"> </code><code class="mi">30</code><code class="p">];</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">flagged</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">RefWithFlag</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="n">vec</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">flagged</code><code class="p">.</code><code class="n">get_ref</code><code class="p">()[</code><code class="mi">1</code><code class="p">],</code><code class="w"> </code><code class="mi">20</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">flagged</code><code class="p">.</code><code class="n">get_flag</code><code class="p">(),</code><code class="w"> </code><code class="kc">true</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The constructor <code>RefWithFlag::new</code> takes a reference and a <code>bool</code> value, and begins by asserting that the type <code>T</code> is does in fact require alignment to even addresses. <span data-claim-test="unsafe-const-assert">The <code>const</code> block around the assertion ensures that it is evaluated at compile time, so that using <code>RefWithFlag</code> incorrectly is a compilation error, not a run-time panic.</span> Having established that the type is OK, the constructor then converts the reference to a raw pointer and uses <code>map_addr</code> and the <code>|</code> bitwise-or operator to add the integer value of <code>flag</code> to the pointer’s address.</p>
+
+<p>The <code>get_flag</code> method extracts the <code>bool</code> component of a <code>RefWithFlag</code>. It’s simple: just mask off the bottom bit of the address and check if it’s nonzero.</p>
+
+<p>The <code>get_ref</code> method extracts the reference from a <code>RefWithFlag</code>. First, it uses the <code>map_addr</code> method once again to mask off the <code>usize</code>’s bottom bit, reproducing the original pointer value. The <code>as</code> operator will not convert raw pointers to references, but we can dereference the raw pointer (in an <code>unsafe</code> block, naturally) and borrow that. Borrowing a raw pointer’s referent gives you a reference with an unbounded lifetime: Rust will accord the reference whatever lifetime would make the code around it check, if there is one. Usually, though, there is some specific lifetime that is more accurate and would thus catch more mistakes. In this case, since <code>get_ref</code>’s return type is <code>&amp;'a T</code>, Rust sees that the reference’s lifetime is the same as <code>RefWithFlag</code>’s lifetime parameter <code>'a</code>, which is just what we want: that’s the lifetime of the reference we started with.</p>
+
+<p>These methods use <code>addr</code><a contenteditable="false" data-primary="raw pointers" data-secondary="addr and map_addr methods" data-type="indexterm" id="id2583"/> to get the address of the pointer as a <code>usize</code> and <code>map_addr</code> to modify it. These methods are part of Rust’s <em>strict pointer provenance</em><a contenteditable="false" data-primary="pointer provenance" data-type="indexterm" id="id2584"/><a contenteditable="false" data-primary="strict pointer provenance" data-type="indexterm" id="id2585"/><a contenteditable="false" data-primary="raw pointers" data-secondary="strict provenance" data-type="indexterm" id="id2586"/> system, which tracks when, where, and how pointers are created and used. Usually, this happens entirely at compile time, providing Rust with more information it can use to optimize programs, but some new CPUs and operating systems can use this information at runtime to enforce invariants about how programs access memory. Exactly how this works is an area of active research in projects like CheriABI.</p>
+
+<p>In <code>RefWithFlag</code>, all we’re doing is modifying an address that came from a pointer in the first place, so it’s enough to use <code>map_addr</code>, which keeps the modified address associated with the original pointer’s provenance information. If you ever do have to create a pointer from an integer with <code>as *const T</code> or similar, you’re using <em>exposed provenance</em> instead, which is even less well-defined.</p>
+
+<p>In memory, a <code>RefWithFlag</code> looks just like a <code>usize</code>: since <code>PhantomData</code> is a zero-sized type, the <code>behaves_like</code> field takes up no space in the structure. But the <code>PhantomData</code> is necessary for Rust to know how to treat lifetimes in code that uses <code>RefWithFlag</code>. Imagine what the type would look like without the <code>behaves_like</code> field:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-bad-refwithflag">
+<code class="c1">// This won't compile.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">RefWithFlag</code><code class="o">&lt;'</code><code class="na">a</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="o">'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">ptr_and_bit</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In <a data-type="xref" href="ch05.html#references">Chapter 5</a>, we pointed out that any structure containing references must not outlive the values they borrow, lest the references become dangling pointers. The structure must abide by the restrictions that apply to its fields. This certainly applies to <code>RefWithFlag</code>: in the example code we just looked at, <code>flagged</code> must not outlive <code>vec</code>, since <code>flagged.get_ref()</code> returns a reference to it. But our reduced <code>RefWithFlag</code> type contains no references at all and never uses its lifetime parameter <code>'a</code>. It’s just a <code>usize</code>. How should Rust know that any restrictions apply to <code>flagged</code>’s lifetime? Including a <code>PhantomData&lt;&amp;'a T&gt;</code> field tells Rust to treat <code>RefWithFlag&lt;'a, T&gt;</code> <em>as if</em> it contained a <code>&amp;'a T</code>, without actually affecting the struct’s representation.</p>
+
+<p>Specifically, this fictional <code>&amp;'a T</code> field helps determine whether the type <code>T</code> is implicitly required to live at least as long as <code>'a</code> (<span data-claim-test="unsafe-phantom-bound">it is, since the reference type <code>&amp;'a T</code> has that requirement</span>); whether <code>RefWithFlag</code> is covariant in <code>'a</code> and <code>T</code> (<span data-claim-test="unsafe-phantom-variance">it is</span>); and whether it’s <code>Sync</code> and <code>Send</code> (although in this case the pointer field prevents both). These are esoteric questions, but Rust needs them answered somehow. If you omit the <code>behaves_like</code> field, Rust will complain that the parameter <code>'a</code> is unused and suggest adding a <code>PhantomData</code>.</p>
+
+<p><code>RefWithFlag</code> uses the same tactics as the <code>Ascii</code> type we presented earlier to avoid undefined behavior in its <code>unsafe</code> block. The type itself is <code>pub</code>, but its fields are not, meaning that only code within the <code>ref_with_flag</code> module can create or look inside a <code>RefWithFlag</code> value. You don’t have to inspect much code to have confidence that the <code>ptr_and_bit</code> field is well constructed<a contenteditable="false" data-startref="ix_raw_pointer_refwithflag" data-type="indexterm" id="id2587"/><a contenteditable="false" data-startref="ix_refwithflag_example" data-type="indexterm" id="id2588"/><a contenteditable="false" data-startref="ix_deref_raw_pointer" data-type="indexterm" id="id2589"/><a contenteditable="false" data-startref="ix_raw_pointer_deref" data-type="indexterm" id="id2590"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Null Pointers"><div class="sect2" id="null-pointers">
+<h2>Null Pointers</h2>
+
+<p>A null<a contenteditable="false" data-primary="null pointers" data-type="indexterm" id="id2591"/><a contenteditable="false" data-primary="raw pointers" data-secondary="null" data-type="indexterm" id="id2592"/> pointer in Rust is a raw pointer with an address of zero, just as in C and C‍++. For any type <code>T</code>, <span class="keep-together">the <code>std::ptr::null&lt;T&gt;</code></span> function returns a <code>*const T</code> null pointer, and <code>std::ptr::null_mut&lt;T&gt;</code> returns a <code>*mut T</code> null pointer.</p>
+
+<p>There are a few ways to check whether a raw pointer is null. The simplest is the <code>is_null</code> method, but the <code>as_ref</code> method may be more convenient: it takes a <code>*const T</code> pointer and returns an <code>Option&lt;&amp;'a T&gt;</code>, turning a null pointer into a <code>None</code>. Similarly, the <code>as_mut</code> method converts <code>*mut T</code> pointers into <code>Option&lt;&amp;'a mut T&gt;</code> values.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Type Sizes and Alignments"><div class="sect2" id="type-sizes-and-alignments">
+<h2>Type Sizes and Alignments</h2>
+
+<p>A value<a contenteditable="false" data-primary="raw pointers" data-secondary="type sizes and alignments" data-type="indexterm" id="id2593"/> of any <code>Sized</code> type<a contenteditable="false" data-primary="type size, raw pointers and" data-type="indexterm" id="id2594"/><a contenteditable="false" data-primary="Sized trait" data-type="indexterm" id="id2595"/> occupies a constant number of bytes in memory and must be placed at an address that is a multiple of some <em>alignment<a contenteditable="false" data-primary="type alignment, raw pointers and" data-type="indexterm" id="id2596"/><a contenteditable="false" data-primary="alignment value, required by types" data-type="indexterm" id="id2597"/></em> value, determined by the machine architecture. For example, an <code>(i32, i32)</code> tuple occupies eight bytes, and most processors prefer it to be placed at an address that is a multiple of four.</p>
+
+<p><a contenteditable="false" data-primary="size_of function" data-type="indexterm" id="id2598"/><a contenteditable="false" data-primary="align_of function" data-type="indexterm" id="id2599"/>The generic function <code>size_of::&lt;T&gt;()</code> returns the size of a value of type <code>T</code>, in bytes, and <code>align_of::&lt;T&gt;()</code> returns its required alignment. For example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-13">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Seat</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">row_number</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">seat_number</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">size_of</code><code class="p">::</code><code class="o">&lt;</code><code class="n">Seat</code><code class="o">&gt;</code><code class="p">(),</code><code class="w"> </code><code class="mi">8</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">align_of</code><code class="p">::</code><code class="o">&lt;</code><code class="n">Seat</code><code class="o">&gt;</code><code class="p">(),</code><code class="w"> </code><code class="mi">4</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Any type’s alignment is always a power of two.</p>
+
+<p>A type’s size is always rounded up to a multiple of its alignment, even if it technically could fit in less space. For example, even though a tuple like <code>(f32, u8)</code> requires only five bytes, <code>size_of::&lt;(f32, u8)&gt;()</code> is <code>8</code>, because <code>align_of::&lt;(f32, u8)&gt;()</code> is <code>4</code>. This ensures that if you have an array, the size of the element type always reflects the spacing between one element and the next.</p>
+
+<p><a contenteditable="false" data-primary="size_of_val function" data-type="indexterm" id="id2600"/><a contenteditable="false" data-primary="align_of_val function" data-type="indexterm" id="id2601"/>For dynamically sized types, the size and alignment depend on the value at hand. Given a reference to an dynamically sized value, the <code>size_of_val</code> and <code>align_of_val</code> functions return the value’s size and alignment. These functions can operate on references to both <code>Sized</code> and dynamically sized types:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-14">
+<code class="c1">// Fat pointers to slices carry their referent's length.</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">slice</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="p">[</code><code class="kt">i32</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="p">[</code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="mi">9</code><code class="p">,</code><code class="w"> </code><code class="mi">27</code><code class="p">,</code><code class="w"> </code><code class="mi">81</code><code class="p">];</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">size_of_val</code><code class="p">(</code><code class="n">slice</code><code class="p">),</code><code class="w"> </code><code class="mi">20</code><code class="p">);</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">text</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"alligator"</code><code class="p">;</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">size_of_val</code><code class="p">(</code><code class="n">text</code><code class="p">),</code><code class="w"> </code><code class="mi">9</code><code class="p">);</code><code class="w"/>
+
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fmt</code><code class="p">::</code><code class="n">Display</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">unremarkable</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">dyn</code><code class="w"> </code><code class="n">Display</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="mi">193_</code><code class="k">u8</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">remarkable</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">dyn</code><code class="w"> </code><code class="n">Display</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="mf">0.0072973525664</code><code class="p">;</code><code class="w"/>
+
+<code class="c1">// These return the size/alignment of the referent,</code>
+<code class="c1">// not those of the dyn reference itself. The answers</code>
+<code class="c1">// come from the vtable the dyn reference points to.</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">size_of_val</code><code class="p">(</code><code class="n">unremarkable</code><code class="p">),</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">align_of_val</code><code class="p">(</code><code class="n">remarkable</code><code class="p">),</code><code class="w"> </code><code class="mi">8</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>All four functions are included in the standard prelude.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Pointer Arithmetic"><div class="sect2" id="pointer-arithmetic">
+<h2>Pointer Arithmetic</h2>
+
+<p>Rust<a contenteditable="false" data-primary="arrays" data-secondary="raw pointers to" data-type="indexterm" id="ix_arrays_raw_pointer"/> lays out the elements of an array, slice, or vector as a single contiguous block of memory, as shown in <a data-type="xref" href="#array-figure">Figure 23-1</a>. Elements are regularly spaced, so that if each element occupies <code>size</code> bytes, then the <code>i</code>th element starts with the <code>i * size</code>th byte.</p>
+
+<figure><div id="array-figure" class="figure"><img alt="An array of four `i32` elements, cleverly named `array`. Each element occupies four bytes. The start address is the address of the first byte of the first element. `array[0]` falls at byte offset 0. `array[3]` falls at byte offset 12." src="assets/pru3_2301.png" width="600" height="214"/>
+<h6><span class="label">Figure 23-1. </span>An array in memory</h6>
+</div></figure>
+
+<p>One nice consequence of this is that if you have two raw pointers to elements of an array, comparing the pointers gives the same results as comparing the elements’ indices: if <code>i &lt; j</code>, then a raw pointer to the <code>i</code>th element is less than a raw pointer to the <code>j</code>th element. This makes raw pointers useful as bounds on array traversals. In fact, the standard library’s simple iterator over a slice was originally defined like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-15">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Iter</code><code class="o">&lt;'</code><code class="na">a</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">ptr</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">end</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>ptr</code> field points to the next element iteration should produce, and the <code>end</code> field serves as the limit: when <code>ptr == end</code>, the iteration is complete.</p>
+
+<p>Another nice consequence of array layout is that the address of any array element is easy to compute. If <code>element_ptr</code> is a <code>*const T</code> or <code>*mut T</code> raw pointer to element <code>arr[i]</code> of some array, then <code>element_ptr.add(j)</code> is a raw pointer to <code>arr[i + j]</code>. The definition of the <code>add</code> method is something like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-16">
+<code class="k">fn</code><code class="w"> </code><code class="nf">add</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">(</code><code class="n">ptr</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">count</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">Sized</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">bytes_per_element</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">size_of</code><code class="p">::</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">ptr</code><code class="p">.</code><code class="n">map_addr</code><code class="p">(</code><code class="o">|</code><code class="n">addr</code><code class="o">|</code><code class="w"> </code><code class="n">addr</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bytes_per_element</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>As in <a data-type="xref" href="#example-refwithflag">“Example: RefWithFlag”</a>, <code>map_addr</code> allows us to convert the base pointer to a <code>usize</code>, do arithmetic on that value, and then convert the result back to a pointer.</p>
+
+<p>This is called <em>pointer arithmetic</em><a contenteditable="false" data-primary="raw pointers" data-secondary="pointer arithmetic" data-type="indexterm" id="ix_raw_pointer_arith"/><a contenteditable="false" data-primary="arithmetic, pointer" data-type="indexterm" id="ix_arith_pointer"/> and it’s usually done via the <code>add</code>, <code>sub</code>, <code>wrapping_add</code>, and <code>wrapping_sub</code> methods on raw pointer types, all of which preserve provenance. Inversely, the <code>offset_from</code> method gives the number of array elements between two pointers, though we’re responsible for making sure the beginning and end are in the same memory region (the same <code>Vec</code>, for instance):</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ptr_coercions">
+<code class="kd">let</code><code class="w"> </code><code class="n">trucks</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"garbage truck"</code><code class="p">,</code><code class="w"> </code><code class="s">"dump truck"</code><code class="p">,</code><code class="w"> </code><code class="s">"moonstruck"</code><code class="p">];</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">first</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">raw</code><code class="w"> </code><code class="k">const</code><code class="w"> </code><code class="n">trucks</code><code class="p">[</code><code class="mi">0</code><code class="p">];</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">last</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">raw</code><code class="w"> </code><code class="k">const</code><code class="w"> </code><code class="n">trucks</code><code class="p">[</code><code class="mi">2</code><code class="p">];</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">last</code><code class="p">.</code><code class="n">offset_from</code><code class="p">(</code><code class="n">first</code><code class="p">)</code><code class="w"> </code><code class="p">},</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">first</code><code class="p">.</code><code class="n">offset_from</code><code class="p">(</code><code class="n">last</code><code class="p">)</code><code class="w"> </code><code class="p">},</code><code class="w"> </code><code class="o">-</code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>It’s fine to produce a pointer to the first byte after the end of an array. You cannot dereference such a pointer, but it can be useful to represent the limit of a loop or for bounds checks.</p>
+
+<p>However, it is undefined behavior to use <code>add</code> (or <code>sub</code>) to produce a pointer beyond that point or before the start of the array, even if you never dereference it. For the sake of optimization, Rust would like to assume that <code>ptr.add(i) &gt; ptr</code> and that <code>ptr.sub(i) &lt; ptr</code>. This assumption seems safe, but it may not hold if the arithmetic in <code>add</code> or <code>sub</code> overflows a <code>usize</code> value. If <code>i</code> is constrained to stay within the same array as <code>ptr</code>, no overflow can occur, because the array itself cannot overflow the bounds of the address space. (To make pointers to the first byte after the end safe, Rust never places values at the upper end of the address space.)</p>
+
+<p>If you do need to offset pointers beyond the limits of the array they are associated with, you can use the <code>wrapping_add</code> and <code>wrapping_sub</code> methods. These are equivalent to <code>add</code> and <code>sub</code>, but Rust makes no assumptions about the relative ordering of <code>ptr.wrapping_add(i)</code> and <code>ptr</code> itself. Of course, you still can’t dereference such pointers unless they fall within the array<a contenteditable="false" data-startref="ix_raw_pointer_arith" data-type="indexterm" id="id2602"/><a contenteditable="false" data-startref="ix_arith_pointer" data-type="indexterm" id="id2603"/><a contenteditable="false" data-startref="ix_arrays_raw_pointer" data-type="indexterm" id="id2604"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Moving into and out of Memory"><div class="sect2" id="moving-into-and-out-of-memory">
+<h2>Moving into and out of Memory</h2>
+
+<p>If you are implementing a type that manages its own memory<a contenteditable="false" data-primary="raw pointers" data-secondary="moving into/out of memory" data-type="indexterm" id="ix_raw_pointer_mem"/><a contenteditable="false" data-primary="memory" data-secondary="raw pointers and" data-type="indexterm" id="ix_mem_raw_pointer"/>, you will need to track which parts of your memory hold values and which do not, just as Rust does with local variables. Consider this code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-17">
+<code class="kd">let</code><code class="w"> </code><code class="n">pot</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"pasta"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">plate</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pot</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>After this code has run, the situation looks like <a data-type="xref" href="#moving_string_from_one_local">Figure 23-2</a>.</p>
+
+<figure><div id="moving_string_from_one_local" class="figure"><img alt="Two local string variables, `pot` and `plate`. The variable `pot` is shown as still holding its prior pointer, capacity, and length, but the string has been moved. `plate` holds the string `&quot;pasta&quot;`." src="assets/pru3_2302.png" width="600" height="226"/>
+<h6><span class="label">Figure 23-2. </span>Moving a string from one local variable to another</h6>
+</div></figure>
+
+<p>After the assignment, <code>pot</code> no longer contains a value. Now <code>plate</code> is the owner of the string. We will call memory locations “occupied” while they hold and own values; and “vacant” if they’re uninitialized or have had their values moved.</p>
+
+<p>At the machine level, it’s not specified what this move does to the memory storing <code>pot</code>, but in practice it usually does nothing at all. The assignment probably leaves <code>pot</code> still holding a pointer, capacity, and length for the string. It could be disastrous to continue using this leftover data, though, especially the pointer; so Rust forbids the use of vacant variables.</p>
+
+<p>The same considerations apply to data structures that manage their own memory. Suppose you run this code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-18">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">noodles</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"udon"</code><code class="p">.</code><code class="n">to_string</code><code class="p">()];</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">soba</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"soba"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">last</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>In memory, the state looks like <a data-type="xref" href="#uninitalized_vector_spare_capacity">Figure 23-3</a>.</p>
+
+<figure><div id="uninitalized_vector_spare_capacity" class="figure"><img alt="A vector holding one string, with capacity for one more. A variable `soba`, holding the string &quot;soba&quot;. A variable `last`, uninitialized." src="assets/pru3_2303.png" width="600" height="312"/>
+<h6><span class="label">Figure 23-3. </span>A vector with uninitialized, spare capacity</h6>
+</div></figure>
+
+<p>The vector has the spare capacity to hold one more element, but its contents are junk, probably whatever that memory held previously. Suppose you then run this code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-19">
+<code class="n">noodles</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">soba</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Pushing the string onto the vector transforms that uninitialized memory into a new element, as illustrated in <a data-type="xref" href="#sobas_value_on_vector">Figure 23-4</a>.</p>
+
+<figure><div id="sobas_value_on_vector" class="figure"><img alt="A vector holding two strings, with no more capacity. A variable `soba`, vacant, but still holding the pointer, capacity, and length it held while occupied. A variable `last`, uninitialized." src="assets/pru3_2304.png" width="600" height="312"/>
+<h6><span class="label">Figure 23-4. </span>After pushing <code>soba</code>’s value onto the vector</h6>
+</div></figure>
+
+<p>The vector has initialized its empty space to own the string and incremented its length to mark that space as occupied. The vector is now the owner of the string; you can refer to its second element with <code>noodles[1]</code>, and dropping the vector would free both strings. And the variable <code>soba</code> is now vacant.</p>
+
+<p>Finally, consider what happens when we pop a value from the vector:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-20">
+<code class="n">last</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">noodles</code><code class="p">.</code><code class="n">pop</code><code class="p">().</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>In memory, things now look like <a data-type="xref" href="#after_popping_element_from_vector">Figure 23-5</a>.</p>
+
+<figure><div id="after_popping_element_from_vector" class="figure"><img alt="A vector holding one string, with capacity for one more. The vector's spare capacity still holds the pointer, capacity and length it held while occupied. A variable `soba`, vacant, but similarly holding stale data. A variable `last`, owning a string." src="assets/pru3_2305.png" width="600" height="312"/>
+<h6><span class="label">Figure 23-5. </span>After popping an element from the vector into <code>last</code></h6>
+</div></figure>
+
+<p>The variable <code>last</code> has taken ownership of the string. The vector has decremented its length to indicate that the space that used to hold the string is now vacant.</p>
+
+<p>Just as with <code>pot</code> and <code>pasta</code> earlier, all three of <code>soba</code>, <code>last</code>, and the vector’s free space probably hold identical bit patterns. But only <code>last</code> is considered to own the value. Treating either of the other two locations as occupied would be a mistake. For local variables, Rust tracks initialization and moves at compile time. Types like <code>Vec</code> and <code>HashMap</code> track occupancy for their buffers dynamically. If you implement a type that manages its own memory, you will need to do the same.</p>
+
+<p>Raw pointers provide two essential unsafe methods for implementing such types<a contenteditable="false" data-primary="raw pointers" data-secondary="read and write methods" data-type="indexterm" id="id2605"/>:</p>
+
+<dl>
+	<dt><code>ptr.read()</code></dt>
+	<dd>
+	<p>Moves or copies a value out of the location <code>ptr</code> points to. <code>ptr</code> can be either a <code>*const T</code> or a <code>*mut T</code> raw pointer, where <code>T</code> is a sized type. The method returns a <code>T</code>.</p>
+
+	<p>After calling this method, the contents of <code>*ptr</code> are unchanged, but unless <code>T</code> is <code>Copy</code>, you typically shouldn’t treat that memory as occupied anymore. If your program <code>read()</code>s the same pointer again, for example, it will create a second byte-for-byte copy of the same non-<code>Copy</code> value. That often means a double free when both values are dropped.</p>
+
+	<p>This is the operation behind <code>Vec::pop</code>. Popping a value calls <code>read</code> to move the value out of the buffer and then decrements the length to mark that memory as vacant.</p>
+	</dd>
+	<dt><code>ptr.write(value)</code></dt>
+	<dd>
+	<p>Moves <code>value</code> into<a contenteditable="false" data-primary="ptr::write " data-type="indexterm" id="id2606"/> the location <code>ptr</code> points to. Whatever was in that memory before is simply overwritten, without calling destructors, so this is suitable for writing to uninitialized memory. Here, <code>ptr</code> must be a <code>*mut T</code> raw pointer and <code>value</code> a <code>T</code> value, where <code>T</code> is a sized type.</p>
+
+	<p>You can think of <code>*ptr</code> as owning the value afterwards. If the value has a destructor, it’s your responsibility to make sure <code>*ptr</code> is a location where the value will be dropped later.</p>
+
+	<p>This is the operation behind <code>Vec::push</code>. Pushing a value calls <code>write</code> to move the value into the next available space and then increments the length to mark that memory as occupied.</p>
+	</dd>
+</dl>
+
+<p>The standard library also provides methods for moving arrays of values from one block of memory to another:</p>
+
+<dl>
+	<dt><code>src.copy_to(dst, count)</code></dt>
+	<dd>
+	<p>Moves<a contenteditable="false" data-primary="raw pointers" data-secondary="copy_to method" data-type="indexterm" id="id2607"/> <code>count</code> values stored in memory starting at <code>src</code> to the memory starting at <code>dst</code>. The <code>src</code> and <code>dest</code> arguments must be <code>*const T</code> and <code>*mut T</code> raw pointers, and <code>count</code> must be a <code>usize</code>. The regions may overlap.</p>
+
+	<p>This is similar to a loop that uses <code>read</code> and <code>write</code> calls to move the values one at a time, except that <code>read</code> requires the memory to contain a valid value, and <code>copy_to</code> doesn’t care. The memory being moved can even be uninitialized.</p>
+	</dd>
+	<dt><code>src.copy_to_nonoverlapping(dst, count)</code></dt>
+	<dd>
+	<p>Like<a contenteditable="false" data-primary="raw pointers" data-secondary="copy_to_nonoverlapping method" data-type="indexterm" id="id2608"/> <code>copy_to</code>, except its contract further requires that the source and destination regions must not overlap. This may be slightly faster than calling <code>copy_to</code>.</p>
+	</dd>
+</dl>
+
+<p>C programmers will recognize these methods as Rust’s versions of <code>memmove</code> and <code>memcpy</code>.<a contenteditable="false" data-primary="memcpy and memmove (C functions)" data-type="indexterm" id="id2609"/></p>
+
+<p>There are two other families of <code>read</code> and <code>write</code> pointer methods:</p>
+
+<dl>
+	<dt><code>ptr.read_unaligned()</code>, <code>ptr.write_unaligned(value)</code></dt>
+	<dd>
+	<p>These<a contenteditable="false" data-primary="raw pointers" data-secondary="unaligned reads and writes" data-type="indexterm" id="id2610"/> methods are like <code>read</code> and <code>write</code>, except that the pointer need not be aligned as normally required for the referent type. These functions may be slower than the plain <code>read</code> and <code>write</code> functions.</p>
+	</dd>
+	<dt><code>ptr.read_volatile()</code>, <code>ptr.write_volatile(value)</code></dt>
+	<dd>
+	<p>These<a contenteditable="false" data-primary="raw pointers" data-secondary="volatile reads and writes" data-type="indexterm" id="id2611"/> functions are the equivalent of volatile reads and writes<a contenteditable="false" data-startref="ix_mem_raw_pointer" data-type="indexterm" id="id2612"/><a contenteditable="false" data-startref="ix_raw_pointer_mem" data-type="indexterm" id="id2613"/> in C or C‍++.</p>
+	</dd>
+</dl>
+
+<p>The standard library documentation covers all pointer methods under “Primitive type pointer”.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Example: GapBuffer"><div class="sect2" id="example-gapbuffer">
+<h2>Example: GapBuffer</h2>
+
+<p>Here’s an example<a contenteditable="false" data-primary="GapBuffer" data-type="indexterm" id="ix_gapbuffer_ex"/><a contenteditable="false" data-primary="text" data-secondary="GapBuffer example" data-type="indexterm" id="ix_text_gapbuf"/><a contenteditable="false" data-primary="raw pointers" data-secondary="GapBuffer example" data-type="indexterm" id="ix_raw_pointer_gapbuf"/> that puts the raw pointer methods just described to use.</p>
+
+<p>Suppose you’re writing a text editor, and you’re looking for a type to represent the text. You could choose <code>String</code> and use the <code>insert</code> and <code>remove</code> methods to insert and delete characters as the user types. But if they’re editing text at the beginning of a large file, those methods can be expensive: inserting a new character involves shifting the entire rest of the string to the right in memory, and deletion shifts it all back to the left. You’d like such common operations to be cheaper.</p>
+
+<p>The Emacs text editor uses a simple data structure called a <em>gap buffer</em> that can insert and delete characters in constant time. Whereas a <code>String</code> keeps all its spare capacity at the end of the text, which makes <code>push</code> and <code>pop</code> cheap, a gap buffer keeps its spare capacity in the midst of the text, at the point where editing is taking place. This spare capacity is called the <em>gap</em>. Inserting or deleting elements at the gap is cheap: you simply shrink or enlarge the gap as needed. You can move the gap to any location you like by shifting text from one side of the gap to the other. When the gap is empty, you migrate to a larger buffer.</p>
+
+<p>While insertion and deletion in a gap buffer are fast, changing the position at which they take place entails moving the gap to the new position. Shifting the elements requires time proportional to the distance being moved.</p>
+
+<p>In this section we’ll implement a gap buffer in Rust. To avoid being distracted by UTF-8, we’ll make our buffer store <code>char</code> values directly, but the principles of operation would be the same if we stored the text in some other form.</p>
+
+<p>First, we’ll show a gap buffer in action. This code creates a <code>GapBuffer</code>, inserts some text in it, and then moves the insertion point to sit just before the last word:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-21">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">GapBuffer</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="n">buf</code><code class="p">.</code><code class="n">insert_iter</code><code class="p">(</code><code class="s">"Lord of the Rings"</code><code class="p">.</code><code class="n">chars</code><code class="p">());</code><code class="w"/>
+<code class="n">buf</code><code class="p">.</code><code class="n">set_position</code><code class="p">(</code><code class="mi">12</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>After running this code, the buffer looks as shown in <a data-type="xref" href="#unsafe-gap-lotr">Figure 23-6</a>.</p>
+
+<figure><div id="unsafe-gap-lotr" class="figure"><img alt="A gap buffer containing the text &quot;Lord of the Rings&quot;. The buffer has capacity for 28 characters, but contains only 17. The first twelve characters appear at the left, followed by an eleven-character gap, followed by the remaining five characters." src="assets/pru3_2306.png" width="600" height="93"/>
+<h6><span class="label">Figure 23-6. </span>A gap buffer containing some text</h6>
+</div></figure>
+
+<p>Insertion is a matter of filling in the gap with new text. This code adds a word and ruins the film:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-24">
+<code class="n">buf</code><code class="p">.</code><code class="n">insert_iter</code><code class="p">(</code><code class="s">"Onion "</code><code class="p">.</code><code class="n">chars</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>This results in the state shown in <a data-type="xref" href="#unsafe-gap-lotor">Figure 23-7</a>.</p>
+
+<figure><div id="unsafe-gap-lotor" class="figure"><img alt="A gap buffer containing the text &quot;Lord of the Onion Rings&quot;. The buffer has capacity for 28 characters, but contains only 23. The first 18 characters appear at the left, followed by a five-character gap, followed by the remaining five characters." src="assets/pru3_2307.png" width="600" height="93"/>
+<h6><span class="label">Figure 23-7. </span>A gap buffer containing some more text</h6>
+</div></figure>
+
+<p>Here’s our <code>GapBuffer</code> type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-22">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Range</code><code class="p">;</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">GapBuffer</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Storage for elements. This has the capacity we need, but its length</code>
+<code class="w">    </code><code class="c1">// always remains zero. GapBuffer puts its elements and the gap in this</code>
+<code class="w">    </code><code class="c1">// `Vec`'s "unused" capacity.</code>
+<code class="w">    </code><code class="n">storage</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Range of uninitialized elements in the middle of `storage`.</code>
+<code class="w">    </code><code class="c1">// Elements before and after this range are always initialized.</code>
+<code class="w">    </code><code class="n">gap</code><code class="p">:</code><code class="w"> </code><code class="nc">Range</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p><code>GapBuffer</code> uses its <code>storage</code> field in a strange way. It never actually stores any elements in the vector—or not quite. It simply calls <code>Vec::with_capacity(n)</code> to get a block of memory large enough to hold <code>n</code> values, obtains raw pointers to that memory via the vector’s <code>as_ptr</code> and <code>as_mut_ptr</code> methods, and then uses the buffer directly for its own purposes. The vector’s length always remains zero. When the <code>Vec</code> gets dropped, the <code>Vec</code> doesn’t try to free its elements, because it doesn’t know it has any, but it does free the block of memory. This is what <code>GapBuffer</code> wants; it has its own <code>Drop</code> implementation that knows where the elements are and drops them correctly.</p>
+
+<p><code>GapBuffer</code>’s simplest methods are what you’d expect:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-23">
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="n">GapBuffer</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">GapBuffer</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">GapBuffer</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">storage</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="n">gap</code><code class="p">:</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="mi">0</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Returns the number of elements this GapBuffer could hold without</code>
+<code class="w">    </code><code class="sd">/// reallocation.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">capacity</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">storage</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Returns the number of elements this GapBuffer currently holds.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">len</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Returns the current insertion position.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">position</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>It cleans up many of the following functions to have a utility method that returns a raw pointer to the buffer element at a given index. This being Rust, we end up needing one method for <code>mut</code> pointers and one for <code>const</code>. Unlike the preceding methods, these are not public. Continuing this <code>impl</code> block:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-25">
+<code class="sd">/// Returns a pointer to the `index`th element of the underlying storage,</code>
+<code class="sd">/// regardless of the gap.</code>
+<code class="sd">///</code>
+<code class="sd">/// # Safety</code>
+<code class="sd">/// `index` must be a valid index into `self.storage`.</code>
+<code class="k">unsafe</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">space</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">index</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">*</code><code class="k">const</code><code class="w"> </code><code class="n">T</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// SAFETY: The caller must ensure `index` is in range.</code>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">storage</code><code class="p">.</code><code class="n">as_ptr</code><code class="p">().</code><code class="n">add</code><code class="p">(</code><code class="n">index</code><code class="p">)</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="sd">/// Returns a mutable pointer to the `index`th element of the underlying</code>
+<code class="sd">/// storage, regardless of the gap.</code>
+<code class="sd">///</code>
+<code class="sd">/// # Safety</code>
+<code class="sd">/// `index` must be a valid index into `self.storage`.</code>
+<code class="k">unsafe</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">space_mut</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">index</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">T</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// SAFETY: Same as space().</code>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">storage</code><code class="p">.</code><code class="n">as_mut_ptr</code><code class="p">().</code><code class="n">add</code><code class="p">(</code><code class="n">index</code><code class="p">)</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In a pattern you’ll see frequently in unsafe Rust, the <code>unsafe</code> code inside these methods is safe <em>if and only if</em> the caller holds up their end of the deal.</p>
+
+<p>To find the element at a given index, you must consider whether the index falls before or after the gap and adjust appropriately:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-26">
+<code class="sd">/// Returns the offset in the buffer of the `index`th element, taking</code>
+<code class="sd">/// the gap into account. This does not check whether index is in range,</code>
+<code class="sd">/// but it never returns an index in the gap.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">index_to_raw</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">index</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">index</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">index</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">index</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="sd">/// Returns a reference to the `index`th element,</code>
+<code class="sd">/// or `None` if `index` is out of bounds.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">get</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">index</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;&amp;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">raw</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">index_to_raw</code><code class="p">(</code><code class="n">index</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">raw</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// SAFETY: We just checked `raw` against self.capacity(),</code>
+<code class="w">        </code><code class="c1">// and index_to_raw skips the gap, so this is safe.</code>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="o">&amp;*</code><code class="bp">self</code><code class="p">.</code><code class="n">space</code><code class="p">(</code><code class="n">raw</code><code class="p">)</code><code class="w"> </code><code class="p">})</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>When we start making insertions and deletions in a different part of the buffer, we need to move the gap to the new location. Moving the gap to the right entails shifting elements to the left, and vice versa, just as the bubble in a spirit level moves in one direction when the fluid flows in the other:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-27">
+<code class="sd">/// Sets the current insertion position to `pos`.</code>
+<code class="sd">/// If `pos` is out of bounds, this panics.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">set_position</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">pos</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">pos</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">panic!</code><code class="p">(</code><code class="s">"index {pos} out of range for GapBuffer"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">gap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">clone</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">pos</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// `pos` falls after the gap. Move the gap right</code>
+<code class="w">        </code><code class="c1">// by shifting elements after the gap to before it.</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pos</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="c1">// SAFETY: If our arithmetic is right, these pointer ranges are all</code>
+<code class="w">        </code><code class="c1">// inside the buffer. They may overlap, but `copy_to` supports that.</code>
+<code class="w">        </code><code class="c1">// Copying is OK, even if `T` is not `Copy`, because we're really</code>
+<code class="w">        </code><code class="c1">// moving the values, not making copies.</code>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="bp">self</code><code class="p">.</code><code class="n">space</code><code class="p">(</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">copy_to</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">space_mut</code><code class="p">(</code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="p">),</code><code class="w"> </code><code class="n">count</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">pos</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// `pos` falls before the gap. Move the gap left</code>
+<code class="w">        </code><code class="c1">// by shifting elements before the gap to after it.</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">pos</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="c1">// SAFETY: Same as above.</code>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="bp">self</code><code class="p">.</code><code class="n">space</code><code class="p">(</code><code class="n">pos</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">copy_to</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">space_mut</code><code class="p">(</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">count</code><code class="p">),</code><code class="w"> </code><code class="n">count</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pos</code><code class="o">..</code><code class="n">pos</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">gap</code><code class="p">.</code><code class="n">len</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This function uses the <code>copy_to</code> method to shift the elements. Note that <code>copy_to</code> doesn’t care what location in memory “owns” a value, or which locations are “occupied” and which are “vacant”. It simply copies the raw bytes from one region to the other, as fast as possible, like <code>memmove</code> in C. It’s up to us to make sure <code>GapBuffer</code> consistently applies its own rules about which locations are occupied.</p>
+
+<p>Element insertion and removal are relatively simple. Insertion takes over one space from the gap for the new element, whereas removal moves one value out and enlarges the gap to cover the space it used to occupy:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-28">
+<code class="sd">/// Inserts `elt` at the current insertion position,</code>
+<code class="sd">/// and leaves the insertion position after it.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">insert</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">elt</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">enlarge_gap</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// SAFETY: The code above ensures there's room in the gap.</code>
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">index</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">space_mut</code><code class="p">(</code><code class="n">index</code><code class="p">).</code><code class="n">write</code><code class="p">(</code><code class="n">elt</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="sd">/// Inserts the elements produced by `iter` at the current insertion</code>
+<code class="sd">/// position, and leaves the insertion position after them.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">insert_iter</code><code class="o">&lt;</code><code class="n">I</code><code class="o">&gt;</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">iterable</code><code class="p">:</code><code class="w"> </code><code class="nc">I</code><code class="p">)</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">I</code><code class="p">:</code><code class="w"> </code><code class="nb">IntoIterator</code><code class="o">&lt;</code><code class="n">Item</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">item</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">iterable</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="n">item</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="sd">/// Removes the element just after the insertion position</code>
+<code class="sd">/// and returns it, or returns `None` if the insertion position</code>
+<code class="sd">/// is at the end of the GapBuffer.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">remove</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="w"> </code><code class="nb">None</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">element</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">space</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="p">).</code><code class="n">read</code><code class="p">()</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">element</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Similar to the way <code>Vec</code> uses a pointer <code>write</code> for <code>push</code> and a pointer <code>read</code> for <code>pop</code>, <code>GapBuffer</code> uses <code>write</code> for <code>insert</code> and <code>read</code> for <code>remove</code>. And just as <code>Vec</code> must adjust its length to maintain the boundary between occupied and vacant memory, <code>GapBuffer</code> adjusts its gap.</p>
+
+<p>When the gap has been filled in, the <code>insert</code> method must grow the buffer to acquire more free space. The <code>enlarge_gap</code> method (the last in the <code>impl</code> block) handles this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-29">
+<code class="sd">/// Doubles the capacity of `self.storage`.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">enlarge_gap</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">new_capacity</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">2</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">new_capacity</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// The existing vector is empty.</code>
+<code class="w">        </code><code class="c1">// Choose a reasonable starting capacity.</code>
+<code class="w">        </code><code class="n">new_capacity</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">4</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// We have no idea what resizing a Vec does with its "unused"</code>
+<code class="w">    </code><code class="c1">// capacity. So just create a new vector and move over the elements.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">new</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">with_capacity</code><code class="p">(</code><code class="n">new_capacity</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">after_gap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">new_gap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="o">..</code><code class="n">new</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">after_gap</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// Move the elements that fall before the gap.</code>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">space</code><code class="p">(</code><code class="mi">0</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">copy_to_nonoverlapping</code><code class="p">(</code><code class="n">new</code><code class="p">.</code><code class="n">as_mut_ptr</code><code class="p">(),</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Move the elements that fall after the gap.</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">new_gap_end</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">new</code><code class="p">.</code><code class="n">as_mut_ptr</code><code class="p">().</code><code class="n">add</code><code class="p">(</code><code class="n">new_gap</code><code class="p">.</code><code class="n">end</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">space</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">copy_to_nonoverlapping</code><code class="p">(</code><code class="n">new_gap_end</code><code class="p">,</code><code class="w"> </code><code class="n">after_gap</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// This frees the old Vec, but drops no elements,</code>
+<code class="w">    </code><code class="c1">// because the Vec's length is zero.</code>
+<code class="w">    </code><code class="bp">self</code><code class="p">.</code><code class="n">storage</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">new</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">new_gap</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Whereas <code>set_position</code> must use <code>copy_to</code> to move elements back and forth in the gap, <code>enlarge_gap</code> can use <code>copy_to_nonoverlapping</code>, since it is moving elements to an entirely new buffer.</p>
+
+<p>Moving the new vector into <code>self.storage</code> drops the old vector. Since its length is zero, the old vector believes it has no elements to drop and simply frees its buffer. Neatly, we have moved all the values, so the old vector is correct in this belief: all the elements are now owned by the new vector.</p>
+
+<p>Finally, we need to make sure that dropping a <code>GapBuffer</code> drops all its elements:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-30">
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Drop</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">GapBuffer</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">drop</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// SAFETY: GapBuffer maintains the invariant that the</code>
+<code class="w">        </code><code class="c1">// spaces in these two ranges contain valid T values.</code>
+<code class="w">        </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">for</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">start</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="bp">self</code><code class="p">.</code><code class="n">space_mut</code><code class="p">(</code><code class="n">i</code><code class="p">).</code><code class="n">drop_in_place</code><code class="p">();</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">            </code><code class="k">for</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="o">..</code><code class="bp">self</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="bp">self</code><code class="p">.</code><code class="n">space_mut</code><code class="p">(</code><code class="n">i</code><code class="p">).</code><code class="n">drop_in_place</code><code class="p">();</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The elements lie before and after the gap, so we iterate over each region and use the <code>drop_in_place</code> pointer method to drop each one. The <code>drop_in_place</code> method is a utility that behaves like <code>drop(ptr.read())</code>, but doesn’t bother moving the value before dropping it. And just as in <code>enlarge_gap</code>, by the time the vector <code>self.storage</code> is dropped, its buffer really is entirely vacant.</p>
+
+<p>Like the other types we’ve shown in this chapter, <code>GapBuffer</code> ensures that its own invariants are sufficient to ensure that the contract of every unsafe feature it uses is followed, so none of its public methods needs to be marked unsafe. <code>GapBuffer</code> implements a safe interface for a feature that cannot be written efficiently in safe code<a contenteditable="false" data-startref="ix_raw_pointer_gapbuf" data-type="indexterm" id="id2614"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Panic Safety in Unsafe Code"><div class="sect2" id="panic-safety-in-unsafe-code">
+<h2>Panic Safety in Unsafe Code</h2>
+
+<p>In Rust, panics<a contenteditable="false" data-primary="panic" data-secondary="safety in unsafe code" data-type="indexterm" id="id2615"/><a contenteditable="false" data-primary="raw pointers" data-secondary="panic safety in unsafe code" data-type="indexterm" id="id2616"/><a contenteditable="false" data-primary="invariants" data-secondary="panic and" data-type="indexterm" id="id2617"/> can’t usually cause undefined behavior; the <code>panic!</code> macro is not an unsafe feature. But when you decide to work with unsafe code, panic safety becomes part of your job.</p>
+
+<p>Consider the <code>GapBuffer::remove</code> method from the previous section:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-31">
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">remove</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="w"> </code><code class="nb">None</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">element</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">unsafe</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">space</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="p">).</code><code class="n">read</code><code class="p">()</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="bp">self</code><code class="p">.</code><code class="n">gap</code><code class="p">.</code><code class="n">end</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">element</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The call to <code>read</code> produces a value of type <code>T</code> by reading the space immediately following the gap. But it also leaves the original bytes unchanged. If we were to drop both copies of the value, it could be undefined behavior. Fortunately, the very next statement enlarges the gap to mark that space as vacant, so by the time we return, there is again only one live copy of the value.</p>
+
+<p>But consider what would happen if, after the call to <code>read</code> but before the adjustment to <code>self.gap.end</code>, this code tried to use a feature that might panic—say, indexing a slice. Exiting the method abruptly anywhere between those two actions would drop <code>element</code> and leave the <code>GapBuffer</code> with a copy of the same value outside the gap. The next call to <code>remove</code> could try to <code>read</code> it again; even simply dropping the <code>GapBuffer</code> would try to drop it. Unless <code>T</code> happens to be <code>Copy</code>, dropping multiple byte-for-byte copies of a value like this is very likely to be undefined behavior.</p>
+
+<p>It’s all but unavoidable for a type’s methods to momentarily relax the type’s invariants while they do their job and then put everything back to rights before they return. A panic mid-method could cut that cleanup process short, leaving the type in an inconsistent state.</p>
+
+<p>If the type uses only safe code, then this inconsistency may make the type misbehave, but it can’t introduce undefined behavior. But code using unsafe features is usually counting on its invariants to meet the contracts of those features. Broken invariants lead to broken contracts, which lead to undefined behavior.</p>
+
+<p>When working with unsafe features, you must take special care to identify these sensitive regions of code where invariants are temporarily relaxed, and ensure that they do nothing that might panic<a contenteditable="false" data-startref="ix_gapbuffer_ex" data-type="indexterm" id="id2618"/><a contenteditable="false" data-startref="ix_text_gapbuf" data-type="indexterm" id="id2619"/><a contenteditable="false" data-startref="ix_pointer_raw" data-type="indexterm" id="id2620"/><a contenteditable="false" data-startref="ix_raw_pointers_ch22" data-type="indexterm" id="id2621"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Unions"><div class="sect1" id="unions">
+<h1>Unions</h1>
+
+<p>Rust<a contenteditable="false" data-primary="unsafe code" data-secondary="unions" data-type="indexterm" id="ix_unsafe_code_unions"/><a contenteditable="false" data-primary="unions" data-type="indexterm" id="ix_unions"/> also has <em>unions</em>, a kind of user-defined type inherited from C.</p>
+
+<p>The Rust standard library documentation says that a union is like a struct, but instead of all the fields being stored at different offsets within the struct value, they are all stored at the <em>same</em> memory location. This is fantastical but true.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unsafe-union">
+<code class="k">union</code><code class="w"> </code><code class="nc">UnspecifiedShape</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">circle</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">Circle</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">rectangle</code><code class="p">:</code><code class="w"> </code><code class="o">*</code><code class="k">mut</code><code class="w"> </code><code class="n">Rectangle</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This type is large enough to hold a single pointer, not two. You can create values of this type by writing either <code>UnspecifiedShape { circle: &amp;mut c }</code> or <code>UnspecifiedShape { rectangle: &amp;mut r }</code>. <span data-claim-test="unsafe-union-multi">Specifying both fields is not permitted</span>, as one would simply overwrite the other.</p>
+
+<p>Unlike an <code>enum</code>, whose tag indicates which variant is present, an <code>UnspecifiedShape</code> carries no indication of which field is initialized, so reading from any field of a union is unsafe.</p>
+
+<p>When a union is dropped, Rust again has no way to tell which field as in use. Therefore <span data-claim-test="unsafe-union-drop">unions can’t have fields that implement <code>Drop</code>.</span></p>
+
+<p>Unions are useful in very narrow circumstances.</p>
+
+<ul>
+	<li>
+	<p>They can be used to roll your own <code>enum</code>-like types. Sometimes an <code>enum</code> with several fields can be reimplemented using a <code>union</code> in a way that saves a whole machine word and has a safe API. There’s rarely more than one type in your program that merits this amount of effort, but when a program uses a hundred million values of a single type, the savings add up.</p>
+	</li>
+	<li>
+	<p>Unions provide a way to reinterpret raw bytes as struct types, or vice versa: declare a union where one field is an array of <code>u8</code>, and the other is the desired struct. (This can be handy when interpreting a binary file or network packet. When possible, though, it’s better to do this safely using the <code>bytemuck</code> crate.)</p>
+	</li>
+	<li>
+	<p>Sometimes, when Rust needs to call or be called from code in another language, unions can be a way of sharing data across the language boundary. C doesn’t have Rust-style enums with fields, for instance, but it does have unions.<a contenteditable="false" data-startref="ix_unsafe_code_unions" data-type="indexterm" id="id2622"/><a contenteditable="false" data-startref="ix_mem_unions" data-type="indexterm" id="id2623"/><a contenteditable="false" data-startref="ix_unions" data-type="indexterm" id="id2624"/><a contenteditable="false" data-startref="ix_unsafe_code_ch22" data-type="indexterm" id="id2625"/></p>
+	</li>
+</ul>
+
+<p>Calling back and forth between Rust and other languages is the topic of the next chapter. As we’ll see, Rust helps you build safe interfaces not only for your own unsafe code but also for code written in other languages.</p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id2582"><sup><a href="ch23.html#id2582-marker">1</a></sup> Well, it’s a classic where we come from.</p></div></div>
+      </section>
+    </div>
+  </body>
+</html>

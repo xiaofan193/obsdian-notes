@@ -1,0 +1,892 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch14.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 14. Closures">
+        <div class="chapter" id="closures">
+<h1><span class="label">Chapter 14. </span>Closures</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id1506"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the fourteenth chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>Save the environment! Create a closure today!</p>
+
+<p data-type="attribution">Cormac Flanagan</p>
+</blockquote>
+
+<p>Sorting a vector<a contenteditable="false" data-primary="closures" data-type="indexterm" id="ix_closures_ch13"/> of integers is easy:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-01">
+<code class="n">integers</code><code class="p">.</code><code class="n">sort</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>It is, therefore, a sad fact that when we want some data sorted, it’s hardly ever a vector of integers. We typically have records of some kind, and the built-in <code>sort</code> method typically does not work:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-02">
+<code class="k">struct</code><code class="w"> </code><code class="nc">City</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">name</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">population</code><code class="p">:</code><code class="w"> </code><code class="kt">i64</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">country</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">sort_cities</code><code class="p">(</code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">cities</code><code class="p">.</code><code class="n">sort</code><code class="p">();</code><code class="w">  </code><code class="c1">// error: how do you want them sorted?</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Rust complains that <code>City</code> does not implement <code>std::cmp::Ord</code>. We need to specify the sort order, like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-03">
+<code class="sd">/// Helper function for sorting cities by latitude.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">city_latitude</code><code class="p">(</code><code class="n">city</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">City</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">i64</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">city</code><code class="p">.</code><code class="n">latitude</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">sort_cities</code><code class="p">(</code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">cities</code><code class="p">.</code><code class="n">sort_by_key</code><code class="p">(</code><code class="n">city_latitude</code><code class="p">);</code><code class="w">  </code><code class="c1">// ok</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The helper function, <code>city_latitude</code>, takes a <code>City</code> record and extracts the <em>key</em>, the field by which we want to sort our data. The <code>sort_by_key</code> method takes this key-function as a parameter.</p>
+
+<p>This works fine, but it’s more concise to write the helper function as a <em>closure</em>, an anonymous function expression:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-04">
+<code class="k">fn</code><code class="w"> </code><code class="nf">sort_cities</code><code class="p">(</code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">cities</code><code class="p">.</code><code class="n">sort_by_key</code><code class="p">(</code><code class="o">|</code><code class="n">city</code><code class="o">|</code><code class="w"> </code><code class="n">city</code><code class="p">.</code><code class="n">latitude</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The closure here is <code>|city| city.latitude</code>. It takes an argument <code>city</code> and returns <code>city.latitude</code>. Rust infers the argument type and return type from how the closure is used.</p>
+
+<p>Other examples of standard library features that accept closures include:</p>
+
+<ul>
+	<li>
+	<p><code>Iterator</code> methods such as <code>map</code> and <code>filter</code>, for working with sequential data. We’ll cover these methods in <a data-type="xref" href="ch15.html#iterators">Chapter 15</a>.</p>
+	</li>
+	<li>
+	<p>Threading APIs like <code>thread::spawn</code>, which starts a new system thread. Concurrency is all about moving work to other threads, and closures conveniently represent units of work. We’ll cover these features in <a data-type="xref" href="ch19.html#threads">Chapter 19</a>.</p>
+	</li>
+	<li>
+	<p>Some methods that conditionally need to compute a default value, like the <code>or_insert_with</code> method of <code>HashMap</code> entries. This method either gets or creates an entry in a <code>HashMap</code>, and it’s used when the default value is expensive to compute. The default value is passed in as a closure that is called only if a new entry must be created.</p>
+	</li>
+</ul>
+
+<p>Of course, anonymous functions are everywhere these days, even in languages like Java, C#, Python, and C‍++ that didn’t originally have them. We’ll assume you’ve seen anonymous functions before and focus on what makes Rust’s closures a little different. In this chapter, you’ll learn how to use closures with standard library methods, how a closure can “capture” variables in its scope, how to write your own functions and methods that take closures as arguments, and how to store closures for later use as callbacks. We’ll also explain how Rust closures are implemented and why they’re faster than you might expect.</p>
+
+<section data-type="sect1" data-pdf-bookmark="Capturing Variables"><div class="sect1" id="capturing-variables">
+<h1>Capturing Variables</h1>
+
+<p>A closure<a contenteditable="false" data-primary="variable capture" data-type="indexterm" id="id1507"/><a contenteditable="false" data-primary="closures" data-secondary="capturing variables" data-type="indexterm" id="id1508"/> can use data that belongs to an enclosing function. For example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-05">
+<code class="sd">/// Sorts cities by population according to a demographic database.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">sort_by_population</code><code class="p">(</code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">db</code><code class="p">:</code><code class="w"> </code><code class="nc">Demographics</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">cities</code><code class="p">.</code><code class="n">sort_by_key</code><code class="p">(</code><code class="o">|</code><code class="n">city</code><code class="o">|</code><code class="w"> </code><code class="n">db</code><code class="p">.</code><code class="n">get_population</code><code class="p">(</code><code class="n">city</code><code class="p">));</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The closure here uses <code>db</code>, which is owned by the enclosing function, <code>sort_by_population</code>. We say that the closure “captures” <code>db</code>. This is one of the classic features of closures, so naturally, Rust supports it; but in Rust, this feature comes with a string attached.</p>
+
+<p>In most languages with closures, garbage collection<a contenteditable="false" data-primary="garbage collection" data-type="indexterm" id="id1509"/> plays an important role. For example, consider this JavaScript code:</p>
+
+<pre class="javascript" data-code-language="javascript" data-type="programlisting">
+<code class="c1">// Starts an animation that rearranges the rows in a table of cities.</code>
+<code class="kd">function</code> <code class="nx">startSortingAnimation</code><code class="p">(</code><code class="nx">cities</code><code class="p">,</code> <code class="nx">db</code><code class="p">)</code> <code class="p">{</code>
+    <code class="c1">// Helper function that we'll use to sort the table.</code>
+    <code class="c1">// Note that this function refers to db.</code>
+    <code class="kd">function</code> <code class="nx">keyfn</code><code class="p">(</code><code class="nx">city</code><code class="p">)</code> <code class="p">{</code>
+        <code class="k">return</code> <code class="nx">db</code><code class="p">.</code><code class="nx">get_population</code><code class="p">(</code><code class="nx">city</code><code class="p">);</code>
+    <code class="p">}</code>
+
+    <code class="k">if</code> <code class="p">(</code><code class="nx">pendingSort</code><code class="p">)</code>
+        <code class="nx">pendingSort</code><code class="p">.</code><code class="nx">cancel</code><code class="p">();</code>
+
+    <code class="c1">// Now kick off an animation, passing keyfn to it.</code>
+    <code class="c1">// The sorting algorithm will call keyfn later.</code>
+    <code class="nx">pendingSort</code> <code class="o">=</code> <code class="k">new</code> <code class="nx">SortingAnimation</code><code class="p">(</code><code class="nx">cities</code><code class="p">,</code> <code class="nx">keyfn</code><code class="p">);</code>
+<code class="p">}</code>
+</pre>
+
+<p>The closure <code>keyfn</code> is stored in the new <code>SortingAnimation</code> object. It’s meant to be called after <code>startSortingAnimation</code> returns. Now, normally when a function returns, all its variables and arguments go out of scope and are discarded. But here, the JavaScript engine must keep <code>db</code> around somehow, since the closure uses it. Most JavaScript engines do this by allocating <code>db</code> in the heap and letting the garbage collector reclaim it later.</p>
+
+<p>Rust doesn’t have garbage collection. How will this work? To answer this question, we’ll look at two examples.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Closures That Borrow"><div class="sect2" id="closures-that-borrow">
+<h2>Closures That Borrow</h2>
+
+<p>First, let’s repeat<a contenteditable="false" data-primary="closures" data-secondary="borrowing references" data-type="indexterm" id="id1510"/> the opening example of this section:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-05b">
+<code class="sd">/// Sorts cities by population according to a demographic database.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">sort_by_population</code><code class="p">(</code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">db</code><code class="p">:</code><code class="w"> </code><code class="nc">Demographics</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">cities</code><code class="p">.</code><code class="n">sort_by_key</code><code class="p">(</code><code class="o">|</code><code class="n">city</code><code class="o">|</code><code class="w"> </code><code class="n">db</code><code class="p">.</code><code class="n">get_population</code><code class="p">(</code><code class="n">city</code><code class="p">));</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In this case, when Rust creates the closure, it automatically borrows a reference<a contenteditable="false" data-primary="references (pointer type)" data-secondary="borrowing" data-type="indexterm" id="id1511"/> to <code>db</code>. It stands to reason: the closure refers to <code>db</code>, so it must have a reference to it.</p>
+
+<p>The rest is simple. The closure is subject to the rules about borrowing and lifetimes that we described in <a data-type="xref" href="ch05.html#references">Chapter 5</a>. In particular, since the closure contains a reference to <code>db</code>, Rust won’t let it outlive <code>db</code>. Since the closure is only used during sorting, this example is fine.</p>
+
+<p>In short, Rust ensures safety by using lifetimes instead of garbage collection. Rust’s way is faster: even a fast GC allocation will be slower than storing <code>db</code> on the stack, as Rust does in this case.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Closures That Steal"><div class="sect2" id="closures-that-steal">
+<h2>Closures That Steal</h2>
+
+<p>The second example is trickier:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-06">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">start_sorting_thread</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="k">mut</code><code class="w"> </code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">db</code><code class="p">:</code><code class="w"> </code><code class="nc">Demographics</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">thread</code><code class="p">::</code><code class="n">JoinHandle</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">key_fn</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">city</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">City</code><code class="o">|</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="kt">i64</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">db</code><code class="p">.</code><code class="n">get_population</code><code class="p">(</code><code class="n">city</code><code class="p">)</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="n">thread</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">cities</code><code class="p">.</code><code class="n">sort_by_key</code><code class="p">(</code><code class="n">key_fn</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">cities</code><code class="w"/>
+<code class="w">    </code><code class="p">})</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is a bit more like what our JavaScript example was doing: <code>thread::spawn</code> takes a closure and calls it in a new system thread. Note that <code>||</code> is the closure’s empty argument list.</p>
+
+<p>The new thread runs in parallel with the caller. When the closure returns, the new thread exits. (The closure’s return value is sent back to the calling thread as a <code>JoinHandle</code> value. We’ll cover that in <a data-type="xref" href="ch19.html#threads">Chapter 19</a>.)</p>
+
+<p>Again, the closure <code>key_fn</code> contains a reference to <code>db</code>. But this time, Rust can’t guarantee that the reference is used safely. Rust therefore rejects this program:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: closure may outlive the current function, but it borrows `db`,</code>
+<code class="go">       which is owned by the current function</code>
+<code class="go">   |</code>
+<code class="go">33 | let key_fn = |city: &amp;City| -&gt; Option&lt;i64&gt; { db.get_population(city) };</code>
+<code class="go">   |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^   -- `db` is borrowed here</code>
+<code class="go">   |              |</code>
+<code class="go">   |              may outlive borrowed value `db`</code>
+</pre>
+
+<p>In fact, there are two problems here, because <code>cities</code> is shared unsafely as well. Quite simply, the new thread created by <code>thread::spawn</code> might not finish its work before <code>cities</code> and <code>db</code> are destroyed at the end of the function.</p>
+
+<p>The solution<a contenteditable="false" data-primary="moves" data-secondary="closures and" data-type="indexterm" id="id1512"/><a contenteditable="false" data-primary="closures" data-secondary="move keyword" data-type="indexterm" id="id1513"/> to both problems is the same: tell Rust to <em>move</em> <code>cities</code> and <code>db</code> into the closures that use them instead of borrowing references to them.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-07">
+<code class="k">fn</code><code class="w"> </code><code class="nf">start_sorting_thread</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="k">mut</code><code class="w"> </code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">db</code><code class="p">:</code><code class="w"> </code><code class="nc">Demographics</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">thread</code><code class="p">::</code><code class="n">JoinHandle</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">key_fn</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">move</code><code class="w"> </code><code class="o">|</code><code class="n">city</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">City</code><code class="o">|</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="kt">i64</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">db</code><code class="p">.</code><code class="n">get_population</code><code class="p">(</code><code class="n">city</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="n">thread</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">cities</code><code class="p">.</code><code class="n">sort_by_key</code><code class="p">(</code><code class="n">key_fn</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">cities</code><code class="w"/>
+<code class="w">    </code><code class="p">})</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The only thing we’ve changed is to add the <code>move</code> keyword before each of the two closures. The <code>move</code> keyword tells Rust that, even if it looks like a closure only uses references to the variables it uses, it doesn’t just borrow those variables: it steals them.</p>
+
+<p>The first closure, <code>key_fn</code>, takes ownership of <code>db</code>. Then the second closure takes ownership of both <code>cities</code> and <code>key_fn</code>.</p>
+
+<p>Rust thus offers two ways for closures to get data from enclosing scopes: moves and borrowing. Rust will infer whether or not a closure needs to steal any captured values, but it only considers the body of the closure, not its context. The <code>move</code> keyword lets us override Rust’s decision-making. Otherwise, closures follow the same rules about moves and borrowing that we already covered in Chapters <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch04.html#ownership">4</a> and <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch05.html#references">5</a>. A few cases in point:</p>
+
+<ul>
+	<li>
+	<p>Just as everywhere else in the language, if a closure would move a value of a copyable type, like <code>i32</code>, it copies the value instead. So if <code>Demographics</code> happened to be a copyable type, we could keep using <code>db</code> even after creating a <code>move</code> closure that uses it.</p>
+	</li>
+	<li>
+	<p>Values of noncopyable types, like <code>Vec&lt;City&gt;</code>, really are moved: the preceding code transfers <code>cities</code> to the new thread, by way of the <code>move</code> closure. Rust would not let us access <code>cities</code> by name after creating the closure.</p>
+	</li>
+	<li>
+	<p>As it happens, this code doesn’t need to use <code>cities</code> after the point where the closure moves it. If we did, though, the workaround would be easy: we could tell Rust to clone <code>cities</code> and store the copy in a different variable. The closure would only steal one of the copies—whichever one it refers to.</p>
+	</li>
+</ul>
+
+<p>We get something important by accepting Rust’s strict rules: thread safety. It is precisely because the vector is moved, rather than being shared across threads, that we know the old thread won’t free the vector while the new thread is modifying it.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Function and Closure Types"><div class="sect1" id="function-and-closure-types">
+<h1>Function and Closure Types</h1>
+
+<p>Throughout this chapter, we’ve seen functions<a contenteditable="false" data-primary="functions" data-secondary="types" data-type="indexterm" id="ix_functions_types2"/> and closures used as values. Naturally, this means that they have types<a contenteditable="false" data-primary="types" data-secondary="of closures and functions" data-secondary-sortas="closures and functions" data-type="indexterm" id="ix_types_closures"/><a contenteditable="false" data-primary="closures" data-secondary="types" data-type="indexterm" id="ix_closures_types"/>. For example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-08">
+<code class="k">fn</code><code class="w"> </code><code class="nf">city_latitude</code><code class="p">(</code><code class="n">city</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">City</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">i64</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">city</code><code class="p">.</code><code class="n">latitude</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This function takes one argument (a <code>&amp;City</code>) and returns an <code>i64</code>. It has the type <code>fn(&amp;City) -&gt; i64</code>.</p>
+
+<p>You can do all the same things with functions that you do with other values. You can store them in variables. You can use all the usual Rust syntax to compute function values:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-09">
+<code class="c1">// Choose between two functions of type `fn (&amp;City) -&gt; f64`</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">my_key_fn</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">user</code><code class="p">.</code><code class="n">prefs</code><code class="p">.</code><code class="n">latitude_sort</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">city_latitude</code><code class="w"/>
+<code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">city_longitude</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+
+<code class="n">cities</code><code class="p">.</code><code class="n">sort_by_key</code><code class="p">(</code><code class="n">my_key_fn</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Structs may have function-typed fields. Generic types like <code>Vec</code> can store scads of functions, called <em>function pointers<a contenteditable="false" data-primary="fn type" data-type="indexterm" id="id1514"/><a contenteditable="false" data-primary="function pointers (fn type)" data-type="indexterm" id="id1515"/></em>, or <code>fn</code> types. These types, such as <code>fn(u32) -&gt; u32</code>, act a lot like closures:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-29">
+<code class="k">fn</code><code class="w"> </code><code class="nf">add_ten</code><code class="p">(</code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">u32</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">x</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">10</code><code class="w"> </code>
+<code class="p">}</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">fn_ptr</code><code class="p">:</code><code class="w"> </code><code class="nc">fn</code><code class="p">(</code><code class="kt">u32</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">u32</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">add_ten</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">eleven</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fn_ptr</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w">  </code><code class="c1">//11</code>
+</pre>
+
+<p>In fact, closures that don’t capture anything from their environment are effectively <code>fn</code>s, since they don’t need to hold any extra information about captured variables. If you specify the appropriate <code>fn</code> type, either in a binding or in a function signature, the compiler is happy to let you use them that way:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-30">
+<code class="kd">let</code><code class="w"> </code><code class="n">closure_ptr</code><code class="p">:</code><code class="w"> </code><code class="nc">fn</code><code class="p">(</code><code class="kt">u32</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">u32</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">x</code><code class="o">|</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">two</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">closure_ptr</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w">  </code><code class="c1">// 2</code>
+</pre>
+
+<p>Unlike capturing closures, these function pointers are tiny, consisting only of the memory address of the function’s machine code, just like a function pointer in C‍++.</p>
+
+<p>A function can also take another function as an argument. For example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-10">
+<code class="sd">/// Given a list of cities and a test function,</code>
+<code class="sd">/// this counts how many cities pass the test.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">count_selected_cities</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">test_fn</code><code class="p">:</code><code class="w"> </code><code class="nc">fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">City</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">city</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">cities</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">test_fn</code><code class="p">(</code><code class="n">city</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">count</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">count</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="sd">/// An example of a test function. Note that the type of</code>
+<code class="sd">/// this function is `fn(&amp;City) -&gt; bool`, the same as</code>
+<code class="sd">/// the `test_fn` argument to `count_selected_cities`.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">is_irish</code><code class="p">(</code><code class="n">city</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">City</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">city</code><code class="p">.</code><code class="n">country</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="s">"Ireland"</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="c1">// How many cities are in Ireland?</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">n</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">count_selected_cities</code><code class="p">(</code><code class="o">&amp;</code><code class="n">my_cities</code><code class="p">,</code><code class="w"> </code><code class="n">is_irish</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>If you’re familiar with function pointers in C/C‍++, you’ll see that Rust’s function values are exactly the same thing.</p>
+
+<p>After all this, it may come as a surprise that closures do <em>not</em> have the same type as functions:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-11">
+<code class="kd">let</code><code class="w"> </code><code class="n">country</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">preferences</code><code class="p">.</code><code class="n">country</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">n</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">count_selected_cities</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="o">&amp;</code><code class="n">my_cities</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="o">|</code><code class="n">city</code><code class="o">|</code><code class="w"> </code><code class="n">city</code><code class="p">.</code><code class="n">country</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">country</code><code class="p">,</code><code class="w">  </code><code class="c1">// error: mismatched types</code>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The second argument causes a type error. To support closures, we must change the type signature of this function. It needs to look like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-12">
+<code class="k">fn</code><code class="w"> </code><code class="nf">count_selected_cities</code><code class="o">&lt;</code><code class="n">F</code><code class="o">&gt;</code><code class="p">(</code><code class="n">cities</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">City</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">test_fn</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">usize</code><code class="w"/>
+<code class="nc">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">Fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">City</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">city</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">cities</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">test_fn</code><code class="p">(</code><code class="n">city</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">count</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">count</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>We have changed only the type signature of <code>count_selected_cities</code>, not the body. The new version is generic. It takes a <code>test_fn</code> of any type <code>F</code> as long as <code>F</code> implements the special trait <code>Fn(&amp;City) -&gt; bool</code>. This trait is automatically implemented by all functions and most closures that take a single <code>&amp;City</code> as an argument and return a Boolean value:</p>
+
+<pre data-code-language="rust" data-testing-pragma="oneliners" data-type="programlisting" id="test-closure-types">
+<code class="k">fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">City</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w">    </code><code class="c1">// fn type (function pointer: fn or non-capturing closure)</code>
+<code class="nb">Fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">City</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w">    </code><code class="c1">// Fn trait (also covers capturing closure types)</code>
+</pre>
+
+<p>This special syntax is built into the language. The <code>-&gt;</code> and return type are optional; if omitted, the return type is <code>()</code>.</p>
+
+<p>The new version of <code>count_selected_cities</code> accepts either a function or a closure:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-13">
+<code class="n">count_selected_cities</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="o">&amp;</code><code class="n">my_cities</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">is_irish</code><code class="p">,</code><code class="w">  </code><code class="c1">// ok</code>
+<code class="p">);</code><code class="w"/>
+
+<code class="n">count_selected_cities</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="o">&amp;</code><code class="n">my_cities</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="o">|</code><code class="n">city</code><code class="o">|</code><code class="w"> </code><code class="n">city</code><code class="p">.</code><code class="n">country</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="s">"Ireland"</code><code class="p">,</code><code class="w">  </code><code class="c1">// also ok</code>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Why didn’t our first attempt work? Well, a closure is callable, but it’s not necessarily as simple as a function pointer; a closure can be used as a function pointer, written <code>fn</code>, only if it doesn’t capture any variables. The closure <code>|city| city.country == "Ireland"</code> has its own type that’s not a <code>fn</code> type.</p>
+
+<p>In fact, every closure you write has its own type, because a closure may contain data: values either borrowed or stolen from enclosing scopes. This could be any number of variables, in any combination of types. So every closure has an ad hoc type created by the compiler, large enough to hold that data. No two closures have exactly the same type. But every closure implements a <code>Fn</code> trait; the closure in our example implements <code>Fn(&amp;City) -&gt; i64</code>.</p>
+
+<p>Since every closure has its own type, code that works with closures usually needs to be generic, like <code>count_selected_cities</code>. It’s a little clunky to spell out the generic types each time, but to see the advantages of this design, just read on<a contenteditable="false" data-startref="ix_types_closures" data-type="indexterm" id="id1516"/><a contenteditable="false" data-startref="ix_closures_types" data-type="indexterm" id="id1517"/><a contenteditable="false" data-startref="ix_functions_types2" data-type="indexterm" id="id1518"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Closure Performance"><div class="sect1" id="closure-performance">
+<h1>Closure Performance</h1>
+
+<p>Rust’s closures<a contenteditable="false" data-primary="closures" data-secondary="performance" data-type="indexterm" id="id1519"/> are designed to be fast: faster than function pointers, fast enough that you can use them even in red-hot, performance-sensitive code. If you’re familiar with C‍++ lambdas, you’ll find that Rust closures are just as fast and compact, but safer.</p>
+
+<p>In most languages, closures are allocated in the heap, dynamically dispatched, and garbage collected. So creating, calling, and collecting each of them costs a tiny bit of extra CPU time. Worse, closures tend to rule out <em>inlining<a contenteditable="false" data-primary="inlining" data-type="indexterm" id="id1520"/></em>, a key technique compilers use to eliminate function call overhead and enable a raft of other optimizations. All told, closures are slow enough in these languages that it can be worth manually removing them from tight inner loops.</p>
+
+<p>Rust closures have none of these performance drawbacks. They’re not garbage collected. Like everything else in Rust, they aren’t allocated in the heap unless you put them in a <code>Box</code>, <code>Vec</code>, or other container. And since each closure has a distinct type, whenever the Rust compiler knows the type of the closure you’re calling, it can inline the code for that particular closure. This makes it OK to use closures in tight loops, and Rust programs often do so, enthusiastically, as you’ll see in <a data-type="xref" href="ch15.html#iterators">Chapter 15</a>.</p>
+
+<p><a data-type="xref" href="#closures-layout">Figure 14-1</a> shows how Rust closures are laid out in memory<a contenteditable="false" data-primary="memory" data-secondary="closure layout in" data-type="indexterm" id="id1521"/><a contenteditable="false" data-primary="closures" data-secondary="layout in memory" data-type="indexterm" id="id1522"/>. At the top of the figure, we show a couple of local variables that our closures will refer to: a string <code>food</code> and a simple enum <code>weather</code>, whose numeric value happens to be 27.</p>
+
+<figure><div id="closures-layout" class="figure"><img alt="Picture showing three closures labeled (a), (b), and (c)." src="assets/pru3_1401.png" width="600" height="386"/>
+<h6><span class="label">Figure 14-1. </span>Layout of closures in memory</h6>
+</div></figure>
+
+<p>Closure (a) uses both variables. Apparently we’re looking for cities that have both tacos and tornadoes. In memory, this closure looks like a small struct containing references to the variables it uses.</p>
+
+<p>Note that it doesn’t contain a pointer to its code! That’s not necessary: as long as Rust knows the closure’s type, it knows which code to run when you call it.</p>
+
+<p>Closure (b) is exactly the same, except it’s a <code>move</code> closure, so it contains values instead of references.</p>
+
+<p>Closure (c) doesn’t use any variables from its environment. The struct is empty, so this closure does not take up any memory at all.</p>
+
+<p>As the figure shows, these closures don’t take up much space. But even those few bytes are not always needed in practice. Often, the compiler can inline all calls to a closure, and then even the small structs shown in this figure are optimized away.</p>
+
+<p>In <a data-type="xref" href="#callbacks">“Callbacks”</a>, we’ll show how to allocate closures in the heap and call them dynamically, using <code>dyn</code>. That is a bit slower, but it is still as fast as any other <code>dyn</code> method call.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Closures and Safety"><div class="sect1" id="closures-and-safety">
+<h1>Closures and Safety</h1>
+
+<p>Throughout<a contenteditable="false" data-primary="safety" data-secondary="closures and" data-type="indexterm" id="ix_safety_closures"/><a contenteditable="false" data-primary="closures" data-secondary="safety" data-type="indexterm" id="ix_closures_safety"/> the chapter so far, we’ve talked about how Rust ensures that closures respect the language’s safety rules when they borrow or move variables from the surrounding code. But there are some further consequences that are not exactly obvious. In this section, we’ll explain a bit more about what happens when a closure drops or modifies a captured value.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Closures That Kill"><div class="sect2" id="closures-that-kill">
+<h2>Closures That Kill</h2>
+
+<p>We have seen closures<a contenteditable="false" data-primary="values" data-secondary="dropping" data-type="indexterm" id="ix_values_drop"/><a contenteditable="false" data-primary="dropping values" data-secondary="in closures" data-secondary-sortas="closures" data-type="indexterm" id="ix_drop_closures"/><a contenteditable="false" data-primary="closures" data-secondary="“that kill”" data-secondary-sortas="that kill" data-type="indexterm" id="id1523"/> that borrow values and closures that steal them; it was only a matter of time before they went all the way bad.</p>
+
+<p>Of course, <em>kill</em> is not really the right terminology. In Rust, we <em>drop<a contenteditable="false" data-primary="closures" data-secondary="dropping values" data-type="indexterm" id="ix_closures_dropping"/></em> values. The most straightforward way to do it is to call <code>drop()</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closure-that-kills">
+<code class="kd">let</code><code class="w"> </code><code class="n">my_string</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"hello"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">f</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="nb">drop</code><code class="p">(</code><code class="n">my_string</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>When <code>f</code> is called, <code>my_string</code> is dropped. Note that we don’t have to write <code>move</code> here. Rust is smart enough to see that we <em>must</em> mean for <code>my_string</code> to be stolen by <code>f</code>.</p>
+
+<p>So what happens if we call it twice?</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-killer-suspense">
+<code class="n">f</code><code class="p">();</code><code class="w"/>
+<code class="n">f</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>Let’s think it through. The first time we call <code>f</code>, it drops <code>my_string</code>, which means the memory where the string is stored is freed, returned to the system. The second time we call <code>f</code>, the same thing happens. It’s a <em>double free</em>, a classic mistake in C‍++ programming that triggers undefined behavior.</p>
+
+<p>Dropping a <code>String</code> twice would be an equally bad idea in Rust. Fortunately, Rust can’t be fooled so easily:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-killer-revealed">
+<code class="n">f</code><code class="p">();</code><code class="w">  </code><code class="c1">// ok</code>
+<code class="n">f</code><code class="p">();</code><code class="w">  </code><code class="c1">// error: use of moved value</code>
+</pre>
+
+<p>Rust knows this closure can’t be called twice.</p>
+
+<p>A closure that can be called only once may seem like a rather extraordinary thing, but we’ve been talking throughout this book about ownership and lifetimes. The idea of values being used up (that is, moved) is one of the core concepts in Rust. It works the same with closures as with everything else.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="FnOnce"><div class="sect2" id="fnonce">
+<h2>FnOnce</h2>
+
+<p>Let’s try once<a contenteditable="false" data-primary="closures" data-secondary="FnOnce" data-type="indexterm" id="ix_closures_fnonce"/><a contenteditable="false" data-primary="dropping values" data-secondary="FnOnce" data-type="indexterm" id="ix_drop_fnonce"/><a contenteditable="false" data-primary="FnOnce trait" data-type="indexterm" id="ix_fnonce"/> more to trick Rust into dropping a <code>String</code> twice. This time, we’ll use this generic function:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-14">
+<code class="k">fn</code><code class="w"> </code><code class="nf">call_twice</code><code class="o">&lt;</code><code class="n">F</code><code class="o">&gt;</code><code class="p">(</code><code class="n">closure</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">Fn</code><code class="p">(),</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">closure</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">closure</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This generic function may be passed any closure that implements the trait <code>Fn()</code>: that is, closures that take no arguments and return <code>()</code>. (As with functions, the return type can be omitted if it’s <code>()</code>; <code>Fn()</code> is shorthand for <code>Fn() -&gt; ()</code>.)</p>
+
+<p>Now what happens if we pass our unsafe closure to this generic function?</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-15">
+<code class="kd">let</code><code class="w"> </code><code class="n">my_string</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"hello"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">f</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="nb">drop</code><code class="p">(</code><code class="n">my_string</code><code class="p">);</code><code class="w"/>
+<code class="n">call_twice</code><code class="p">(</code><code class="n">f</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Again, the closure will drop <code>my_string</code> when it’s called. Calling it twice would be a double free. But again, Rust is not fooled:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: expected a closure that implements the `Fn` trait, but</code>
+<code class="go">       this closure only implements `FnOnce`</code>
+<code class="go">    |</code>
+<code class="go">  8 | let f = || drop(my_string);</code>
+<code class="go">    |         ^^      ---------</code>
+<code class="go">    |         |       |</code>
+<code class="go">    |         |       closure is `FnOnce` because it moves the variable</code>
+<code class="go">    |         |       `my_string` out of its environment</code>
+<code class="go">    |         this closure implements `FnOnce`, not `Fn`</code>
+<code class="go">  9 | call_twice(f);</code>
+<code class="go">    |            - the requirement to implement `Fn` derives from here</code>
+</pre>
+
+<p>This error message tells us more about how Rust handles “closures that kill.” They could have been banned from the language entirely, but cleanup closures are useful sometimes. So instead, Rust restricts their use. Closures that drop values, like <code>f</code>, are not allowed to have <code>Fn</code>. They are, quite literally, no <code>Fn</code> at all. They implement a less powerful trait, <code>FnOnce</code>, the trait of closures that can be called once.</p>
+
+<p>The first time you call a <code>FnOnce</code> closure, <em>the closure itself is used up.</em> It’s as though the two traits, <code>Fn</code> and <code>FnOnce</code>, were defined like this:</p>
+
+<pre>
+// Pseudocode for `Fn` and `FnOnce` traits with no arguments.
+trait <strong>Fn() -&gt; R</strong> {
+    fn call(<strong>&amp;self</strong>) -&gt; R;
+}
+
+trait <strong>FnOnce() -&gt; R</strong> {
+    fn call_once(<strong>self</strong>) -&gt; R;
+}
+</pre>
+
+<p>Just as an arithmetic expression like <code>a + b</code> is shorthand for a method call, <code>Add::add(a, b)</code>, Rust treats <code>closure()</code> as shorthand for one of the two trait methods shown in the preceding example. For a <code>Fn</code> closure, <code>closure()</code> expands to <code>closure.call()</code>. This method takes <code>self</code> by reference, so the closure is not moved. But if the closure is only safe to call once, then <code>closure()</code> expands to <code>closure.call_once()</code>. That method takes <code>self</code> by value, so the closure is used up.</p>
+
+<p>Of course we’ve been deliberately stirring up trouble here by using <code>drop()</code>. In practice, you’ll mostly get into this situation by accident. It doesn’t happen often, but once in a great while you’ll write some closure code that unintentionally uses up a value:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-16">
+<code class="kd">let</code><code class="w"> </code><code class="n">dict</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">produce_glossary</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">debug_dump_dict</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">key</code><code class="p">,</code><code class="w"> </code><code class="n">value</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">dict</code><code class="w"> </code><code class="p">{</code><code class="w">  </code><code class="c1">// oops!</code>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{key:?} - {value:?}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>Then, when you call <code>debug_dump_dict()</code> more than once, you’ll get an error message like this:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: use of moved value: `debug_dump_dict`</code>
+<code class="go">   |</code>
+<code class="go">19 |     debug_dump_dict();</code>
+<code class="go">   |     ----------------- `debug_dump_dict` moved due to this call</code>
+<code class="go">20 |     debug_dump_dict();</code>
+<code class="go">   |     ^^^^^^^^^^^^^^^ value used here after move</code>
+<code class="go">   |</code>
+<code class="go">note: closure cannot be invoked more than once because it moves the variable</code>
+<code class="go">`dict` out of its environment</code>
+<code class="go">   |</code>
+<code class="go">13 |         for (key, value) in dict {</code>
+<code class="go">   |                             ^^^^</code>
+</pre>
+
+<p>To debug this, we have to figure out why the closure is a <code>FnOnce</code>. Which value is being used up here? The compiler helpfully points out that it’s <code>dict</code>, which in this case is the only one we’re referring to at all. Ah, there’s the bug: we’re using up <code>dict</code> by iterating over it directly. We should be looping over <code>&amp;dict</code>, rather than plain <code>dict</code>, to access the values by reference:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-17">
+<code class="kd">let</code><code class="w"> </code><code class="n">debug_dump_dict</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">key</code><code class="p">,</code><code class="w"> </code><code class="n">value</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">dict</code><code class="w"> </code><code class="p">{</code><code class="w">  </code><code class="c1">// does not use up dict</code>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{key:?} - {value:?}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>This fixes the error; the function is now a <code>Fn</code> and can be called any number of times<a contenteditable="false" data-startref="ix_values_drop" data-type="indexterm" id="id1524"/><a contenteditable="false" data-startref="ix_closures_fnonce" data-type="indexterm" id="id1525"/><a contenteditable="false" data-startref="ix_drop_fnonce" data-type="indexterm" id="id1526"/><a contenteditable="false" data-startref="ix_drop_closures" data-type="indexterm" id="id1527"/><a contenteditable="false" data-startref="ix_fnonce" data-type="indexterm" id="id1528"/><a contenteditable="false" data-startref="ix_closures_dropping" data-type="indexterm" id="id1529"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="FnMut"><div class="sect2" id="fnmut">
+<h2>FnMut</h2>
+
+<p>There is one more kind of closure<a contenteditable="false" data-primary="mutable references (&amp;mut T)" data-secondary="FnMut" data-type="indexterm" id="ix_mutable_refs_fnmut"/><a contenteditable="false" data-primary="FnMut trait" data-type="indexterm" id="ix_fnmut_trait"/><a contenteditable="false" data-primary="closures" data-secondary="FnMut" data-type="indexterm" id="ix_closures_fnmut"/>, the kind that contains mutable data or <code>mut</code> <span class="keep-together">references.</span></p>
+
+<p>Rust considers non-<code>mut</code> values safe to share across threads. But it wouldn’t be safe to share non-<code>mut</code> closures that contain <code>mut</code> data: calling such a closure from multiple threads could lead to all sorts of race conditions as multiple threads try to read and write the same data at the same time.</p>
+
+<p>Therefore, Rust has one more category of closure, <code>FnMut</code>, the category of closures that write. <code>FnMut</code> closures are called by <code>mut</code> reference, as if they were defined like this:</p>
+
+<pre>
+// Pseudocode for `Fn`, `FnMut`, and `FnOnce` traits.
+trait Fn() -&gt; R {
+    fn call(&amp;self) -&gt; R;
+}
+
+trait <strong>FnMut() -&gt; R</strong> {
+    fn call_mut(<strong>&amp;mut self</strong>) -&gt; R;
+}
+
+trait FnOnce() -&gt; R {
+    fn call_once(self) -&gt; R;
+}
+</pre>
+
+<p>Any closure that requires <code>mut</code> access to a value, but doesn’t drop any values, is a <code>FnMut</code> closure. For example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-fnmut">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">incr</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">i</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w">  </code><code class="c1">// incr borrows a mut reference to i</code>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Ding! i is now: {i}"</code><code class="p">);</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+<code class="n">call_twice</code><code class="p">(</code><code class="n">incr</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The way we wrote <code>call_twice</code>, it requires a <code>Fn</code>. Since <code>incr</code> is a <code>FnMut</code> and not a <code>Fn</code>, this code fails to compile. There’s an easy fix, though. To understand the fix, let’s take a step back and summarize what you’ve learned about the three categories of Rust closures.</p>
+
+<ul>
+	<li>
+	<p><code>Fn</code> is the family<a contenteditable="false" data-primary="Fn trait" data-type="indexterm" id="id1530"/> of closures and functions that you can call multiple times without restriction. This highest category also includes all <code>fn</code> functions.</p>
+	</li>
+	<li>
+	<p><code>FnMut</code> is the family of closures that can be called multiple times if the closure itself is declared <code>mut</code>.</p>
+	</li>
+	<li>
+	<p><code>FnOnce</code> is the family of closures that can be called once, if the caller owns the <span class="keep-together">closure.</span></p>
+	</li>
+</ul>
+
+<p>Every <code>Fn</code> meets the requirements for <code>FnMut</code>, and every <code>FnMut</code> meets the requirements for <code>FnOnce</code>. As shown in <a data-type="xref" href="#closure-venn-diagram">Figure 14-2</a>, they’re not three separate categories.</p>
+
+<p>Instead, <code>Fn()</code> is a subtrait of <code>FnMut()</code>, which is a subtrait of <code>FnOnce()</code>. This makes <code>Fn</code> the most exclusive and most powerful category. <code>FnMut</code> and <code>FnOnce</code> are broader categories that include closures with usage restrictions.</p>
+
+<figure><div id="closure-venn-diagram" class="figure"><img alt="Picture showing Fn as the innermost circle, enclosed by FnMut, which is enclosed by FnOnce." src="assets/pru3_1402.png" width="600" height="359"/>
+<h6><span class="label">Figure 14-2. </span>Venn diagram of the three closure categories</h6>
+</div></figure>
+
+<p>Now that we’ve organized what we know, it’s clear that to accept the widest possible swath of closures, our <code>call_twice</code> function really ought to accept all <code>FnMut</code> closures, like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-18">
+<code class="k">fn</code><code class="w"> </code><code class="nf">call_twice</code><code class="o">&lt;</code><code class="n">F</code><code class="o">&gt;</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">closure</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">FnMut</code><code class="p">(),</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">closure</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">closure</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The bound on the first line was <code>F: Fn()</code>, and now it’s <code>F: FnMut()</code>. With this change, we still accept all <code>Fn</code> closures, and we additionally can use <code>call_twice</code> on closures that mutate data<a contenteditable="false" data-startref="ix_mutable_refs_fnmut" data-type="indexterm" id="id1531"/><a contenteditable="false" data-startref="ix_closures_fnmut" data-type="indexterm" id="id1532"/><a contenteditable="false" data-startref="ix_fnmut_trait" data-type="indexterm" id="id1533"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-19">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="n">call_twice</code><code class="p">(</code><code class="o">||</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w">  </code><code class="c1">// ok!</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">i</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Copy and Clone for Closures"><div class="sect2" id="copy-and-clone-for-closures">
+<h2>Copy and Clone for Closures</h2>
+
+<p>Just as Rust automatically figures out which closures can be called only once, it can figure out which closures<a contenteditable="false" data-primary="Copy type" data-type="indexterm" id="id1534"/><a contenteditable="false" data-primary="utility traits" data-secondary="Clone" data-type="indexterm" id="id1535"/><a contenteditable="false" data-primary="utility traits" data-secondary="Copy" data-type="indexterm" id="id1536"/><a contenteditable="false" data-primary="closures" data-secondary="Clone for" data-type="indexterm" id="id1537"/><a contenteditable="false" data-primary="closures" data-secondary="Copy for" data-type="indexterm" id="id1538"/><a contenteditable="false" data-primary="Clone trait" data-type="indexterm" id="id1539"/> can implement <code>Copy</code> and <code>Clone</code>, and which cannot.</p>
+
+<p>As we explained earlier, closures are represented as structs that contain either the values (for <code>move</code> closures) or references to the values (for non-<code>move</code> closures) of the variables they capture. The rules for <code>Copy</code> and <code>Clone</code> on closures are just like the <code>Copy</code> and <code>Clone</code> rules for regular structs. A non-<code>move</code> closure that doesn’t mutate variables holds only shared references, which are both <code>Clone</code> and <code>Copy</code>, so that closure is both <code>Clone</code> and <code>Copy</code> as well:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closure-impls-Copy">
+<code class="kd">let</code><code class="w"> </code><code class="n">y</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">10</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">add_y</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">x</code><code class="o">|</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">y</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">copy_of_add_y</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">add_y</code><code class="p">;</code><code class="w">                 </code><code class="c1">// This closure is `Copy`, so...</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">add_y</code><code class="p">(</code><code class="n">copy_of_add_y</code><code class="p">(</code><code class="mi">22</code><code class="p">)),</code><code class="w"> </code><code class="mi">42</code><code class="p">);</code><code class="w">  </code><code class="c1">// ... we can call both.</code>
+</pre>
+
+<p>On the other hand, a non-<code>move</code> closure that <em>does</em> mutate values has mutable references within its internal representation. Mutable references are neither <code>Clone</code> nor <code>Copy</code>, so neither is a closure that uses them:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closure-neither-Copy-nor-Clone">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">add_to_x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">|</code><code class="n">n</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="n">n</code><code class="p">;</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">copy_of_add_to_x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">add_to_x</code><code class="p">;</code><code class="w">         </code><code class="c1">// this moves, rather than copies</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">add_to_x</code><code class="p">(</code><code class="n">copy_of_add_to_x</code><code class="p">(</code><code class="mi">1</code><code class="p">)),</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w">  </code><code class="c1">// error: use of moved value</code>
+</pre>
+
+<p>For a <code>move</code> closure, the rules are even simpler. If everything a <code>move</code> closure captures is <code>Copy</code>, it’s <code>Copy</code>. If everything it captures is <code>Clone</code>, it’s <code>Clone</code>. For instance:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closure-Clone">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">greeting</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code class="p">::</code><code class="n">from</code><code class="p">(</code><code class="s">"Hello, "</code><code class="p">);</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">greet</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">move</code><code class="w"> </code><code class="o">|</code><code class="n">name</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">greeting</code><code class="p">.</code><code class="n">push_str</code><code class="p">(</code><code class="n">name</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{greeting}"</code><code class="p">);</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+<code class="n">greet</code><code class="p">.</code><code class="n">clone</code><code class="p">()(</code><code class="s">"Alfred"</code><code class="p">);</code><code class="w"/>
+<code class="n">greet</code><code class="p">.</code><code class="n">clone</code><code class="p">()(</code><code class="s">"Bruce"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This <code>.clone()(...)</code> syntax is a little weird, but it just means that we clone the closure and then call the clone. This program outputs:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">Hello, Alfred</code>
+<code class="go">Hello, Bruce</code>
+</pre>
+
+<p>When <code>greeting</code> is used in <code>greet</code>, it’s moved into the struct that represents <code>greet</code> internally, because it’s a <code>move</code> closure. So, when we clone <code>greet</code>, everything inside it is cloned, too. There are two copies of <code>greeting</code>, which are each modified separately when the clones of <code>greet</code> are called. This isn’t so useful on its own, but when you need to pass the same closure into more than one function, it can be very helpful<a contenteditable="false" data-startref="ix_closures_safety" data-type="indexterm" id="id1540"/><a contenteditable="false" data-startref="ix_safety_closures" data-type="indexterm" id="id1541"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Callbacks"><div class="sect1" id="callbacks">
+<h1>Callbacks</h1>
+
+<p>A lot of libraries use <em>callbacks<a contenteditable="false" data-primary="closures" data-secondary="callbacks" data-type="indexterm" id="ix_closure_callback"/><a contenteditable="false" data-primary="callbacks, closures and" data-type="indexterm" id="ix_callback_closure"/></em> as part of their API: functions provided by the user, for the library to call later. In fact, you’ve seen some APIs like that already in this book. Back in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>, we used the <code>actix-web</code> framework<a contenteditable="false" data-primary="actix-web framework" data-type="indexterm" id="id1542"/> to write a simple web server. One important part of that program was the router<a contenteditable="false" data-primary="routers, callbacks and" data-type="indexterm" id="ix_router_callback"/>, which looked like this:</p>
+
+<pre class="ignore" data-code-language="rust" data-type="programlisting">
+<code class="n">App</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">route</code><code class="p">(</code><code class="s">"/"</code><code class="p">,</code><code class="w"> </code><code class="n">web</code><code class="p">::</code><code class="n">get</code><code class="p">().</code><code class="n">to</code><code class="p">(</code><code class="n">get_index</code><code class="p">))</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">route</code><code class="p">(</code><code class="s">"/gcd"</code><code class="p">,</code><code class="w"> </code><code class="n">web</code><code class="p">::</code><code class="n">post</code><code class="p">().</code><code class="n">to</code><code class="p">(</code><code class="n">post_gcd</code><code class="p">))</code><code class="w"/>
+</pre>
+
+<p>The purpose of the router is to route incoming requests from the Internet to the bit of Rust code that handles that particular kind of request. In this example, <code>get_index</code> and <code>post_gcd</code> were the names of functions that we declared elsewhere in the program, using the <code>fn</code> keyword. But we could have passed closures instead, like this:</p>
+
+<pre class="ignore" data-code-language="rust" data-type="programlisting">
+<code class="n">App</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">route</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="s">"/"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">web</code><code class="p">::</code><code class="n">get</code><code class="p">().</code><code class="n">to</code><code class="p">(</code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">HttpResponse</code><code class="p">::</code><code class="nb">Ok</code><code class="p">()</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">content_type</code><code class="p">(</code><code class="s">"text/html"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">body</code><code class="p">(</code><code class="s">"&lt;title&gt;GCD Calculator&lt;/title&gt;..."</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">}),</code><code class="w"/>
+<code class="w">    </code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">route</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="s">"/gcd"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">web</code><code class="p">::</code><code class="n">post</code><code class="p">().</code><code class="n">to</code><code class="p">(</code><code class="o">|</code><code class="n">form</code><code class="p">:</code><code class="w"> </code><code class="nc">web</code><code class="p">::</code><code class="n">Form</code><code class="o">&lt;</code><code class="n">GcdParameters</code><code class="o">&gt;|</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">HttpResponse</code><code class="p">::</code><code class="nb">Ok</code><code class="p">()</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">content_type</code><code class="p">(</code><code class="s">"text/html"</code><code class="p">)</code><code class="w"/>
+<code class="w">                </code><code class="p">.</code><code class="n">body</code><code class="p">(</code><code class="fm">format!</code><code class="p">(</code><code class="w"/>
+<code class="w">                    </code><code class="s">"The GCD of {} and {} is {}."</code><code class="p">,</code><code class="w"/>
+<code class="w">                    </code><code class="n">form</code><code class="p">.</code><code class="n">n</code><code class="p">,</code><code class="w"> </code><code class="n">form</code><code class="p">.</code><code class="n">m</code><code class="p">,</code><code class="w"> </code><code class="n">gcd</code><code class="p">(</code><code class="n">form</code><code class="p">.</code><code class="n">n</code><code class="p">,</code><code class="w"> </code><code class="n">form</code><code class="p">.</code><code class="n">m</code><code class="p">),</code><code class="w"/>
+<code class="w">                </code><code class="p">))</code><code class="w"/>
+<code class="w">        </code><code class="p">}),</code><code class="w"/>
+<code class="w">    </code><code class="p">)</code><code class="w"/>
+</pre>
+
+<p>This is because <code>actix-web</code> was written to accept any thread-safe <code>Fn</code> as an argument.</p>
+
+<p>How can we do that in our own programs? Let’s try writing our own very simple router from scratch, without using any code from <code>actix-web</code>. We can begin by declaring a few types to represent HTTP requests and responses:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-20">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Request</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">method</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">url</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">headers</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="o">&lt;</code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">body</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">struct</code><code class="w"> </code><code class="nc">Response</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">code</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">headers</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="o">&lt;</code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><code class="nb">String</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">body</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Now the job of a router is simply to store a table that maps URLs to callbacks so that the right callback can be called on demand. (For simplicity’s sake, we’ll only allow users to create routes that match a single exact URL.)</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-21">
+<code class="k">struct</code><code class="w"> </code><code class="nc">BasicRouter</code><code class="o">&lt;</code><code class="n">C</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">C</code><code class="p">:</code><code class="w"> </code><code class="nb">Fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Request</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Response</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">routes</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="o">&lt;</code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><code class="n">C</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">C</code><code class="o">&gt;</code><code class="w"> </code><code class="n">BasicRouter</code><code class="o">&lt;</code><code class="n">C</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">C</code><code class="p">:</code><code class="w"> </code><code class="nb">Fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Request</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Response</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Creates an empty router.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">BasicRouter</code><code class="o">&lt;</code><code class="n">C</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">BasicRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">routes</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Adds a route to the router.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add_route</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">url</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">callback</code><code class="p">:</code><code class="w"> </code><code class="nc">C</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">routes</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="n">url</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">callback</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Unfortunately, we’ve made a mistake. Did you notice it?</p>
+
+<p>This router works fine as long as we add only one route to it:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-22">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">router</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">BasicRouter</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="n">router</code><code class="p">.</code><code class="n">add_route</code><code class="p">(</code><code class="s">"/"</code><code class="p">,</code><code class="w"> </code><code class="o">|</code><code class="n">_</code><code class="o">|</code><code class="w"> </code><code class="n">get_form_response</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>This much compiles and runs. Unfortunately, if we add another route:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-23">
+<code class="n">router</code><code class="p">.</code><code class="n">add_route</code><code class="p">(</code><code class="s">"/gcd"</code><code class="p">,</code><code class="w"> </code><code class="o">|</code><code class="n">req</code><code class="o">|</code><code class="w"> </code><code class="n">get_gcd_response</code><code class="p">(</code><code class="n">req</code><code class="p">));</code><code class="w"/>
+</pre>
+
+<p>then we get errors:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: mismatched types</code>
+<code class="go">   |</code>
+<code class="go">71 |     router.add_route("/gcd", |req| get_gcd_response(req));</code>
+<code class="go">   |            ---------         ^^^^^^^^^^^^^^^^^^^^^^^^^^^</code>
+<code class="go">   |            |                 expected closure, found a different closure</code>
+<code class="go">   |            arguments to this method are incorrect</code>
+<code class="go">   |</code>
+<code class="go">   = note: expected closure `{closure@bad_router.rs:70:27: 70:30}`</code>
+<code class="go">              found closure `{closure@bad_router.rs:71:30: 71:35}`</code>
+<code class="go">   = note: no two closures, even if identical, have the same type</code>
+<code class="go">   = help: consider boxing your closure and/or using it as a trait object</code>
+</pre>
+
+<p>Our mistake was in how we defined the <code>BasicRouter</code> type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-24">
+<code class="k">struct</code><code class="w"> </code><code class="nc">BasicRouter</code><code class="o">&lt;</code><code class="n">C</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">C</code><code class="p">:</code><code class="w"> </code><code class="nb">Fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Request</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Response</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">routes</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="o">&lt;</code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><code class="n">C</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>We unwittingly declared that each <code>BasicRouter</code> has a single callback type <code>C</code>, and all the callbacks in the <code>HashMap</code> are of that type. Back in <a data-type="xref" href="ch11.html#which-to-use">“Which to Use”</a>, we showed a <code>Salad</code> type that had the same problem:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-25">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Salad</code><code class="o">&lt;</code><code class="n">V</code><code class="p">:</code><code class="w"> </code><code class="nc">Vegetable</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">veggies</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">V</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The solution here is the same as for the salad: since we want to support a variety of types, we need to use boxes and <code>dyn</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-26">
+<code class="k">type</code><code class="w"> </code><code class="nc">BoxedCallback</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="nb">Fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Request</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Response</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+
+<code class="k">struct</code><code class="w"> </code><code class="nc">BasicRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">routes</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="o">&lt;</code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><code class="n">BoxedCallback</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Each box can contain a different type of closure, so a single <code>HashMap</code> can contain all sorts of callbacks. Note that the type parameter <code>C</code> is gone.</p>
+
+<p>This requires a few adjustments to the methods:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-27">
+<code class="k">impl</code><code class="w"> </code><code class="n">BasicRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Create an empty router.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">BasicRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">BasicRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">routes</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Add a route to the router.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add_route</code><code class="o">&lt;</code><code class="n">C</code><code class="o">&gt;</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">url</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">callback</code><code class="p">:</code><code class="w"> </code><code class="nc">C</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="k">where</code><code class="w"/>
+<code class="w">        </code><code class="n">C</code><code class="p">:</code><code class="w"> </code><code class="nb">Fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Request</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Response</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">routes</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="n">url</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">callback</code><code class="p">));</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>Note the two bounds on <code>C</code> in the type signature for <code>add_route</code>: a particular <code>Fn</code> trait and the <code>'static</code> lifetime. Rust makes us add this <code>'static</code> bound. Without it, the call to <code>Box::new(callback)</code> would be an error, because it’s not safe to store a closure if it contains borrowed references to variables that are about to go out of scope.</p>
+</div>
+
+<p>Finally, our simple router is ready to handle incoming requests:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-28">
+<code class="k">impl</code><code class="w"> </code><code class="n">BasicRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">handle_request</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">request</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Request</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Response</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">routes</code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="o">&amp;</code><code class="n">request</code><code class="p">.</code><code class="n">url</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">not_found_response</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="nb">Some</code><code class="p">(</code><code class="n">callback</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">callback</code><code class="p">(</code><code class="n">request</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>At the cost of some flexibility, we could also write a more space-efficient version of this router that, rather than storing trait objects, uses function pointers. The routing table would look like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-31">
+<code class="k">struct</code><code class="w"> </code><code class="nc">FnPointerRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">routes</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="o">&lt;</code><code class="nb">String</code><code class="p">,</code><code class="w"> </code><code class="k">fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Request</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Response</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here, the <code>HashMap</code> is storing just a single <code>usize</code> per <code>String</code>, and critically, there’s no <code>Box</code>. In exchange for not supporting capturing closures, we’ve removed all dynamic allocation aside from the <code>HashMap</code> itself. Of course, the methods need to be adjusted as well:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-closures-32">
+<code class="k">impl</code><code class="w"> </code><code class="n">FnPointerRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Create an empty router.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">FnPointerRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">FnPointerRouter</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">routes</code><code class="p">:</code><code class="w"> </code><code class="nc">HashMap</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Add a route to the router.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add_route</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">url</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">callback</code><code class="p">:</code><code class="w"> </code><code class="nc">fn</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Request</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Response</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">routes</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="n">url</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="n">callback</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"> </code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>As laid out in <a data-type="xref" href="#closures-layout">Figure 14-1</a>, closures have unique types because each one captures different variables, so among other things, they’re each a different size. If they don’t capture anything, though, there’s nothing to store. By using <code>fn</code> pointers in functions that take callbacks, you can restrict a caller to use only these noncapturing closures, gaining some performance and flexibility within the code using callbacks at the cost of flexibility for the users of your API<a contenteditable="false" data-startref="ix_router_callback" data-type="indexterm" id="id1543"/><a contenteditable="false" data-startref="ix_callback_closure" data-type="indexterm" id="id1544"/><a contenteditable="false" data-startref="ix_closure_callback" data-type="indexterm" id="id1545"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Using Closures Effectively"><div class="sect1" id="using-closures-effectively">
+<h1>Using Closures Effectively</h1>
+
+<p>As we’ve seen, Rust’s closures<a contenteditable="false" data-primary="closures" data-secondary="effective use of" data-type="indexterm" id="id1546"/> are different from closures in most other languages. The biggest difference is that in languages with GC, you can use local variables in a closure without having to think about lifetimes or ownership. Without GC, things are different. Some design patterns that are commonplace in Java, C#, and JavaScript won’t work in Rust without changes.</p>
+
+<p>For example, take the Model-View-Controller design<a contenteditable="false" data-primary="MVC (Model-View-Controller)" data-type="indexterm" id="id1547"/> pattern (MVC for short), illustrated in <a data-type="xref" href="#mvc-diagram">Figure 14-3</a>. For every element of a user interface, an MVC framework creates three objects: a <em>model</em> representing that UI element’s state, a <em>view</em> that’s responsible for its appearance, and a <em>controller</em> that handles user interaction. Countless variations on MVC have been implemented over the years, but the general idea is that three objects divvy up the UI responsibilities somehow.</p>
+
+<p>Here’s the problem. Typically, each object has a reference to one or both of the others, directly or through a callback, as shown in <a data-type="xref" href="#mvc-diagram">Figure 14-3</a>. Whenever anything happens to one of the objects, it notifies the others, so everything updates promptly. The question of which object “owns” the others never comes up.</p>
+
+<figure><div id="mvc-diagram" class="figure"><img alt="Graph showing three objects, connected by arrows. Some of the arrows are labeled 'via callback'." src="assets/pru3_1403.png" width="551" height="247"/>
+<h6><span class="label">Figure 14-3. </span>The Model-View-Controller design pattern</h6>
+</div></figure>
+
+<p>You can’t implement this pattern in Rust without making some changes. Ownership must be made explicit, and reference cycles must be eliminated. The model and the controller can’t have direct references to each other.</p>
+
+<p>Rust’s radical wager is that good alternative designs exist. Sometimes you can fix a problem with closure ownership and lifetimes by having each closure receive the references it needs as arguments. Sometimes you can assign each thing in the system a number and pass around the numbers instead of references. Or you can implement one of the many variations on MVC where the objects don’t all have references to each other. Or model your toolkit after a non-MVC system with unidirectional data flow, like the Elm<a contenteditable="false" data-primary="Elm architecture" data-type="indexterm" id="id1548"/> architecture, shown in <a data-type="xref" href="#elm-diagram">Figure 14-4</a>, which was pioneered by the Elm language and is used in the Rust library <code>relm</code> and popular web development libraries like React and Redux.</p>
+
+<figure><div id="elm-diagram" class="figure"><img alt="Graph showing four boxes: Action, Dispatcher, Store, View. A user is also shown. Arrows point in a loop from user input, through the four boxes in order, to the user's display." src="assets/pru3_1404.png" width="600" height="188"/>
+<h6><span class="label">Figure 14-4. </span>The Elm architecture, an alternative to MVC</h6>
+</div></figure>
+
+<p>In short, if you try to use Rust closures to make a “sea of objects,” you’re going to have a hard time. But there are alternatives. In this case, it seems software engineering as a discipline is already gravitating to the alternatives anyway, because they’re simpler.</p>
+
+<p>In the next chapter, we turn to a topic where closures really shine. We’ll be writing a kind of code that takes full advantage of the concision, speed, and efficiency of Rust closures and that’s fun to write, easy to read, and eminently practical. Up next: Rust iterators<a contenteditable="false" data-startref="ix_closures_ch13" data-type="indexterm" id="id1549"/>.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

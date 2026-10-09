@@ -1,0 +1,1607 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en" xml:lang="en">
+  <head>
+    <title>Programming Rust 3Rd</title>
+  </head>
+  <body>
+    <nav epub:type="toc" id="id" role="doc-toc">
+      <h2>Programming Rust 3Rd</h2>
+      <ol>
+        <li>
+          <a href="preface01.html">Preface</a>
+          <ol>
+            <li>
+              <a href="preface01.html">Who Should Read This Book</a>
+            </li>
+            <li>
+              <a href="preface01.html">Why We Wrote This Book</a>
+            </li>
+            <li>
+              <a href="preface01.html">Navigating This Book</a>
+            </li>
+            <li>
+              <a href="preface01.html">Conventions Used in This Book</a>
+            </li>
+            <li>
+              <a href="preface01.html">Using Code Examples</a>
+            </li>
+            <li>
+              <a href="preface01.html">O’Reilly Online Learning</a>
+            </li>
+            <li>
+              <a href="preface01.html">How to Contact Us</a>
+            </li>
+            <li>
+              <a href="preface01.html">Acknowledgments</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch01.html">1. Systems Programmers Can Have Nice Things</a>
+          <ol>
+            <li>
+              <a href="ch01.html">Rust Shoulders the Load for You</a>
+            </li>
+            <li>
+              <a href="ch01.html">Parallel Programming Is Tamed</a>
+            </li>
+            <li>
+              <a href="ch01.html">And Yet Rust Is Still Fast</a>
+            </li>
+            <li>
+              <a href="ch01.html">Rust Makes Collaboration Easier</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch02.html">2. A Tour of Rust</a>
+          <ol>
+            <li>
+              <a href="ch02.html">rustup and Cargo</a>
+            </li>
+            <li>
+              <a href="ch02.html">Rust Functions</a>
+            </li>
+            <li>
+              <a href="ch02.html">Writing and Running Unit Tests</a>
+            </li>
+            <li>
+              <a href="ch02.html">Handling Command-Line Arguments</a>
+            </li>
+            <li>
+              <a href="ch02.html">Serving Pages to the Web</a>
+            </li>
+            <li>
+              <a href="ch02.html">Concurrency</a>
+              <ol>
+                <li>
+                  <a href="ch02.html">What the Mandelbrot Set Actually Is</a>
+                </li>
+                <li>
+                  <a href="ch02.html">Parsing Pair Command-Line Arguments</a>
+                </li>
+                <li>
+                  <a href="ch02.html">Mapping from Pixels to Complex Numbers</a>
+                </li>
+                <li>
+                  <a href="ch02.html">Plotting the Set</a>
+                </li>
+                <li>
+                  <a href="ch02.html">Writing Image Files</a>
+                </li>
+                <li>
+                  <a href="ch02.html">A Concurrent Mandelbrot Program</a>
+                </li>
+                <li>
+                  <a href="ch02.html">Safety Is Invisible</a>
+                </li>
+              </ol>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch03.html">3. Fundamental Types</a>
+          <ol>
+            <li>
+              <a href="ch03.html">Numeric Types</a>
+              <ol>
+                <li>
+                  <a href="ch03.html">Integer Types</a>
+                </li>
+                <li>
+                  <a href="ch03.html">Handling Integer Overflow</a>
+                </li>
+                <li>
+                  <a href="ch03.html">Floating-Point Types</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch03.html">The bool Type</a>
+            </li>
+            <li>
+              <a href="ch03.html">Tuples</a>
+            </li>
+            <li>
+              <a href="ch03.html">Pointer Types</a>
+            </li>
+            <li>
+              <a href="ch03.html">Arrays, Vectors, and Slices</a>
+              <ol>
+                <li>
+                  <a href="ch03.html">Arrays</a>
+                </li>
+                <li>
+                  <a href="ch03.html">Vectors</a>
+                </li>
+                <li>
+                  <a href="ch03.html">Slices</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch03.html">String and Character Types</a>
+              <ol>
+                <li>
+                  <a href="ch03.html">String and Character Literals</a>
+                </li>
+                <li>
+                  <a href="ch03.html">Characters and Strings in Memory</a>
+                </li>
+                <li>
+                  <a href="ch03.html">String</a>
+                </li>
+                <li>
+                  <a href="ch03.html">Using Strings</a>
+                </li>
+                <li>
+                  <a href="ch03.html">Other String-Like Types</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch03.html">Type Aliases</a>
+            </li>
+            <li>
+              <a href="ch03.html">Beyond the Basics</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch04.html">4. Ownership and Moves</a>
+          <ol>
+            <li>
+              <a href="ch04.html">Ownership</a>
+            </li>
+            <li>
+              <a href="ch04.html">Moves</a>
+              <ol>
+                <li>
+                  <a href="ch04.html">More Operations That Move</a>
+                </li>
+                <li>
+                  <a href="ch04.html">Moves and Control Flow</a>
+                </li>
+                <li>
+                  <a href="ch04.html">Moves and Indexed Content</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch04.html">Copy Types: The Exception to Moves</a>
+            </li>
+            <li>
+              <a href="ch04.html">Rc and Arc: Shared Ownership</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch05.html">5. References</a>
+          <ol>
+            <li>
+              <a href="ch05.html">Reference Basics</a>
+            </li>
+            <li>
+              <a href="ch05.html">Working with References</a>
+              <ol>
+                <li>
+                  <a href="ch05.html">Implicit and Explicit References</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Assigning References</a>
+                </li>
+                <li>
+                  <a href="ch05.html">References to References</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Comparing References</a>
+                </li>
+                <li>
+                  <a href="ch05.html">References Are Never Null</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Borrowing References to Arbitrary Expressions</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Fat Pointers</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch05.html">Reference Safety</a>
+              <ol>
+                <li>
+                  <a href="ch05.html">Borrowing a Local Variable</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Receiving References as Function Arguments</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Passing References to Functions</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Returning References</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Structs Containing References</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Distinct Lifetime Parameters</a>
+                </li>
+                <li>
+                  <a href="ch05.html">Omitting Lifetime Parameters</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch05.html">Sharing Versus Mutation</a>
+            </li>
+            <li>
+              <a href="ch05.html">Taking Arms Against a Sea of Objects</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch06.html">6. Expressions</a>
+          <ol>
+            <li>
+              <a href="ch06.html">An Expression Language</a>
+            </li>
+            <li>
+              <a href="ch06.html">Blocks</a>
+              <ol>
+                <li>
+                  <a href="ch06.html">Declarations</a>
+                </li>
+                <li>
+                  <a href="ch06.html">if and match</a>
+                </li>
+                <li>
+                  <a href="ch06.html">if let</a>
+                </li>
+                <li>
+                  <a href="ch06.html">let else</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Loops</a>
+                </li>
+                <li>
+                  <a href="ch06.html">break and continue Expressions</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Labeled Blocks</a>
+                </li>
+                <li>
+                  <a href="ch06.html">return Expressions</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Why Rust Has loop</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch06.html">const and unsafe Blocks</a>
+            </li>
+            <li>
+              <a href="ch06.html">Operators</a>
+              <ol>
+                <li>
+                  <a href="ch06.html">Function and Method Calls</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Fields and Elements</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Reference Operators</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Arithmetic, Bitwise, Comparison, and Logical Operators</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Assignment</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Type Casts</a>
+                </li>
+                <li>
+                  <a href="ch06.html">Closures</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch06.html">Onward</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch07.html">7. Error Handling</a>
+          <ol>
+            <li>
+              <a href="ch07.html">Panic</a>
+              <ol>
+                <li>
+                  <a href="ch07.html">Unwinding</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Aborting</a>
+                </li>
+                <li>
+                  <a href="ch07.html">The Panic Hook</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Other Panic Macros</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch07.html">Result</a>
+              <ol>
+                <li>
+                  <a href="ch07.html">Catching Errors</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Printing Errors</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Propagating Errors</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Result Methods</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Result Type Aliases</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Working with Multiple Error Types</a>
+                </li>
+                <li>
+                  <a href="ch07.html">A Universal Error Type: anyhow</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Defining Custom Error Types</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Dealing with Errors That “Can’t Happen”</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Ignoring Errors</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Handling Errors in main()</a>
+                </li>
+                <li>
+                  <a href="ch07.html">Why Results?</a>
+                </li>
+              </ol>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch08.html">8. Crates and Modules</a>
+          <ol>
+            <li>
+              <a href="ch08.html">Crates</a>
+              <ol>
+                <li>
+                  <a href="ch08.html">Editions</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Rust Versions</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Build Profiles</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch08.html">Modules</a>
+              <ol>
+                <li>
+                  <a href="ch08.html">Nested Modules</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Modules in Separate Files</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Paths and Imports</a>
+                </li>
+                <li>
+                  <a href="ch08.html">The Standard Prelude</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Making use Declarations pub</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Making Struct Fields pub</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Constants and Statics</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch08.html">Turning a Program into a Library</a>
+            </li>
+            <li>
+              <a href="ch08.html">The src/bin Directory</a>
+            </li>
+            <li>
+              <a href="ch08.html">Attributes</a>
+            </li>
+            <li>
+              <a href="ch08.html">Conditional Compilation</a>
+            </li>
+            <li>
+              <a href="ch08.html">The Build Environment</a>
+            </li>
+            <li>
+              <a href="ch08.html">Including Files</a>
+            </li>
+            <li>
+              <a href="ch08.html">Tests and Documentation</a>
+              <ol>
+                <li>
+                  <a href="ch08.html">Integration Tests</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Documentation</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Doc-Tests</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch08.html">Specifying Dependencies</a>
+              <ol>
+                <li>
+                  <a href="ch08.html">Versions</a>
+                </li>
+                <li>
+                  <a href="ch08.html">Cargo.lock</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch08.html">Build Scripts</a>
+            </li>
+            <li>
+              <a href="ch08.html">Publishing Crates to crates.io</a>
+            </li>
+            <li>
+              <a href="ch08.html">Workspaces</a>
+            </li>
+            <li>
+              <a href="ch08.html">More Nice Things</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch09.html">9. Structs</a>
+          <ol>
+            <li>
+              <a href="ch09.html">Defining Structs</a>
+            </li>
+            <li>
+              <a href="ch09.html">Other Kinds of Structs</a>
+              <ol>
+                <li>
+                  <a href="ch09.html">Tuple Structs</a>
+                </li>
+                <li>
+                  <a href="ch09.html">Unit-Like Structs</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch09.html">Struct Layout</a>
+            </li>
+            <li>
+              <a href="ch09.html">Defining Methods with impl</a>
+              <ol>
+                <li>
+                  <a href="ch09.html">Passing Self as a Box, Rc, or Arc</a>
+                </li>
+                <li>
+                  <a href="ch09.html">Non-Method Associated Functions</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch09.html">Associated Constants</a>
+            </li>
+            <li>
+              <a href="ch09.html">Generic Structs</a>
+            </li>
+            <li>
+              <a href="ch09.html">Generic Structs with Lifetime Parameters</a>
+            </li>
+            <li>
+              <a href="ch09.html">Generic Structs with Constant Parameters</a>
+            </li>
+            <li>
+              <a href="ch09.html">Deriving Common Traits for Struct Types</a>
+            </li>
+            <li>
+              <a href="ch09.html">Interior Mutability</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch10.html">10. Enums and Patterns</a>
+          <ol>
+            <li>
+              <a href="ch10.html">Enums</a>
+              <ol>
+                <li>
+                  <a href="ch10.html">Enums with Data</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Enums in Memory</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Rich Data Structures Using Enums</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Generic Enums</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch10.html">Patterns</a>
+              <ol>
+                <li>
+                  <a href="ch10.html">Literals, Variables, and Wildcards in Patterns</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Tuple and Struct Patterns</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Matching References</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Reference Patterns</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Array and Slice Patterns</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Match Guards</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Matching Multiple Possibilities</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Binding with @ Patterns</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Where Patterns Are Allowed</a>
+                </li>
+                <li>
+                  <a href="ch10.html">Populating a Binary Tree</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch10.html">Public Enums and Compatibility</a>
+            </li>
+            <li>
+              <a href="ch10.html">The Big Picture</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch11.html">11. Traits and Generics</a>
+          <ol>
+            <li>
+              <a href="ch11.html">Using Traits</a>
+              <ol>
+                <li>
+                  <a href="ch11.html">Using dyn</a>
+                  <ol>
+                    <li>
+                      <a href="ch11.html">dyn Reference Layout</a>
+                    </li>
+                  </ol>
+                </li>
+                <li>
+                  <a href="ch11.html">Generic Functions and Type Parameters</a>
+                </li>
+                <li>
+                  <a href="ch11.html">Which to Use</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch11.html">Defining and Implementing Traits</a>
+              <ol>
+                <li>
+                  <a href="ch11.html">Default Methods</a>
+                </li>
+                <li>
+                  <a href="ch11.html">Traits and Other People’s Types</a>
+                </li>
+                <li>
+                  <a href="ch11.html">Self in Traits</a>
+                </li>
+                <li>
+                  <a href="ch11.html">Subtraits</a>
+                </li>
+                <li>
+                  <a href="ch11.html">Associated Functions</a>
+                </li>
+                <li>
+                  <a href="ch11.html">Associated Constants</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch11.html">Fully Qualified Method Calls</a>
+            </li>
+            <li>
+              <a href="ch11.html">Traits That Define Relationships Between Types</a>
+              <ol>
+                <li>
+                  <a href="ch11.html">Associated Types (or How Iterators Work)</a>
+                </li>
+                <li>
+                  <a href="ch11.html">Generic Traits (or How Operator Overloading Works)</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch11.html">impl Trait</a>
+            </li>
+            <li>
+              <a href="ch11.html">Lifetime Bounds</a>
+            </li>
+            <li>
+              <a href="ch11.html">use Bounds</a>
+            </li>
+            <li>
+              <a href="ch11.html">Reverse-Engineering Bounds</a>
+            </li>
+            <li>
+              <a href="ch11.html">Traits as a Foundation</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch12.html">12. Operator Overloading</a>
+          <ol>
+            <li>
+              <a href="ch12.html">Arithmetic and Bitwise Operators</a>
+              <ol>
+                <li>
+                  <a href="ch12.html">Unary Operators</a>
+                </li>
+                <li>
+                  <a href="ch12.html">Binary Operators</a>
+                </li>
+                <li>
+                  <a href="ch12.html">Compound Assignment Operators</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch12.html">Equivalence Comparisons</a>
+              <ol>
+                <li>
+                  <a href="ch12.html">The Eq Trait (Or: Equality vs. NaN)</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch12.html">Ordered Comparisons</a>
+            </li>
+            <li>
+              <a href="ch12.html">Index and IndexMut</a>
+            </li>
+            <li>
+              <a href="ch12.html">Other Operators</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch13.html">13. Utility Traits</a>
+          <ol>
+            <li>
+              <a href="ch13.html">Drop</a>
+            </li>
+            <li>
+              <a href="ch13.html">Sized</a>
+            </li>
+            <li>
+              <a href="ch13.html">Clone</a>
+            </li>
+            <li>
+              <a href="ch13.html">Copy</a>
+            </li>
+            <li>
+              <a href="ch13.html">Deref and DerefMut</a>
+            </li>
+            <li>
+              <a href="ch13.html">Default</a>
+            </li>
+            <li>
+              <a href="ch13.html">AsRef and AsMut</a>
+            </li>
+            <li>
+              <a href="ch13.html">Borrow and BorrowMut</a>
+            </li>
+            <li>
+              <a href="ch13.html">From and Into</a>
+            </li>
+            <li>
+              <a href="ch13.html">TryFrom and TryInto</a>
+            </li>
+            <li>
+              <a href="ch13.html">ToOwned</a>
+            </li>
+            <li>
+              <a href="ch13.html">Borrow and ToOwned at Work: The Humble Cow</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch14.html">14. Closures</a>
+          <ol>
+            <li>
+              <a href="ch14.html">Capturing Variables</a>
+              <ol>
+                <li>
+                  <a href="ch14.html">Closures That Borrow</a>
+                </li>
+                <li>
+                  <a href="ch14.html">Closures That Steal</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch14.html">Function and Closure Types</a>
+            </li>
+            <li>
+              <a href="ch14.html">Closure Performance</a>
+            </li>
+            <li>
+              <a href="ch14.html">Closures and Safety</a>
+              <ol>
+                <li>
+                  <a href="ch14.html">Closures That Kill</a>
+                </li>
+                <li>
+                  <a href="ch14.html">FnOnce</a>
+                </li>
+                <li>
+                  <a href="ch14.html">FnMut</a>
+                </li>
+                <li>
+                  <a href="ch14.html">Copy and Clone for Closures</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch14.html">Callbacks</a>
+            </li>
+            <li>
+              <a href="ch14.html">Using Closures Effectively</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch15.html">15. Iterators</a>
+          <ol>
+            <li>
+              <a href="ch15.html">The Iterator and IntoIterator Traits</a>
+            </li>
+            <li>
+              <a href="ch15.html">Creating Iterators</a>
+              <ol>
+                <li>
+                  <a href="ch15.html">iter and iter_mut Methods</a>
+                </li>
+                <li>
+                  <a href="ch15.html">IntoIterator Implementations</a>
+                </li>
+                <li>
+                  <a href="ch15.html">from_fn and successors</a>
+                </li>
+                <li>
+                  <a href="ch15.html">drain Methods</a>
+                </li>
+                <li>
+                  <a href="ch15.html">Other Iterator Sources</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch15.html">Iterator Adapters</a>
+              <ol>
+                <li>
+                  <a href="ch15.html">map and filter</a>
+                </li>
+                <li>
+                  <a href="ch15.html">filter_map and flat_map</a>
+                </li>
+                <li>
+                  <a href="ch15.html">flatten</a>
+                </li>
+                <li>
+                  <a href="ch15.html">take and take_while</a>
+                </li>
+                <li>
+                  <a href="ch15.html">skip and skip_while</a>
+                </li>
+                <li>
+                  <a href="ch15.html">peekable</a>
+                </li>
+                <li>
+                  <a href="ch15.html">fuse</a>
+                </li>
+                <li>
+                  <a href="ch15.html">Reversible Iterators and rev</a>
+                </li>
+                <li>
+                  <a href="ch15.html">inspect</a>
+                </li>
+                <li>
+                  <a href="ch15.html">chain</a>
+                </li>
+                <li>
+                  <a href="ch15.html">enumerate</a>
+                </li>
+                <li>
+                  <a href="ch15.html">zip</a>
+                </li>
+                <li>
+                  <a href="ch15.html">by_ref</a>
+                </li>
+                <li>
+                  <a href="ch15.html">cloned, copied</a>
+                </li>
+                <li>
+                  <a href="ch15.html">cycle</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch15.html">Consuming Iterators</a>
+              <ol>
+                <li>
+                  <a href="ch15.html">Simple Accumulation: count, sum, product</a>
+                </li>
+                <li>
+                  <a href="ch15.html">max, min</a>
+                </li>
+                <li>
+                  <a href="ch15.html">max_by, min_by</a>
+                </li>
+                <li>
+                  <a href="ch15.html">max_by_key, min_by_key</a>
+                </li>
+                <li>
+                  <a href="ch15.html">Comparing Item Sequences</a>
+                </li>
+                <li>
+                  <a href="ch15.html">any and all</a>
+                </li>
+                <li>
+                  <a href="ch15.html">position, rposition, and ExactSizeIterator</a>
+                </li>
+                <li>
+                  <a href="ch15.html">fold and rfold</a>
+                </li>
+                <li>
+                  <a href="ch15.html">try_fold and try_rfold</a>
+                </li>
+                <li>
+                  <a href="ch15.html">nth, nth_back</a>
+                </li>
+                <li>
+                  <a href="ch15.html">last</a>
+                </li>
+                <li>
+                  <a href="ch15.html">find, rfind, and find_map</a>
+                </li>
+                <li>
+                  <a href="ch15.html">Building Collections: collect and FromIterator</a>
+                </li>
+                <li>
+                  <a href="ch15.html">The Extend Trait</a>
+                </li>
+                <li>
+                  <a href="ch15.html">partition</a>
+                </li>
+                <li>
+                  <a href="ch15.html">for_each and try_for_each</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch15.html">Implementing Your Own Iterators</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch16.html">16. Collections</a>
+          <ol>
+            <li>
+              <a href="ch16.html">Overview</a>
+            </li>
+            <li>
+              <a href="ch16.html">Vec&lt;T&gt;</a>
+              <ol>
+                <li>
+                  <a href="ch16.html">Accessing Elements</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Iteration</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Length and Capacity</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Growing and Shrinking Vectors</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Splitting</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Swapping</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Filling</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Sorting and Searching</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Comparing Slices</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Random Elements</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Rust Rules Out Invalidation Errors</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch16.html">VecDeque&lt;T&gt;</a>
+            </li>
+            <li>
+              <a href="ch16.html">BinaryHeap&lt;T&gt;</a>
+            </li>
+            <li>
+              <a href="ch16.html">HashMap&lt;K, V&gt; and BTreeMap&lt;K, V&gt;</a>
+              <ol>
+                <li>
+                  <a href="ch16.html">Entries</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Map Iteration</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch16.html">HashSet&lt;T&gt; and BTreeSet&lt;T&gt;</a>
+              <ol>
+                <li>
+                  <a href="ch16.html">Set Iteration</a>
+                </li>
+                <li>
+                  <a href="ch16.html">When Equal Values Are Different</a>
+                </li>
+                <li>
+                  <a href="ch16.html">Whole-Set Operations</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch16.html">Hashing</a>
+            </li>
+            <li>
+              <a href="ch16.html">Using a Custom Hashing Algorithm</a>
+            </li>
+            <li>
+              <a href="ch16.html">Beyond the Standard Collections</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch17.html">17. Strings and Text</a>
+          <ol>
+            <li>
+              <a href="ch17.html">Some Unicode Background</a>
+              <ol>
+                <li>
+                  <a href="ch17.html">ASCII, Latin-1, and Unicode</a>
+                </li>
+                <li>
+                  <a href="ch17.html">UTF-8</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Text Directionality</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch17.html">Characters (char)</a>
+              <ol>
+                <li>
+                  <a href="ch17.html">Classifying Characters</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Handling Digits</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Case Conversion for Characters</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Conversions to and from Integers</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch17.html">String and str</a>
+              <ol>
+                <li>
+                  <a href="ch17.html">Creating String Values</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Simple Inspection</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Appending and Inserting Text</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Removing and Replacing Text</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Conventions for Searching and Iterating</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Patterns for Searching Text</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Searching and Replacing</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Iterating over Text</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Trimming</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Case Conversion for Strings</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Parsing Other Types from Strings</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Converting Other Types to Strings</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Borrowing as Other Text-Like Types</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Accessing Text as UTF-8</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Producing Text from UTF-8 Data</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Putting Off Allocation</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Strings as Generic Collections</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch17.html">Formatting Values</a>
+              <ol>
+                <li>
+                  <a href="ch17.html">Formatting Text Values</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Formatting Numbers</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Formatting Other Types</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Formatting Values for Debugging</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Formatting Pointers for Debugging</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Referring to Arguments by Index or Name</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Dynamic Widths and Precisions</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Formatting Your Own Types</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Using the Formatting Language in Your Own Code</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch17.html">Regular Expressions</a>
+              <ol>
+                <li>
+                  <a href="ch17.html">Basic Regex Use</a>
+                </li>
+                <li>
+                  <a href="ch17.html">Building Regex Values Lazily</a>
+                </li>
+              </ol>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch18.html">18. Input and Output</a>
+          <ol>
+            <li>
+              <a href="ch18.html">Readers and Writers</a>
+              <ol>
+                <li>
+                  <a href="ch18.html">Readers</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Buffered Readers</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Reading Lines</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Collecting Lines</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Writers</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Files</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Seeking</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Other Reader and Writer Types</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Binary Data, Compression, and Serialization</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch18.html">Files and Directories</a>
+              <ol>
+                <li>
+                  <a href="ch18.html">OsStr and Path</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Path and PathBuf Methods</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Filesystem Access Functions</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Reading Directories</a>
+                </li>
+                <li>
+                  <a href="ch18.html">Platform-Specific Features</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch18.html">Networking</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch19.html">19. Threads</a>
+          <ol>
+            <li>
+              <a href="ch19.html">Fork-Join Parallelism</a>
+              <ol>
+                <li>
+                  <a href="ch19.html">spawn and join</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Error Handling Across Threads</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Sharing Immutable Data Across Threads</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Rayon</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Revisiting the Mandelbrot Set</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch19.html">Channels</a>
+              <ol>
+                <li>
+                  <a href="ch19.html">Sending Values</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Receiving Values</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Running the Pipeline</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Channel Features and Performance</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Thread Safety: Send and Sync</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Piping Almost Any Iterator to a Channel</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Beyond Pipelines</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch19.html">Shared Mutable State</a>
+              <ol>
+                <li>
+                  <a href="ch19.html">What Is a Mutex?</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Mutex&lt;T&gt;</a>
+                </li>
+                <li>
+                  <a href="ch19.html">mut and Mutex</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Why Mutexes Are Not Always a Good Idea</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Deadlock</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Poisoned Mutexes</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Multiconsumer Channels Using Mutexes</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Read/Write Locks (RwLock&lt;T&gt;)</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Condition Variables (Condvar)</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Atomics</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Global Variables</a>
+                </li>
+                <li>
+                  <a href="ch19.html">Thread-Local Variables</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch19.html">What Hacking Concurrent Code in Rust Is Like</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch20.html">20. Asynchronous Programming</a>
+          <ol>
+            <li>
+              <a href="ch20.html">What Asynchronous Code Looks Like</a>
+            </li>
+            <li>
+              <a href="ch20.html">Futures</a>
+            </li>
+            <li>
+              <a href="ch20.html">Asynchronous Function Future Types</a>
+            </li>
+            <li>
+              <a href="ch20.html">async Blocks</a>
+            </li>
+            <li>
+              <a href="ch20.html">Future lifetimes</a>
+            </li>
+            <li>
+              <a href="ch20.html">Spawning Asynchronous Tasks</a>
+              <ol>
+                <li>
+                  <a href="ch20.html">Listing a Web Page’s Outgoing Links</a>
+                </li>
+                <li>
+                  <a href="ch20.html">Spidering the Web Concurrently</a>
+                </li>
+                <li>
+                  <a href="ch20.html">Extracting The Traversal’s Results</a>
+                </li>
+                <li>
+                  <a href="ch20.html">Waiting Vs. Blocking</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch20.html">Asynchronous Versions of Blocking Tools</a>
+            </li>
+            <li>
+              <a href="ch20.html">Tasks and ’static</a>
+            </li>
+            <li>
+              <a href="ch20.html">Tasks and Send</a>
+            </li>
+            <li>
+              <a href="ch20.html">Asynchronous Closures</a>
+            </li>
+            <li>
+              <a href="ch20.html">AsyncFn</a>
+            </li>
+            <li>
+              <a href="ch20.html">Asynchronous Functions In Traits</a>
+            </li>
+            <li>
+              <a href="ch20.html">Cancellation</a>
+              <ol>
+                <li>
+                  <a href="ch20.html">Cancel safety</a>
+                </li>
+                <li>
+                  <a href="ch20.html">Racing futures with tokio::select!</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch20.html">Shutdown</a>
+              <ol>
+                <li>
+                  <a href="ch20.html">Aborting Tasks</a>
+                </li>
+                <li>
+                  <a href="ch20.html">Shutdown Signals</a>
+                </li>
+                <li>
+                  <a href="ch20.html">Cancellation tokens</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch20.html">Conclusion</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch21.html">21. Futures</a>
+          <ol>
+            <li>
+              <a href="ch21.html">The Future Trait</a>
+            </li>
+            <li>
+              <a href="ch21.html">Implementing and Instantiating Futures</a>
+            </li>
+            <li>
+              <a href="ch21.html">How Do We Know When to Poll?</a>
+              <ol>
+                <li>
+                  <a href="ch21.html">Invoking Wakers: spawn_blocking</a>
+                </li>
+                <li>
+                  <a href="ch21.html">Implementing block_on</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch21.html">The Role of Runtimes</a>
+              <ol>
+                <li>
+                  <a href="ch21.html">Implementing I/O Futures</a>
+                </li>
+                <li>
+                  <a href="ch21.html">Reactors</a>
+                </li>
+                <li>
+                  <a href="ch21.html">Implementating a Reactor</a>
+                </li>
+                <li>
+                  <a href="ch21.html">Cooperative Multitasking</a>
+                </li>
+                <li>
+                  <a href="ch21.html">Tokio’s Executor</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch21.html">Pinning</a>
+              <ol>
+                <li>
+                  <a href="ch21.html">The Two Life Stages of a Future</a>
+                </li>
+                <li>
+                  <a href="ch21.html">Pinned Pointers</a>
+                </li>
+                <li>
+                  <a href="ch21.html">The Unpin Trait</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch21.html">Conclusion</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch22.html">22. Macros</a>
+          <ol>
+            <li>
+              <a href="ch22.html">Macro Basics</a>
+              <ol>
+                <li>
+                  <a href="ch22.html">Basics of Macro Expansion</a>
+                </li>
+                <li>
+                  <a href="ch22.html">Unintended Consequences</a>
+                </li>
+                <li>
+                  <a href="ch22.html">Repetition</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch22.html">Built-In Macros</a>
+            </li>
+            <li>
+              <a href="ch22.html">Debugging Macros</a>
+            </li>
+            <li>
+              <a href="ch22.html">Building the json! Macro</a>
+              <ol>
+                <li>
+                  <a href="ch22.html">Fragment Types</a>
+                </li>
+                <li>
+                  <a href="ch22.html">Recursion in Macros</a>
+                </li>
+                <li>
+                  <a href="ch22.html">Using Traits with Macros</a>
+                </li>
+                <li>
+                  <a href="ch22.html">Scoping and Hygiene</a>
+                </li>
+                <li>
+                  <a href="ch22.html">Importing and Exporting Macros</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch22.html">Beyond macro_rules!</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch23.html">23. Unsafe Code</a>
+          <ol>
+            <li>
+              <a href="ch23.html">Unsafe from What?</a>
+            </li>
+            <li>
+              <a href="ch23.html">unsafe Blocks</a>
+            </li>
+            <li>
+              <a href="ch23.html">Example: An Efficient ASCII String Type</a>
+            </li>
+            <li>
+              <a href="ch23.html">Unsafe Functions</a>
+            </li>
+            <li>
+              <a href="ch23.html">Marking Unsafe Code</a>
+            </li>
+            <li>
+              <a href="ch23.html">Undefined Behavior</a>
+            </li>
+            <li>
+              <a href="ch23.html">Unsafe Traits</a>
+            </li>
+            <li>
+              <a href="ch23.html">Raw Pointers</a>
+              <ol>
+                <li>
+                  <a href="ch23.html">Dereferencing Raw Pointers Safely</a>
+                </li>
+                <li>
+                  <a href="ch23.html">Example: RefWithFlag</a>
+                </li>
+                <li>
+                  <a href="ch23.html">Null Pointers</a>
+                </li>
+                <li>
+                  <a href="ch23.html">Type Sizes and Alignments</a>
+                </li>
+                <li>
+                  <a href="ch23.html">Pointer Arithmetic</a>
+                </li>
+                <li>
+                  <a href="ch23.html">Moving into and out of Memory</a>
+                </li>
+                <li>
+                  <a href="ch23.html">Example: GapBuffer</a>
+                </li>
+                <li>
+                  <a href="ch23.html">Panic Safety in Unsafe Code</a>
+                </li>
+              </ol>
+            </li>
+            <li>
+              <a href="ch23.html">Unions</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ch24.html">24. Foreign Functions</a>
+          <ol>
+            <li>
+              <a href="ch24.html">Finding Common Data Representations</a>
+            </li>
+            <li>
+              <a href="ch24.html">Declaring Foreign Functions and Variables</a>
+            </li>
+            <li>
+              <a href="ch24.html">Using Functions from Libraries</a>
+            </li>
+            <li>
+              <a href="ch24.html">A Raw Interface to libgit2</a>
+            </li>
+            <li>
+              <a href="ch24.html">A Safe Interface to libgit2</a>
+            </li>
+            <li>
+              <a href="ch24.html">Conclusion</a>
+            </li>
+          </ol>
+        </li>
+        <li>
+          <a href="ix01.html">Index</a>
+        </li>
+      </ol>
+    </nav>
+    <nav epub:type="page-list" id="pages" hidden="hidden">
+      <h2>Pages</h2>
+      <ol>
+        <li>
+          <a href="toc01.html#id528">id528</a>
+        </li>
+      </ol>
+    </nav>
+  </body>
+</html>

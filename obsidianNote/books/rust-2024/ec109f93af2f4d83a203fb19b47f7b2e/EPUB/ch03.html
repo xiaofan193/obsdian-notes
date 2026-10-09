@@ -1,0 +1,1319 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch03.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 3. Fundamental Types">
+        <div class="chapter" id="fundamental-types">
+<h1><span class="label">Chapter 3. </span>Fundamental Types</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id720"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the third chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>The first principles of the universe are atoms and empty space; everything else is merely thought to exist.</p>
+
+<p data-type="attribution">Diogenes Laertes (describing the philosophy of Democritus)</p>
+</blockquote>
+
+<p>This chapter covers Rust’s fundamental types for representing values: integer and floating-point numbers, strings and characters, vectors and arrays, and so on.<a contenteditable="false" data-primary="values" data-secondary="fundamental types for representing" data-type="indexterm" id="ix_values_types_fund_ch3"/><a contenteditable="false" data-primary="types" data-type="indexterm" id="ix_types_fund_ch3"/> These source-level types have concrete machine-level counterparts with predictable costs and performance.</p>
+
+<p>Compared to a dynamically typed language like JavaScript or Python, Rust requires more planning from you up front. You must spell out the types of function arguments and return values, struct fields, and a few other constructs. For the rest, Rust’s <em>type inference<a contenteditable="false" data-primary="type inference" data-type="indexterm" id="id721"/></em> will generally figure out the types for you. For example, you could spell out every type in a function, like this:</p>
+
+<pre class="small" data-code-language="rust" data-type="programlisting" id="test-types0">
+<code class="k">fn</code><code class="w"> </code><code class="nf">grade_cutoffs</code><code class="p">(</code><code class="n">tier_size</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u32</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cutoffs</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u32</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">u32</code><code class="o">&gt;</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">tier</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">1</code><code class="k">u32</code><code class="o">..</code><code class="mi">5</code><code class="k">u32</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">cutoffs</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="mi">100</code><code class="k">u32</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">tier</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">tier_size</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">cutoffs</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>But this is cluttered and repetitive. Given the function’s return type, it’s obvious that <code>cutoffs</code> must be a <code>Vec&lt;u32&gt;</code>, a vector of 32-bit signed integers; no other type would work. And from that it follows that each element of the vector must be a <code>u32</code>, and therefore all the numbers being multiplied and subtracted must be <code>u32</code> as well. This is exactly the sort of reasoning Rust’s type inference applies, allowing you to instead write:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types1">
+<code class="k">fn</code><code class="w"> </code><code class="nf">grade_cutoffs</code><code class="p">(</code><code class="n">tier_size</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u32</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">cutoffs</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">tier</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">1</code><code class="o">..</code><code class="mi">5</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">cutoffs</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="mi">100</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">tier</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">tier_size</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">cutoffs</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>These two definitions are exactly equivalent, and Rust will generate the same machine code either way. Type inference gives back much of the legibility of dynamically typed languages, while still catching type errors at compile time.</p>
+
+<p>The rest of this chapter covers Rust’s types from the bottom up. <a data-type="xref" href="#types-in-rust">Table 3-1</a> offers a sample of the sorts of types you’ll see in Rust. It shows Rust’s primitive types, some very common types from the standard library, and some examples of user-defined types.</p>
+
+<table class="less_space tallrow" id="types-in-rust">
+	<caption class="less_space"><span class="label">Table 3-1. </span>Examples of types in Rust</caption>
+	<thead>
+		<tr>
+			<th>Type</th>
+			<th>Description</th>
+			<th>Values</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td><code>i8</code>, <code>i16</code>, <code>i32</code>, <code>i64</code>, <code>i128</code><br/>
+			<code>u8</code>, <code>u16</code>, <code>u32</code>, <code>u64</code>, <code>u128</code></td>
+			<td>Signed and unsigned integers,<br/>
+			of given bit width</td>
+			<td><code>42</code>, <code>-5i8</code>, <code>0x400u16</code>, <code>0o100i16</code>, <code>20_922_789_888_000u64</code>,<br/>
+			<code>b'*'</code> (<code>u8</code> byte literal)</td>
+		</tr>
+		<tr>
+			<td><code>isize</code>, <code>usize</code></td>
+			<td>Signed and unsigned integers,<br/>
+			the same size as an address on the machine (usually 64 bits)</td>
+			<td><code>137</code>,<br/>
+			<code>-0b0101_0010_isize</code>,<br/>
+			<code>0xffff_fc00_usize</code></td>
+		</tr>
+		<tr>
+			<td><code>f32</code>, <code>f64</code></td>
+			<td>IEEE floating-point numbers,<br/>
+			single and double precision</td>
+			<td><code>1.0</code>, <code>3.14159f32</code>, <code>6.0221e23</code></td>
+		</tr>
+		<tr>
+			<td><code>bool</code></td>
+			<td>Boolean</td>
+			<td><code>true</code>, <code>false</code></td>
+		</tr>
+		<tr>
+			<td><code>(char, u8, i32)</code></td>
+			<td>Tuple: mixed types allowed</td>
+			<td><code>('%', 0x7f, -1)</code></td>
+		</tr>
+		<tr>
+			<td><code>()</code></td>
+			<td>“Unit” (empty tuple)</td>
+			<td><code>()</code></td>
+		</tr>
+		<tr>
+			<td><code>struct S {<br/>
+			  x: f32,<br/>
+			  y: f32,<br/>
+			}</code></td>
+			<td>Named-field struct</td>
+			<td><code>S { x: 120.0, y: 209.0 }</code></td>
+		</tr>
+		<tr>
+			<td><code>struct T(i32, char);</code></td>
+			<td>Tuple struct</td>
+			<td><code>T(120, 'X')</code></td>
+		</tr>
+		<tr>
+			<td><code>struct E;</code></td>
+			<td>Unit-like struct; has no fields</td>
+			<td><code>E</code></td>
+		</tr>
+		<tr>
+			<td><code>enum Attend {<br/>
+			  OnTime,<br/>
+			  Late(u32)<br/>
+			}</code></td>
+			<td>Enumeration, algebraic data type</td>
+			<td><code>Attend::Late(5)</code>, <code>Attend::OnTime</code></td>
+		</tr>
+		<tr>
+			<td><code>Box&lt;Attend&gt;</code></td>
+			<td>Box: owning pointer to value in heap</td>
+			<td><code>Box::new(Late(15))</code></td>
+		</tr>
+		<tr>
+			<td><code>&amp;i32</code>, <code>&amp;mut i32</code></td>
+			<td>Shared and mutable references: non-owning pointers that must not outlive their referent</td>
+			<td><code>&amp;s.y</code>, <code>&amp;mut v</code></td>
+		</tr>
+		<tr>
+			<td><code>String</code></td>
+			<td>UTF-8 string, dynamically sized</td>
+			<td><code>"ラーメン: ramen".to_string()</code></td>
+		</tr>
+		<tr>
+			<td><code>&amp;str</code></td>
+			<td>Reference to <code>str</code>: non-owning pointer to UTF-8 text</td>
+			<td><code>"そば: soba"</code>, <code>&amp;s[0..12]</code></td>
+		</tr>
+		<tr>
+			<td><code>char</code></td>
+			<td>Unicode character, 32 bits wide</td>
+			<td><code>'*'</code>, <code>'\n'</code>, <code>'字'</code>, <code>'\x7f'</code>, <code>'\u{CA0}'</code></td>
+		</tr>
+		<tr>
+			<td><code>[f64; 4]</code>, <code>[u8; 256]</code></td>
+			<td>Array, fixed length; elements all of same type</td>
+			<td><code>[1.0, 0.0, 0.0, 1.0]</code>,<br/>
+			<code>[b' '; 256]</code></td>
+		</tr>
+		<tr>
+			<td><code>Vec&lt;f64&gt;</code></td>
+			<td>Vector, varying length; elements all of same type</td>
+			<td><code>vec![0.367, 2.718, 7.389]</code></td>
+		</tr>
+		<tr>
+			<td><code>&amp;[u8]</code>, <code>&amp;mut [u8]</code></td>
+			<td>Reference to slice: reference to a portion of an array or vector, comprising pointer and length</td>
+			<td><code>&amp;v[10..20]</code>, <code>&amp;mut a[..]</code></td>
+		</tr>
+		<tr>
+			<td><code>Option&lt;&amp;str&gt;</code></td>
+			<td>Optional value: either <code>None</code> (absent) or <code>Some(v)</code> (present, with value <code>v</code>)</td>
+			<td><code>Some("Dr.")</code>, <code>None</code></td>
+		</tr>
+		<tr>
+			<td><code>Result&lt;u64, Error&gt;</code></td>
+			<td>Result of operation that may fail: either a success value <code>Ok(v)</code>, or an error <code>Err(e)</code></td>
+			<td><span data-claim-test="error-examples"><code>Ok(4096)</code>, <code>Err(Error::last_os_error())</code></span></td>
+		</tr>
+		<tr>
+			<td><code>&amp;dyn Error</code>, <code>&amp;mut dyn Read</code></td>
+			<td>Reference to trait object: any value that implements a given set of methods</td>
+			<td><code>&amp;err as &amp;dyn Error</code>,<br/>
+			<code>&amp;mut file as &amp;mut dyn Read</code></td>
+		</tr>
+		<tr>
+			<td><code>fn(&amp;str) -&gt; bool</code></td>
+			<td>Function pointer</td>
+			<td><code>str::is_empty</code></td>
+		</tr>
+		<tr>
+			<td>(Closure types have no written form)</td>
+			<td>Closure</td>
+			<td><code>|a, b| { a*a + b*b }</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Most of these types are covered in this chapter, except for the following:</p>
+
+<ul>
+	<li>
+	<p>We give <code>struct</code> types their own chapter, <a data-type="xref" href="ch09.html#structs">Chapter 9</a>.</p>
+	</li>
+	<li>
+	<p>We give enumerated types their own chapter, <a data-type="xref" href="ch10.html#enums-and-patterns">Chapter 10</a>.</p>
+	</li>
+	<li>
+	<p>We describe trait objects in <a data-type="xref" href="ch11.html#traits-and-generics">Chapter 11</a>.</p>
+	</li>
+	<li>
+	<p>We describe the essentials of <code>String</code> and <code>&amp;str</code> here, but provide more detail in <a data-type="xref" href="ch17.html#strings-and-text">Chapter 17</a>.</p>
+	</li>
+	<li>
+	<p>We cover function and closure types in <a data-type="xref" href="ch14.html#closures">Chapter 14</a>.</p>
+	</li>
+</ul>
+
+<section data-type="sect1" data-pdf-bookmark="Numeric Types"><div class="sect1" id="numeric-types">
+<h1>Numeric Types</h1>
+
+<p>The foundation of Rust’s type system is a collection of fixed-width numeric types<a contenteditable="false" data-primary="numeric types" data-secondary="fixed-width" data-type="indexterm" id="ix_numeric_types_fixed"/><a contenteditable="false" data-primary="types" data-secondary="numeric" data-type="indexterm" id="ix_types_numeric"/><a contenteditable="false" data-primary="fixed-width numeric types" data-type="indexterm" id="ix_fixed_numeric_types"/>, chosen to match the types that almost all modern processors implement directly in hardware.</p>
+
+<p>Fixed-width numeric types can overflow or lose precision, but they are adequate for most applications and can be thousands of times faster than representations like arbitrary-precision integers and exact rationals. If you need those sorts of numeric representations, they are available in the <code>num</code> crate.</p>
+
+<p>The names of Rust’s numeric types follow a regular pattern, spelling out their width in bits, and the representation they use (<a data-type="xref" href="#table0302">Table 3-2</a>).</p>
+
+<table id="table0302">
+	<caption><span class="label">Table 3-2. </span>Rust numeric types</caption>
+	<thead>
+		<tr class="header">
+			<th>Size (bits)</th>
+			<th>Unsigned integer</th>
+			<th>Signed integer</th>
+			<th>Floating-point</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td>8</td>
+			<td><code>u8</code></td>
+			<td><code>i8</code></td>
+			<td> </td>
+		</tr>
+		<tr class="even">
+			<td>16</td>
+			<td><code>u16</code></td>
+			<td><code>i16</code></td>
+			<td> </td>
+		</tr>
+		<tr class="odd">
+			<td>32</td>
+			<td><code>u32</code></td>
+			<td><code>i32</code></td>
+			<td><code>f32</code></td>
+		</tr>
+		<tr class="even">
+			<td>64</td>
+			<td><code>u64</code></td>
+			<td><code>i64</code></td>
+			<td><code>f64</code></td>
+		</tr>
+		<tr class="odd">
+			<td>128</td>
+			<td><code>u128</code></td>
+			<td><code>i128</code></td>
+			<td> </td>
+		</tr>
+		<tr class="even">
+			<td>Machine word</td>
+			<td><code>usize</code></td>
+			<td><code>isize</code></td>
+			<td> </td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Here, a <em>machine word<a contenteditable="false" data-primary="machine word" data-type="indexterm" id="id722"/></em> is a value the size of an address on the machine the code runs on, 32 or 64 bits.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Integer Types"><div class="sect2" id="integer-types">
+<h2>Integer Types</h2>
+
+<p>Rust’s unsigned<a contenteditable="false" data-primary="unsigned integer types" data-type="indexterm" id="id723"/> integer types<a contenteditable="false" data-primary="machine types, integer types" data-type="indexterm" id="ix_machine_integer_types"/><a contenteditable="false" data-primary="numeric types" data-secondary="integer types" data-type="indexterm" id="ix_numeric_integer_types"/><a contenteditable="false" data-primary="integer types" data-type="indexterm" id="ix_integer_types"/> use their full range to represent positive values and zero (<a data-type="xref" href="#table0303">Table 3-3</a>).</p>
+
+<table id="table0303">
+	<caption><span class="label">Table 3-3. </span>Rust unsigned integer types</caption>
+	<thead>
+		<tr class="header">
+			<th>Type</th>
+			<th>Range</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td><code>u8</code></td>
+			<td>0 to 2<sup>8</sup>−1 (0 to 255)</td>
+		</tr>
+		<tr class="even">
+			<td><code>u16</code></td>
+			<td>0 to 2<sup>16</sup>−1 (0 to 65,535)</td>
+		</tr>
+		<tr class="odd">
+			<td><code>u32</code></td>
+			<td>0 to 2<sup>32</sup>−1 (0 to 4,294,967,295)</td>
+		</tr>
+		<tr class="even">
+			<td><code>u64</code></td>
+			<td>0 to 2<sup>64</sup>−1 (0 to 18,446,744,073,709,551,615, or 18 quintillion)</td>
+		</tr>
+		<tr class="odd">
+			<td><code>u128</code></td>
+			<td>0 to 2<sup>128</sup>−1 (0 to around 3.4×10<sup>38</sup>)</td>
+		</tr>
+		<tr class="even">
+			<td><code>usize</code></td>
+			<td>0 to either 2<sup>32</sup>−1 or 2<sup>64</sup>−1</td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Rust’s signed<a contenteditable="false" data-primary="signed integer types" data-type="indexterm" id="id724"/> integer types use the two’s complement representation, using the same bit patterns as the corresponding unsigned type to cover a range of positive and negative values (<a data-type="xref" href="#table0304">Table 3-4</a>).</p>
+
+<table id="table0304">
+	<caption><span class="label">Table 3-4. </span>Rust signed integer types</caption>
+	<thead>
+		<tr class="header">
+			<th>Type</th>
+			<th>Range</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td><code>i8</code></td>
+			<td>−2<sup>7</sup> to 2<sup>7</sup>−1 (−128 to 127)</td>
+		</tr>
+		<tr class="even">
+			<td><code>i16</code></td>
+			<td>−2<sup>15</sup> to 2<sup>15</sup>−1 (−32,768 to 32,767)</td>
+		</tr>
+		<tr class="odd">
+			<td><code>i32</code></td>
+			<td>−2<sup>31</sup> to 2<sup>31</sup>−1 (−2,147,483,648 to 2,147,483,647)</td>
+		</tr>
+		<tr class="even">
+			<td><code>i64</code></td>
+			<td>−2<sup>63</sup> to 2<sup>63</sup>−1 (−9,223,372,036,854,775,808 to 9,223,372,036,854,775,807)</td>
+		</tr>
+		<tr class="odd">
+			<td><code>i128</code></td>
+			<td>−2<sup>127</sup> to 2<sup>127</sup>−1 (roughly -1.7×10<sup>38</sup> to +1.7×10<sup>38</sup>)</td>
+		</tr>
+		<tr class="even">
+			<td><code>isize</code></td>
+			<td>Either −2<sup>31</sup> to 2<sup>31</sup>−1, or −2<sup>63</sup> to 2<sup>63</sup>−1</td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Rust uses the <code>u8</code> type for byte values. For example, reading data from a binary file or socket yields a stream of <code>u8</code> values.</p>
+
+<p>C/C‍++ programmers should note that there is no single “character” type used for both text and binary data in Rust. As we’ll see when we discuss strings and characters later in this chapter, Rust’s <code>char</code> type is a Unicode character type, not an integer type, and is quite different from C’s <code>char</code>.</p>
+
+<p>The <code>usize</code> and <code>isize</code> types<a contenteditable="false" data-primary="isize type" data-type="indexterm" id="id725"/><a contenteditable="false" data-primary="usize type" data-type="indexterm" id="id726"/> are analogous to <code>size_t</code> and <code>ptrdiff_t</code> in C and C‍++. Their precision matches the size of the address space on the target machine: they are 32 bits long on 32-bit architectures, and 64 bits long on 64-bit architectures. Rust requires array indices to be <code>usize</code> values. Values representing the sizes of arrays or vectors or counts of the number of elements in some data structure also generally have the <code>usize</code> type.</p>
+
+<p>Integer literals<a contenteditable="false" data-primary="integer literals" data-type="indexterm" id="id727"/> in Rust can take a suffix indicating their type: <code>42u8</code> is a <code>u8</code> value, and <code>1729isize</code> is an <code>isize</code>. If an integer literal lacks a type suffix, Rust puts off determining its type until it finds the value being used in a way that pins it down: stored in a variable of a particular type, passed to a function that expects a particular type, compared with another value of a particular type, or something like that. If the code provides no such clues, Rust defaults to <code>i32</code>.</p>
+
+<p><a contenteditable="false" data-primary="hexadecimal numeric literal" data-type="indexterm" id="id728"/><a contenteditable="false" data-primary="octal numeric literal" data-type="indexterm" id="id729"/><a contenteditable="false" data-primary="binary numeric literal" data-type="indexterm" id="id730"/>The prefixes <code>0x</code>, <code>0o</code>, and <code>0b</code> designate hexadecimal, octal, and binary literals.</p>
+
+<p>To make long numbers more legible, you can insert underscores among the digits. For example, you can write the largest <code>u32</code> value as <code>4_294_967_295</code>. The exact placement of the underscores is not significant, so you can break hexadecimal or binary numbers into groups of four digits rather than three, as in <code>0xffff_ffff</code>, or set off the type suffix from the digits, as in <code>127_u8</code>.</p>
+
+<p>You can convert from one integer type to another using the <code>as</code> operator:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types2">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">10_</code><code class="k">i8</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u16</code><code class="p">,</code><code class="w"> </code><code class="mi">10_</code><code class="k">u16</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mh">0xcafedad_</code><code class="k">u64</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u8</code><code class="p">,</code><code class="w"> </code><code class="mh">0xad_</code><code class="k">u8</code><code class="p">);</code><code class="w">  </code><code class="c1">// value too big for u8, truncated</code>
+</pre>
+
+<p>The standard library provides some operations as methods on integers. For example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types3">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">2_</code><code class="k">u16</code><code class="p">.</code><code class="n">pow</code><code class="p">(</code><code class="mi">4</code><code class="p">),</code><code class="w"> </code><code class="mi">16</code><code class="p">);</code><code class="w">              </code><code class="c1">// exponentiation</code>
+<code class="fm">assert_eq!</code><code class="p">((</code><code class="o">-</code><code class="mi">4_</code><code class="k">i32</code><code class="p">).</code><code class="n">abs</code><code class="p">(),</code><code class="w"> </code><code class="mi">4</code><code class="p">);</code><code class="w">             </code><code class="c1">// absolute value</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mb">0b101101_</code><code class="k">u8</code><code class="p">.</code><code class="n">count_ones</code><code class="p">(),</code><code class="w"> </code><code class="mi">4</code><code class="p">);</code><code class="w">   </code><code class="c1">// population count</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">12_</code><code class="k">i32</code><code class="p">.</code><code class="n">max</code><code class="p">(</code><code class="mi">37</code><code class="p">),</code><code class="w"> </code><code class="mi">37</code><code class="p">);</code><code class="w">            </code><code class="c1">// maximum of two values</code>
+</pre>
+
+<p>There are dozens of these. You can find them in the online documentation under “Primitive Type <code>i32</code>” and friends.</p>
+
+<p>In real code, you usually won’t need to write out the type suffixes as we’ve done here, because the context will determine the type. When it doesn’t, however, the error messages can be surprising. For example, the following doesn’t compile:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-bad-abs">
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="o">-</code><code class="mi">4</code><code class="p">).</code><code class="n">abs</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>Rust complains:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: can't call method `abs` on ambiguous numeric type `{integer}`</code>
+</pre>
+
+<p>In cases like this where the type of an integer is unclear, Rust usually defaults to <code>i32</code>. In the particular case where we’re calling a method, though, it’s an error. Rust always needs to know the type of a value before looking up its methods. The solution is to spell out which type you intend, either with a suffix or by using a specific type’s function:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-good-abs">
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="o">-</code><code class="mi">4_</code><code class="k">i32</code><code class="p">).</code><code class="n">abs</code><code class="p">());</code><code class="w"/>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="kt">i32</code><code class="p">::</code><code class="n">abs</code><code class="p">(</code><code class="o">-</code><code class="mi">4</code><code class="p">));</code><code class="w"/>
+</pre>
+
+<p>Note that method calls have a higher precedence than unary prefix operators, so be careful when applying methods to negated values. <span data-claim-test="method-call-precedence-higher-than-prefix-ops">Without the parentheses around <code>-4_i32</code> in the first statement, <code>-4_i32.abs()</code> would apply the <code>abs</code> method to the positive value <code>4</code>, producing positive <code>4</code>, and then negate that<a contenteditable="false" data-startref="ix_numeric_integer_types" data-type="indexterm" id="id731"/><a contenteditable="false" data-startref="ix_integer_types" data-type="indexterm" id="id732"/><a contenteditable="false" data-startref="ix_machine_integer_types" data-type="indexterm" id="id733"/>, producing <code>-4</code>.</span></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Handling Integer Overflow"><div class="sect2" id="handling-integer-overflow">
+<h2>Handling Integer Overflow</h2>
+
+<p>Integer arithmetic can <em>overflow</em>, producing results that are outside the range of Rust’s integer types.</p>
+
+<p>For example, the following function has a surprising bug:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types-overflow-midpoint">
+<code class="k">fn</code><code class="w"> </code><code class="nf">midpoint</code><code class="p">(</code><code class="n">lo</code><code class="p">:</code><code class="w"> </code><code class="kt">i32</code><code class="p">,</code><code class="w"> </code><code class="n">hi</code><code class="p">:</code><code class="w"> </code><code class="kt">i32</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">i32</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="n">lo</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">hi</code><code class="p">)</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="mi">2</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="c1">// panic: attempt to add with overflow (in debug builds only!)</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">m</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">midpoint</code><code class="p">(</code><code class="mi">7</code><code class="p">,</code><code class="w"> </code><code class="kt">i32</code><code class="p">::</code><code class="n">MAX</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The <code>midpoint</code> function looks about right, but when called with large enough arguments, <code>(lo + hi)</code> produces a result that is outside of <code>i32</code>’s range. In Java, that would “wrap around” to a negative number instead. The function would then divide that by two and return an incorrect result. In C or C‍++, integer overflow is undefined behavior.</p>
+
+<p>In Rust, debug builds check the addition and panic on overflow, giving you a chance to notice and fix the problem. (In this case, you could cast the arguments to <code>i64</code>, do the math, and cast the result back to <code>i32</code>; or just use the built-in method <code>lo.midpoint(hi)</code>.) In release builds, for speed, the checks are disabled by default, and integer arithmetic wraps around, as in Java.</p>
+
+<p>This conditional behavior isn’t always ideal, so the integer types provide methods that let you spell out exactly what you want. These integer arithmetic methods fall in five general categories:</p>
+
+<ul>
+	<li>
+	<p><em>Wrapping</em> operations<a contenteditable="false" data-primary="wrapping arithmetic" data-type="indexterm" id="id734"/> return the value equivalent to the mathematically correct result modulo the range of the value:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-wrapping">
+<code class="c1">// The first product can be represented as a u16;</code>
+<code class="c1">// the second cannot, so we get 250000 modulo 2¹⁶.</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">100_</code><code class="k">u16</code><code class="p">.</code><code class="n">wrapping_mul</code><code class="p">(</code><code class="mi">200</code><code class="p">),</code><code class="w"> </code><code class="mi">20000</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">500_</code><code class="k">u16</code><code class="p">.</code><code class="n">wrapping_mul</code><code class="p">(</code><code class="mi">500</code><code class="p">),</code><code class="w"> </code><code class="mi">53392</code><code class="p">);</code><code class="w"/>
+
+<code class="c1">// Operations on signed types may wrap to negative values.</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">500_</code><code class="k">i16</code><code class="p">.</code><code class="n">wrapping_mul</code><code class="p">(</code><code class="mi">500</code><code class="p">),</code><code class="w"> </code><code class="o">-</code><code class="mi">12144</code><code class="p">);</code><code class="w"/>
+</pre>
+
+	<p>This is exactly how the <code>*</code> operator behaves in release builds. The advantage of the <code>wrapping</code> methods is that they behave the same way in all builds.</p>
+	</li>
+	<li>
+	<p><em>Strict</em> operations<a contenteditable="false" data-primary="strict arithmetic" data-type="indexterm" id="id735"/> provide the debug-mode behavior in all builds: panic on overflow.</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-strict">
+<code class="kd">let</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kt">usize</code><code class="p">::</code><code class="n">MAX</code><code class="p">.</code><code class="n">strict_mul</code><code class="p">(</code><code class="mi">2</code><code class="p">);</code><code class="w">  </code><code class="c1">// panic (in all builds)</code>
+</pre>
+	</li>
+	<li>
+	<p><em>Checked</em> operations<a contenteditable="false" data-primary="checked arithmetic" data-type="indexterm" id="id736"/> return an <code>Option</code> of the result: <code>Some(v)</code> if the mathematically correct result can be represented as a value of that type, or <code>None</code> if it cannot. For example:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-checked">
+<code class="c1">// The sum 10 + 20 fits in a u8, but 100 + 200 doesn't.</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">10_</code><code class="k">u8</code><code class="p">.</code><code class="n">checked_add</code><code class="p">(</code><code class="mi">20</code><code class="p">),</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="mi">30</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">100_</code><code class="k">u8</code><code class="p">.</code><code class="n">checked_add</code><code class="p">(</code><code class="mi">200</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+
+<code class="c1">// Oddly, signed division can overflow too, in one particular case.</code>
+<code class="c1">// A signed n-bit type can represent -2ⁿ⁻¹, but not 2ⁿ⁻¹.</code>
+<code class="fm">assert_eq!</code><code class="p">((</code><code class="o">-</code><code class="mi">128_</code><code class="k">i8</code><code class="p">).</code><code class="n">checked_div</code><code class="p">(</code><code class="o">-</code><code class="mi">1</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+</pre>
+	</li>
+	<li>
+	<p><em>Saturating</em> operations<a contenteditable="false" data-primary="saturating arithmetic" data-type="indexterm" id="id737"/> return the representable value that is closest to the mathematically correct result. In other words, the result is “clamped” to the maximum and minimum values the type can represent:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-saturating">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">32760_</code><code class="k">i16</code><code class="p">.</code><code class="n">saturating_add</code><code class="p">(</code><code class="mi">10</code><code class="p">),</code><code class="w"> </code><code class="mi">32767</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">((</code><code class="o">-</code><code class="mi">32760_</code><code class="k">i16</code><code class="p">).</code><code class="n">saturating_sub</code><code class="p">(</code><code class="mi">10</code><code class="p">),</code><code class="w"> </code><code class="o">-</code><code class="mi">32768</code><code class="p">);</code><code class="w"/>
+</pre>
+	</li>
+	<li>
+	<p><em>Overflowing</em> operations<a contenteditable="false" data-primary="overflowing arithmetic" data-type="indexterm" id="id738"/> return a tuple <code>(result, overflowed)</code>, where <code>result</code> is what the wrapping version of the function would return, and <code>overflowed</code> is a <code>bool</code> indicating whether an overflow occurred:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-overflowing">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">255_</code><code class="k">u8</code><code class="p">.</code><code class="n">overflowing_sub</code><code class="p">(</code><code class="mi">2</code><code class="p">),</code><code class="w"> </code><code class="p">(</code><code class="mi">253</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">255_</code><code class="k">u8</code><code class="p">.</code><code class="n">overflowing_add</code><code class="p">(</code><code class="mi">2</code><code class="p">),</code><code class="w"> </code><code class="p">(</code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">));</code><code class="w"/>
+</pre>
+	</li>
+</ul>
+
+<p>The bit-shifting operations <code>shl</code> (shift left, <code>&lt;&lt;</code>) and <code>shr</code> (shift right, <code>&gt;&gt;</code>) deviate from the pattern. For these operations it is the shift distance, not the result, that can be out of range (again causing undefined behavior in C‍++). So the “checking”, “wrapping”, or “overflowing” for these methods applies to the shift distance argument.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-checked-shifts">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">10_</code><code class="k">u64</code><code class="p">.</code><code class="n">wrapping_shl</code><code class="p">(</code><code class="mi">65</code><code class="p">),</code><code class="w"> </code><code class="mi">20</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">10_</code><code class="k">u64</code><code class="p">.</code><code class="n">checked_shr</code><code class="p">(</code><code class="mi">65</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Floating-Point Types"><div class="sect2" id="floating-point-types">
+<h2>Floating-Point Types</h2>
+
+<p>Rust<a contenteditable="false" data-primary="numeric types" data-secondary="floating-point types" data-type="indexterm" id="ix_numeric_float-point_type"/><a contenteditable="false" data-primary="types" data-secondary="floating-point" data-type="indexterm" id="ix_types_float-point"/><a contenteditable="false" data-primary="floating-point types" data-type="indexterm" id="ix_float-point_type"/> provides the usual single- and double-precision floating-point types (<a data-type="xref" href="#floatingpointtypes">Table 3-5</a>). Rust’s <code>f32</code> and <code>f64</code> correspond to the <code>float</code> and <code>double</code> types in C/C‍++ and Java, or <code>float32</code> and <code>float64</code> in Go. Both types follow the IEEE 754 floating point standard. They include positive and negative infinities, distinct positive and negative zero values, and a <em>not-a-number</em> value.</p>
+
+<table id="floatingpointtypes">
+	<caption><span class="label">Table 3-5. </span>Floating-point types</caption>
+	<thead>
+		<tr class="header">
+			<th>Type</th>
+			<th>Precision</th>
+			<th>Range</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td><code>f32</code></td>
+			<td>IEEE single precision (at least 6 decimal digits)</td>
+			<td>Roughly ±3.4 × 10<sup>38</sup></td>
+		</tr>
+		<tr class="even">
+			<td><code>f64</code></td>
+			<td>IEEE double precision (at least 15 decimal digits)</td>
+			<td>Roughly ±1.8 × 10<sup>308</sup></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Floating-point literals<a contenteditable="false" data-primary="floating-point literals" data-type="indexterm" id="id739"/> have the general form diagrammed in <a data-type="xref" href="#fig0301">Figure 3-1</a>.</p>
+
+<figure><div id="fig0301" class="figure"><img alt="(Diagram of a floating-point literal, showing integer part, fractional part, exponent, and type suffix.)" src="assets/pru3_0301.png" width="381" height="266"/>
+<h6><span class="label">Figure 3-1. </span>A floating-point literal</h6>
+</div></figure>
+
+<p>Every part of a floating-point number after the integer part is optional, but at least one of the fractional part, exponent, or type suffix must be present, to distinguish it from an integer literal.<a contenteditable="false" data-primary="integer literals" data-type="indexterm" id="id740"/> Rust never assigns a floating-point type to a integer literal, or vice versa.</p>
+
+<p>The fractional part may consist of a lone decimal point, so <code>5.</code> is a valid floating-point constant.</p>
+
+<p>If a floating-point literal lacks a type suffix, Rust checks the context to see how the value is used, much as it does for integer literals. The default is <code>f64</code>.</p>
+
+<p>The types <code>f32</code> and <code>f64</code> have associated constants for the IEEE-required special values like <code>INFINITY</code>, <code>NEG_INFINITY</code> (negative infinity), <code>NAN</code> (the not-a-number value), and <code>MIN</code> and <code>MAX</code> (the largest and smallest finite values):</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types3.5">
+<code class="fm">assert!</code><code class="p">((</code><code class="o">-</code><code class="mf">1.</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="kt">f32</code><code class="p">::</code><code class="n">INFINITY</code><code class="p">).</code><code class="n">is_sign_negative</code><code class="p">());</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="o">-</code><code class="kt">f32</code><code class="p">::</code><code class="n">MIN</code><code class="p">,</code><code class="w"> </code><code class="kt">f32</code><code class="p">::</code><code class="n">MAX</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The <code>f32</code> and <code>f64</code> types provide a full complement of methods for mathematical calculations; for example, <code>2f64.sqrt()</code> is the double-precision square root of two. Some examples:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types4">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mi">5</code><code class="k">f32</code><code class="p">.</code><code class="n">sqrt</code><code class="p">()</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">5</code><code class="k">f32</code><code class="p">.</code><code class="n">sqrt</code><code class="p">(),</code><code class="w"> </code><code class="mf">5.</code><code class="p">);</code><code class="w">  </code><code class="c1">// exactly 5.0, per IEEE</code>
+<code class="fm">assert_eq!</code><code class="p">((</code><code class="o">-</code><code class="mf">1.01</code><code class="k">f64</code><code class="p">).</code><code class="n">floor</code><code class="p">(),</code><code class="w"> </code><code class="o">-</code><code class="mf">2.0</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>These methods are documented under “Primitive Type <code>f32</code>” and “Primitive Type <code>f64</code>”. The separate modules <code>std::f32::consts</code> and <code>std::f64::consts</code> provide various commonly used mathematical constants like <code>E</code>, <code>PI</code>, and the square root of two.</p>
+
+<p>As with integers, you usually won’t need to write out type suffixes on floating-point literals in real code, but <span data-claim-test="float-suffix-required">when you do</span>, putting a type on either the literal or the function will suffice:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-good-sqrt">
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="mf">2.0_</code><code class="k">f64</code><code class="p">).</code><code class="n">sqrt</code><code class="p">());</code><code class="w"/>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"{}"</code><code class="p">,</code><code class="w"> </code><code class="kt">f64</code><code class="p">::</code><code class="n">sqrt</code><code class="p">(</code><code class="mf">2.0</code><code class="p">));</code><code class="w"/>
+</pre>
+
+<p>Unlike C and C‍++, Rust does not perform numeric conversions implicitly. If a function expects an <code>f64</code> argument, it’s an error to pass an <code>i32</code> value as the argument. In fact, Rust won’t even implicitly convert an <code>i16</code> value to an <code>i32</code> value, even though every <code>i16</code> value is in the range of <code>i32</code>. But you can always write out <em>explicit</em> conversions using the <code>as</code> operator: <code>i as f64</code>, or <code>x as i32</code>.</p>
+
+<p>The lack of implicit conversions sometimes makes a Rust expression more verbose than the analogous C or C‍++ code would be. However, implicit integer conversions have a well-established record of causing bugs and security holes, especially when the integers in question represent the size of something in memory, and an unanticipated overflow occurs. In our experience, the act of writing out numeric conversions in Rust has alerted us to problems we would otherwise have missed.</p>
+
+<p>We explain exactly how conversions<a contenteditable="false" data-startref="ix_types_float-point" data-type="indexterm" id="id741"/><a contenteditable="false" data-startref="ix_float-point_type" data-type="indexterm" id="id742"/><a contenteditable="false" data-startref="ix_numeric_float-point_type" data-type="indexterm" id="id743"/><a contenteditable="false" data-startref="ix_types_numeric" data-type="indexterm" id="id744"/><a contenteditable="false" data-startref="ix_fixed_numeric_types" data-type="indexterm" id="id745"/><a contenteditable="false" data-startref="ix_numeric_types_fixed" data-type="indexterm" id="id746"/> behave in <a data-type="xref" href="ch06.html#type-casts">“Type Casts”</a>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="The bool Type"><div class="sect1" id="the-bool-type">
+<h1>The bool Type</h1>
+
+<p>Rust’s Boolean<a contenteditable="false" data-primary="Boolean type (bool)" data-type="indexterm" id="id747"/> type, <code>bool</code>, has the usual two values for such types, <code>true</code> and <code>false</code>. Comparison operators<a contenteditable="false" data-primary="comparison operators" data-type="indexterm" id="id748"/><a contenteditable="false" data-primary="operators" data-secondary="comparison" data-type="indexterm" id="id749"/> like <code>==</code> and <code>&lt;</code> produce <code>bool</code> results: the value of <code>2 &lt; 5</code> is <code>true</code>.</p>
+
+<p>Many languages are lenient about using values of other types in contexts that require a Boolean value: C and C‍++ implicitly convert characters, integers, floating-point numbers, and pointers to Boolean values, so they can be used directly as the condition in an <code>if</code> or <code>while</code> statement. Python and JavaScript permit any value at all in an <code>if</code> condition, with language-specific rules to determine which values are treated as <code>true</code> there and which are <code>false</code>. Rust, however, is very strict: control structures like <code>if</code> and <code>while</code> require their conditions to be <code>bool</code> expressions, as do the short-circuiting logical operators <code>&amp;&amp;</code> and <code>||</code>. You must write <code>if x != 0 { ... }</code>, not simply <code>if x { ... }</code>.</p>
+
+<p>Rust’s <code>as</code> operator can convert <code>bool</code> values to integer types:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types5">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="kc">false</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">i32</code><code class="p">,</code><code class="w"> </code><code class="mi">0</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="kc">true</code><code class="w">  </code><code class="k">as</code><code class="w"> </code><code class="kt">i32</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>However, <code>as</code> won’t convert in the other direction, from numeric types to <code>bool</code>. Instead, you must write out an explicit comparison like <code>x != 0</code>.</p>
+
+<p>Although a <code>bool</code> needs only a single bit to represent it, Rust uses an entire byte for a <code>bool</code> value in memory, so you can create a pointer to it.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Tuples"><div class="sect1" id="tuples">
+<h1>Tuples</h1>
+
+<p>A <em>tuple<a contenteditable="false" data-primary="types" data-secondary="tuples" data-type="indexterm" id="ix_types_tuples_ch3"/><a contenteditable="false" data-primary="tuples" data-type="indexterm" id="ix_tuples_ch3"/></em> is a pair, or triple, quadruple, quintuple, etc. (hence, <em>n-tuple</em>, or <em>tuple</em>), of values of assorted types. You can write a tuple as a sequence of values, separated by commas and surrounded by parentheses. For example, <code>(1984_i32, false)</code> is a tuple whose first field is an integer, and whose second is a boolean; its type is <code>(i32, bool)</code>. Given a tuple value <code>t</code>, you can access its fields as <code>t.0</code>, <code>t.1</code>, and so on.</p>
+
+<p>Tuples are very different from arrays.<a contenteditable="false" data-primary="arrays" data-secondary="tuples versus" data-type="indexterm" id="id750"/> For one thing, each field of a tuple can have a different type, whereas an array’s elements must all be the same type. Further, while accessing elements by a variable index, <code>arr[i]</code>, is practically the defining feature of arrays, there is no way to do this with a tuple. You can access a field by its numeric “name”, <code>t.1</code>, but you can’t write <code>t.i</code> or <code>t[i]</code> to get the <code>i</code>th field.</p>
+
+<p>Rust code often uses tuple types to return multiple values from a function. For example, the <code>split_at</code> method on string slices, which divides a string into two halves and returns them both, is declared like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-split_at">
+<code class="k">fn</code><code class="w"> </code><code class="nf">split_at</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">mid</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="p">(</code><code class="o">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="kt">str</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The return type <code>(&amp;str, &amp;str)</code> is a tuple of two string slices. You can use pattern-matching syntax to assign each field of the return value to a different variable:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types8">
+<code class="kd">let</code><code class="w"> </code><code class="n">text</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"I see the eigenvalue in thine eye"</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">head</code><code class="p">,</code><code class="w"> </code><code class="n">tail</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">text</code><code class="p">.</code><code class="n">split_at</code><code class="p">(</code><code class="mi">21</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">head</code><code class="p">,</code><code class="w"> </code><code class="s">"I see the eigenvalue "</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">tail</code><code class="p">,</code><code class="w"> </code><code class="s">"in thine eye"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This is more legible than the equivalent:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types9">
+<code class="kd">let</code><code class="w"> </code><code class="n">text</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"I see the eigenvalue in thine eye"</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">temp</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">text</code><code class="p">.</code><code class="n">split_at</code><code class="p">(</code><code class="mi">21</code><code class="p">);</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">head</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">temp</code><code class="p">.</code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">tail</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">temp</code><code class="p">.</code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">head</code><code class="p">,</code><code class="w"> </code><code class="s">"I see the eigenvalue "</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">tail</code><code class="p">,</code><code class="w"> </code><code class="s">"in thine eye"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>You’ll also see tuples used as a sort of minimal-drama struct type. For example, in the Mandelbrot program in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>, we needed to pass the width and height of the image to the functions that plot it and write it to disk. We could declare a struct with <code>width</code> and <code>height</code> members, but that’s pretty heavy notation for something so obvious, so we just used a tuple:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types10">
+<code class="sd">/// Writes the buffer `pixels`, whose dimensions are given by `bounds`, to the</code>
+<code class="sd">/// file named `filename`.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">write_image</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">filename</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="p">[</code><code class="kt">u8</code><code class="p">],</code><code class="w"/>
+<code class="w">    </code><code class="n">bounds</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(),</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The type of the <code>bounds</code> parameter is <code>(usize, usize)</code>, a tuple of two <code>usize</code> values. Admittedly, we could just as well write out separate <code>width</code> and <code>height</code> parameters, and the machine code would be about the same either way. It’s a matter of clarity. We think of the size as one value, not two, and using a tuple lets us write what we mean.</p>
+
+<p>The other commonly used tuple type<a contenteditable="false" data-primary="zero-tuple" data-type="indexterm" id="id751"/> is the zero-tuple <code>()</code>. This is traditionally called the <em>unit type<a contenteditable="false" data-primary="unit type" data-type="indexterm" id="id752"/></em> because it has only one value, also written <code>()</code>. Rust uses the unit type where there’s no meaningful value to carry, but context requires some sort of type nonetheless.</p>
+
+<p>For example, a function that returns no value has a return type of <code>()</code>. The standard library’s <code>std::thread::sleep</code> function has no meaningful value to return; it just pauses the program for a while. The declaration for <code>std::thread::sleep</code> reads:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types11">
+<code class="k">fn</code><code class="w"> </code><code class="nf">sleep</code><code class="p">(</code><code class="n">duration</code><code class="p">:</code><code class="w"> </code><code class="nc">Duration</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The signature omits the function’s return type altogether, which is shorthand for returning the unit type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types12">
+<code class="k">fn</code><code class="w"> </code><code class="nf">sleep</code><code class="p">(</code><code class="n">duration</code><code class="p">:</code><code class="w"> </code><code class="nc">Duration</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>Similarly, the <code>write_image</code> example we mentioned before has a return type of <code>Result&lt;(), std::io::Error&gt;</code>, meaning that the function returns a <code>std::io::Error</code> value if something goes wrong, but returns no value on success<a contenteditable="false" data-startref="ix_tuples_ch3" data-type="indexterm" id="id753"/><a contenteditable="false" data-startref="ix_types_tuples_ch3" data-type="indexterm" id="id754"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Pointer Types"><div class="sect1" id="pointer-types">
+<h1>Pointer Types</h1>
+
+<p>Rust has several types that represent memory addresses.<a contenteditable="false" data-primary="pointer types" data-type="indexterm" id="ix_pointer_types_ch3"/></p>
+
+<p>This is unusual in modern programming languages for two reasons. First, in many languages, values do not nest.<a contenteditable="false" data-primary="nesting of values" data-type="indexterm" id="id755"/> In Java, for example, if <code>class Rectangle</code> contains a field <code>Vector2D upperLeft;</code>, then <code>upperLeft</code> is a reference to another separately created <code>Vector2D</code> object. Objects never physically contain other objects in Java. The language doesn’t need pointer types because every Java object type is implicitly a pointer type.</p>
+
+<p>Rust is different. The language is designed to help keep allocations to a minimum, so values nest by default. The value <code>((0, 0), (1440, 900))</code> is stored as four adjacent integers. If you store it in a local variable, you’ve got a local variable four integers wide. Nothing is allocated in the heap. This is great for memory efficiency, but as a consequence, whenever a Rust program needs one value to point to another, it must say so by using a pointer type explicitly.</p>
+
+<p>The second reason Rust needs several pointer types is that there’s no garbage collector to manage memory for us.<a contenteditable="false" data-primary="garbage collection" data-type="indexterm" id="id756"/> It turns out memory still needs to be managed. Rust programs must decide when to allocate memory, how much to allocate, and when it’s safe to deallocate it. In Rust, these memory management policies are written out in the pointer types themselves. Here are some Rust pointer types and the policies they represent. Don’t worry if this is a bit bewildering at first; we explain all of these types fully in later chapters.</p>
+
+<ul>
+	<li><code>&amp;T</code> and <code>&amp;mut T</code> - We showed a few examples of references already in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>. References refer to “borrowed” values without taking on any responsibility for cleanup. Therefore references have no memory management overhead at all.</li>
+	<li><code>Box&lt;T&gt;</code> - This is a pointer type that points to a value of type <code>T</code> stored in the heap. Memory is allocated when the program calls <code>Box::new(value)</code>. When the box is “dropped”—for example, when the variable holding the box goes out of scope—the memory is freed. Boxes are not needed every day, but they’re the most basic way to override the default nesting of values, which is occasionally useful.</li>
+	<li><code>std::rc::Rc&lt;T&gt;</code> and <code>std::sync::Arc&lt;T&gt;</code> - These are Rust’s support for reference counting. Unlike <code>Box&lt;T&gt;</code> pointers, multiple <code>Rc&lt;T&gt;</code> pointers can point to the same heap-allocated <code>T</code>. This is useful when, say, multiple parts of a program all need access to a shared component. Rust tracks how many <code>Rc</code>s point to each shared value. The memory for the <code>T</code> is freed when the last <code>Rc</code> pointing to it is dropped. <code>Arc&lt;T&gt;</code> is the same, but it uses an atomic reference count, so <code>Arc</code>s can be shared across multiple threads.</li>
+	<li><code>*const T</code> and <code>*mut T</code> - These are Rust’s raw pointer types, the equivalent of C pointers. They can be dereferenced only in <code>unsafe</code> blocks, code that explicitly opts out of Rust’s safety guarantees. Raw pointers can be necessary when calling into a C library, or behind the scenes when implementing a new kind of data structure from scratch. We won’t discuss them again until <a data-type="xref" href="ch23.html#unsafe-code">Chapter 23</a>.</li>
+</ul>
+
+<p>All of these types point to a value of type T; they differ only in memory management strategies and corresponding rules about mutability and thread safety.</p>
+
+<p>Java doesn’t need all this variety: the garbage collector provides a convenient, one-size-fits-all strategy for managing memory. C‍++ programmers, however, will recognize these as <em>smart pointer</em> types<a contenteditable="false" data-primary="smart pointers" data-type="indexterm" id="id757"/>, similar to those in the C‍++ standard library: <code>Box&lt;T&gt;</code> is like C‍++’s <code>std::unique_ptr&lt;T&gt;</code>, and <code>Arc&lt;T&gt;</code> is like C‍++’s <code>std::shared_ptr&lt;T&gt;</code>.<a contenteditable="false" data-primary="unique_ptr (C++)" data-type="indexterm" id="id758"/><a contenteditable="false" data-primary="shared_ptr (C++)" data-type="indexterm" id="id759"/></p>
+
+<p>Except for raw pointers, Rust pointer types are non-nullable. Use <code>Option</code> for optional pointers, with <code>None</code> representing <code>null</code>. There’s no extra memory cost; an <code>Option&lt;&amp;T&gt;</code> is the same size as a <code>&amp;T</code>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Arrays, Vectors, and Slices"><div class="sect1" id="arrays-vectors-and-slices">
+<h1>Arrays, Vectors, and Slices</h1>
+
+<p>Rust has three types for representing a sequence of values in memory<a contenteditable="false" data-primary="types" data-secondary="for representing sequence of values in memory" data-secondary-sortas="representing sequence of values in memory" data-type="indexterm" id="ix_types_memory_seq_values"/><a contenteditable="false" data-primary="memory" data-secondary="types for representing sequence of values in" data-type="indexterm" id="ix_memory_seq_values"/>:</p>
+
+<ul>
+	<li>
+	<p>The type <code>[T; N]</code> represents a fixed-size array of <code>N</code> values, each of type <code>T</code>. An array’s size is a constant determined at compile time and is part of the type; you can’t grow or shrink an array.</p>
+	</li>
+	<li>
+	<p>The type <code>Vec&lt;T&gt;</code>, called a <em>vector of <code>T</code>s</em>, is a dynamically allocated, growable sequence of values of type <code>T</code>. A vector’s elements live in the heap, so you can resize vectors at will: push new elements onto them, append other vectors to them, delete elements, and so on.</p>
+	</li>
+	<li>
+	<p>The types <code>&amp;[T]</code> and <code>&amp;mut [T]</code> are reference types that refer to a <em>slice</em>, a contiguous subsequence, of a vector or array’s elements.</p>
+	</li>
+</ul>
+
+<p>Given a value <code>v</code> of any of these three types, the expression <code>v.len()</code> gives the number of elements in <code>v</code>, and <code>v[i]</code> refers to the <code>i</code>th element of <code>v</code>. The first element is <code>v[0]</code>, and the last element is <code>v[v.len() - 1]</code>. Rust checks that <code>i</code> always falls within this range; if it doesn’t, the expression panics. The length of <code>v</code> may be zero, in which case any attempt to index it will panic. <code>i</code> must be a <code>usize</code> value; you can’t use any other integer type as an index.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Arrays"><div class="sect2" id="arrays">
+<h2>Arrays</h2>
+
+<p>There are several ways to write array<a contenteditable="false" data-primary="arrays" data-type="indexterm" id="id760"/><a contenteditable="false" data-primary="types" data-secondary="arrays" data-type="indexterm" id="id761"/> values. The simplest is to write a series of values within square brackets:</p>
+
+<pre class="small" data-code-language="rust" data-type="programlisting" id="test-types14">
+<code class="kd">let</code><code class="w"> </code><code class="n">lazy_caterer</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">u32</code><code class="p">;</code><code class="w"> </code><code class="mi">6</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">,</code><code class="w"> </code><code class="mi">7</code><code class="p">,</code><code class="w"> </code><code class="mi">11</code><code class="p">,</code><code class="w"> </code><code class="mi">16</code><code class="p">];</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">taxonomy</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="s">"Animalia"</code><code class="p">,</code><code class="w"> </code><code class="s">"Arthropoda"</code><code class="p">,</code><code class="w"> </code><code class="s">"Insecta"</code><code class="p">];</code><code class="w"/>
+
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">lazy_caterer</code><code class="p">[</code><code class="mi">3</code><code class="p">],</code><code class="w"> </code><code class="mi">7</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">taxonomy</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">3</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>For the common case of a long array filled with some value, you can write <code>[<em>V</em>; <em>N</em>]</code>, where <code><em>V</em></code> is the value each element should have, and <code><em>N</em></code> is the length. For example, <code>[true; 10000]</code> is an array of 10,000 <code>bool</code> elements, all set to <code>true</code>:</p>
+
+<pre class="small" data-code-language="rust" data-type="programlisting" id="test-types15">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">sieve</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="kc">true</code><code class="p">;</code><code class="w"> </code><code class="mi">10000</code><code class="p">];</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">2</code><code class="o">..</code><code class="mi">100</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">sieve</code><code class="p">[</code><code class="n">i</code><code class="p">]</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">j</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">i</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="k">while</code><code class="w"> </code><code class="n">j</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="mi">10000</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">sieve</code><code class="p">[</code><code class="n">j</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="kc">false</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="n">j</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="n">i</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="fm">assert!</code><code class="p">(</code><code class="n">sieve</code><code class="p">[</code><code class="mi">211</code><code class="p">]);</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="o">!</code><code class="n">sieve</code><code class="p">[</code><code class="mi">9876</code><code class="p">]);</code><code class="w"/>
+</pre>
+
+<p>You’ll see this syntax used for fixed-size buffers: <code>[0u8; 1024]</code> is a one-kilobyte buffer, filled with zeros. Rust has no notation for an uninitialized array. (In general, Rust ensures that code can never access uninitialized memory.)</p>
+
+<p>An array’s length is part of its type, fixed at compile time. If <code>n</code> is a variable, you can’t write <code>[true; n]</code> to get an array of <code>n</code> elements. You might think, in light of this severe limitation, that arrays don’t sound very useful. For most use cases, you’d be right! Arrays are efficient: small arrays can be stored on the stack or inside a struct without allocating more heap memory. An array of 8 bytes can fit in a single machine register! But in day-to-day programming, most lists have a variable length. For that, you need a vector.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Vectors"><div class="sect2" id="vectors">
+<h2>Vectors</h2>
+
+<p>A vector<a contenteditable="false" data-primary="vectors" data-type="indexterm" id="ix_vectors_types"/><a contenteditable="false" data-primary="types" data-secondary="vectors" data-type="indexterm" id="ix_types_vectors"/><a contenteditable="false" data-primary="Vec&lt;T&gt; collection type" data-type="indexterm" id="ix_types_vec_t"/> <code>Vec&lt;T&gt;</code> is a resizable array of elements of type <code>T</code>, allocated in the heap.</p>
+
+<p>There are several ways to create vectors. The simplest is to use the <code>vec!</code> macro<a contenteditable="false" data-primary="vec! macro" data-type="indexterm" id="id762"/>, which gives us a syntax for vectors that looks very much like an array literal:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types17">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">primes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">2</code><code class="p">,</code><code class="w"> </code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="mi">5</code><code class="p">,</code><code class="w"> </code><code class="mi">7</code><code class="p">];</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">primes</code><code class="p">.</code><code class="n">iter</code><code class="p">().</code><code class="n">product</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">(),</code><code class="w"> </code><code class="mi">210</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>But of course, this is a vector, not an array, so we can add elements to it dynamically:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types18">
+<code class="n">primes</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="mi">11</code><code class="p">);</code><code class="w"/>
+<code class="n">primes</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="mi">13</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">primes</code><code class="p">.</code><code class="n">iter</code><code class="p">().</code><code class="n">product</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">(),</code><code class="w"> </code><code class="mi">30030</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>You can also build a vector by repeating a given value a certain number of times, again using a syntax that imitates array literals:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types19">
+<code class="k">fn</code><code class="w"> </code><code class="nf">new_pixel_buffer</code><code class="p">(</code><code class="n">rows</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="n">cols</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="n">rows</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">cols</code><code class="p">]</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>vec!</code> macro is equivalent to calling <code>Vec::new</code> to create a new, empty vector and then pushing the elements onto it:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types20">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">pal</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="n">pal</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"step"</code><code class="p">);</code><code class="w"/>
+<code class="n">pal</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"on"</code><code class="p">);</code><code class="w"/>
+<code class="n">pal</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"no"</code><code class="p">);</code><code class="w"/>
+<code class="n">pal</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="s">"pets"</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">pal</code><code class="p">,</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"step"</code><code class="p">,</code><code class="w"> </code><code class="s">"on"</code><code class="p">,</code><code class="w"> </code><code class="s">"no"</code><code class="p">,</code><code class="w"> </code><code class="s">"pets"</code><code class="p">]);</code><code class="w"/>
+</pre>
+
+<p>Another possibility is to build a vector from the values produced by an iterator:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types21">
+<code class="kd">let</code><code class="w"> </code><code class="n">v</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="mi">5</code><code class="p">).</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">,</code><code class="w"> </code><code class="p">[</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">,</code><code class="w"> </code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">]);</code><code class="w"/>
+</pre>
+
+<p>You’ll often need to supply the type when using <code>collect</code> (as we’ve done here), because it can build many different sorts of collections, not just vectors. By specifying the type of <code>v</code>, we’ve made it unambiguous which sort of collection we want.</p>
+
+<p><code>Vec</code> is an essential type in Rust—it’s used almost anywhere one needs a list of dynamic size—so there are many other methods that construct new vectors or extend existing ones. We’ll cover them in <a data-type="xref" href="ch16.html#collections">Chapter 16</a>.</p>
+
+<p>A <code>Vec&lt;T&gt;</code> consists of three values: a pointer to the heap-allocated buffer for the elements, which is created and owned by the <code>Vec&lt;T&gt;</code>; the number of elements that buffer has the capacity to store; and the number it actually contains now (in other words, its length). When the buffer has reached its capacity, adding another element to the vector entails allocating a larger buffer, copying the present contents into it, updating the vector’s pointer and capacity to describe the new buffer, and finally freeing the old one.</p>
+
+<p>If you know the number of elements a vector will need in advance, instead of <code>Vec::new</code> you can call <code>Vec::with_capacity</code> to create<a contenteditable="false" data-primary="capacity of a vector" data-type="indexterm" id="id763"/> a vector with a buffer large enough to hold them all, right from the start; then, you can add the elements to the vector one at a time without causing any reallocation. The <code>vec!</code> macro uses a trick like this, since it knows how many elements the final vector will have. Note that this only establishes the vector’s initial size; if you exceed your estimate, the vector simply enlarges its storage as usual.</p>
+
+<p>Many library functions look for the opportunity to use <code>Vec::with_capacity</code> instead of <code>Vec::new</code>. For example, in the <code>collect</code> example, the iterator <code>0..5</code> knows in advance that it will yield five values, and the <code>collect</code> function takes advantage of this to pre-allocate the vector it returns with the correct capacity. We’ll see how this works in <a data-type="xref" href="ch15.html#iterators">Chapter 15</a>.</p>
+
+<p>Just as a vector’s <code>len</code> method<a contenteditable="false" data-primary="len method" data-type="indexterm" id="id764"/> returns the number of elements it contains now, its <code>capacity</code> method returns the number of elements it could hold without reallocation:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types23">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">v</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">with_capacity</code><code class="p">(</code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">0</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">capacity</code><code class="p">(),</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+
+<code class="n">v</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="n">v</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">capacity</code><code class="p">(),</code><code class="w"> </code><code class="mi">2</code><code class="p">);</code><code class="w"/>
+
+<code class="n">v</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="mi">3</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">3</code><code class="p">);</code><code class="w"/>
+<code class="c1">// Typically prints "capacity is now 4":</code>
+<code class="fm">println!</code><code class="p">(</code><code class="s">"capacity is now {}"</code><code class="p">,</code><code class="w"> </code><code class="n">v</code><code class="p">.</code><code class="n">capacity</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>The capacity printed at the end isn’t guaranteed to be exactly 4, but it will be at least 3, since the vector is holding three values.</p>
+
+<p>You can insert and remove elements wherever you like in a vector, although these operations shift all the elements after the affected position forward or backward, so they may be slow if the vector is long:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types24">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">v</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">10</code><code class="p">,</code><code class="w"> </code><code class="mi">20</code><code class="p">,</code><code class="w"> </code><code class="mi">30</code><code class="p">,</code><code class="w"> </code><code class="mi">40</code><code class="p">,</code><code class="w"> </code><code class="mi">50</code><code class="p">];</code><code class="w"/>
+
+<code class="c1">// Make the element at index 3 be 35.</code>
+<code class="n">v</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="mi">35</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">,</code><code class="w"> </code><code class="p">[</code><code class="mi">10</code><code class="p">,</code><code class="w"> </code><code class="mi">20</code><code class="p">,</code><code class="w"> </code><code class="mi">30</code><code class="p">,</code><code class="w"> </code><code class="mi">35</code><code class="p">,</code><code class="w"> </code><code class="mi">40</code><code class="p">,</code><code class="w"> </code><code class="mi">50</code><code class="p">]);</code><code class="w"/>
+
+<code class="c1">// Remove the element at index 1.</code>
+<code class="n">v</code><code class="p">.</code><code class="n">remove</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">,</code><code class="w"> </code><code class="p">[</code><code class="mi">10</code><code class="p">,</code><code class="w"> </code><code class="mi">30</code><code class="p">,</code><code class="w"> </code><code class="mi">35</code><code class="p">,</code><code class="w"> </code><code class="mi">40</code><code class="p">,</code><code class="w"> </code><code class="mi">50</code><code class="p">]);</code><code class="w"/>
+</pre>
+
+<p>You can use the <code>pop</code> method to remove the last element and return it. More precisely, popping a value from a <code>Vec&lt;T&gt;</code> returns an <code>Option&lt;T&gt;</code>: <code>None</code> if the vector was already empty, or <code>Some(v)</code> if its last element had been <code>v</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types25">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">v</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"Snow Puff"</code><code class="p">,</code><code class="w"> </code><code class="s">"Glass Gem"</code><code class="p">];</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">pop</code><code class="p">(),</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="s">"Glass Gem"</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">pop</code><code class="p">(),</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="s">"Snow Puff"</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">v</code><code class="p">.</code><code class="n">pop</code><code class="p">(),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>You can use a <code>for</code> loop to iterate over a vector:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-functional-versus-imperative">
+<code class="c1">// Get our command-line arguments as a vector of Strings.</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">languages</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">().</code><code class="n">skip</code><code class="p">(</code><code class="mi">1</code><code class="p">).</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">l</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">languages</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="s">"{l}: {}"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">l</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">%</code><code class="w"> </code><code class="mi">2</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="s">"functional"</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="s">"imperative"</code><code class="w"/>
+<code class="w">        </code><code class="p">},</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Running this program with a list of programming languages is illuminating:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"> </code>Lisp<code class="w"> </code>Scheme<code class="w"> </code>C<code class="w"> </code>C++<code class="w"> </code>Fortran<code class="w"/>
+<code class="go">   Compiling proglangs v0.1.0 (/home/jimb/rust/proglangs)</code>
+<code class="go">    Finished dev [unoptimized + debuginfo] target(s) in 0.36s</code>
+<code class="go">     Running `target/debug/proglangs Lisp Scheme C C++ Fortran`</code>
+<code class="go">Lisp: functional</code>
+<code class="go">Scheme: functional</code>
+<code class="go">C: imperative</code>
+<code class="go">C++: imperative</code>
+<code class="go">Fortran: imperative</code>
+<code class="gp">$</code>
+</pre>
+
+<p>Finally, a satisfying definition for the term <em>functional language<a contenteditable="false" data-primary="functional language" data-type="indexterm" id="id765"/></em>.</p>
+
+<p>Despite its fundamental role, <code>Vec</code> is an ordinary type defined in Rust, not built into the language. We’ll cover the techniques needed to implement such types<a contenteditable="false" data-startref="ix_types_vec_t" data-type="indexterm" id="id766"/><a contenteditable="false" data-startref="ix_types_vectors" data-type="indexterm" id="id767"/><a contenteditable="false" data-startref="ix_vectors_types" data-type="indexterm" id="id768"/> in <a data-type="xref" href="ch23.html#unsafe-code">Chapter 23</a>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Slices"><div class="sect2" id="slices">
+<h2>Slices</h2>
+
+<p>A slice<a contenteditable="false" data-primary="slices" data-type="indexterm" id="id769"/><a contenteditable="false" data-primary="types" data-secondary="slices" data-type="indexterm" id="id770"/><a contenteditable="false" data-primary="[T] slices" data-primary-sortas="T slices" data-seealso="slices" data-type="indexterm" id="id771"/>, written <code>[T]</code> without specifying the length, is a region of an array<a contenteditable="false" data-primary="arrays" data-secondary="slices and" data-type="indexterm" id="id772"/> or vector. Since a slice can be any length, slices can’t be stored directly in variables or passed as function arguments. They are always passed by reference. This being the case, it’s extremely common to refer to references of type <code>&amp;[T]</code> as “slices,” using the shorter name for the more common concept. We’ll do the same later on, but in this section, we’ll call values of type <code>&amp;[T]</code> “slice references” to avoid ambiguity.</p>
+
+<p>A slice reference is a <em>fat pointer<a contenteditable="false" data-primary="fat pointer" data-type="indexterm" id="id773"/></em>: a two-word value comprising a pointer to the slice’s first element, and the number of elements in the slice.</p>
+
+<p>Suppose you run the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types27">
+<code class="kd">let</code><code class="w"> </code><code class="n">v</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mf">0.0</code><code class="p">,</code><code class="w">  </code><code class="mf">0.707</code><code class="p">,</code><code class="w">  </code><code class="mf">1.0</code><code class="p">,</code><code class="w">  </code><code class="mf">0.707</code><code class="p">];</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">a</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">f64</code><code class="p">;</code><code class="w"> </code><code class="mi">4</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w">     </code><code class="p">[</code><code class="mf">0.0</code><code class="p">,</code><code class="w"> </code><code class="o">-</code><code class="mf">0.707</code><code class="p">,</code><code class="w"> </code><code class="o">-</code><code class="mf">1.0</code><code class="p">,</code><code class="w"> </code><code class="o">-</code><code class="mf">0.707</code><code class="p">];</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">sv</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="p">[</code><code class="kt">f64</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">v</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">sa</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="p">[</code><code class="kt">f64</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">a</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>In the last two lines, Rust automatically converts the <code>&amp;Vec&lt;f64&gt;</code> reference and the <code>&amp;[f64; 4]</code> reference to slice references that point directly to the data.</p>
+
+<p>By the end, memory looks like <a data-type="xref" href="#fig0302">Figure 3-2</a>.</p>
+
+<figure><div id="fig0302" class="figure"><img alt="borrowing a slice of a vector" src="assets/pru3_0302.png" width="600" height="224"/>
+<h6><span class="label">Figure 3-2. </span>A vector <code>v</code> and an array <code>a</code> in memory, with slices <code>sa</code> and <code>sv</code> referring to each</h6>
+</div></figure>
+
+<p>An ordinary reference points to one value; a slice reference points to several values stored side-by-side in memory. Since slice references can point to data whether it’s located in an array or a vector, they’re a good choice when you want to write a function that can operate on either one. For example, here’s a function that prints a slice of numbers, one per line:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types28">
+<code class="k">fn</code><code class="w"> </code><code class="nf">print_nums</code><code class="p">(</code><code class="n">n</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="p">[</code><code class="kt">f64</code><code class="p">])</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">elt</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">n</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{elt}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="n">print_nums</code><code class="p">(</code><code class="o">&amp;</code><code class="n">a</code><code class="p">);</code><code class="w">  </code><code class="c1">// works on arrays</code>
+<code class="n">print_nums</code><code class="p">(</code><code class="o">&amp;</code><code class="n">v</code><code class="p">);</code><code class="w">  </code><code class="c1">// works on vectors</code>
+</pre>
+
+<p>Just as in the previous example, Rust automatically converts <code>&amp;a</code> and <code>&amp;v</code> to slice references.</p>
+
+<p>You can get a reference to a slice of an array or vector, or a slice of an existing slice, by indexing it with a range:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types29">
+<code class="n">print_nums</code><code class="p">(</code><code class="o">&amp;</code><code class="n">v</code><code class="p">[</code><code class="mi">0</code><code class="o">..</code><code class="mi">2</code><code class="p">]);</code><code class="w">    </code><code class="c1">// print the first two elements of v</code>
+<code class="n">print_nums</code><code class="p">(</code><code class="o">&amp;</code><code class="n">a</code><code class="p">[</code><code class="mi">2</code><code class="o">..</code><code class="p">]);</code><code class="w">     </code><code class="c1">// print elements of a starting with a[2]</code>
+<code class="n">print_nums</code><code class="p">(</code><code class="o">&amp;</code><code class="n">sv</code><code class="p">[</code><code class="mi">1</code><code class="o">..</code><code class="mi">3</code><code class="p">]);</code><code class="w">   </code><code class="c1">// print v[1] and v[2]</code>
+</pre>
+
+<p>As with ordinary array accesses, Rust checks that the indices are valid. Trying to borrow a slice that extends past the end of the data results in a panic.</p>
+
+<p>If our <code>print_nums</code> function took its argument as a <code>&amp;Vec&lt;f64&gt;</code>, it would be unnecessarily limited to full vectors only; <code>&amp;v[0..2]</code> and so on would not be valid arguments. Where possible, functions should accept slice references rather than vector or array references, for generality.</p>
+
+<p>For the same reason, many of the useful standard library methods you’d like to see on arrays and vectors—searching, sorting, filling, reversing, and so on—are implemented as methods on slices:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types-slice-methods">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">chaos</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="mi">5</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">];</code><code class="w"/>
+<code class="n">chaos</code><code class="p">.</code><code class="n">sort</code><code class="p">();</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">chaos</code><code class="p">,</code><code class="w"> </code><code class="p">[</code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">,</code><code class="w"> </code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">,</code><code class="w"> </code><code class="mi">5</code><code class="p">]);</code><code class="w"/>
+</pre>
+
+<p>In this example, the <code>sort</code> method is actually defined on the slice type <code>[i32]</code>, not <code>Vec&lt;i32&gt;</code>. Rust once again automatically creates a slice reference to the vector’s elements, and calls <code>sort</code> on that. It would work the same with an array<a contenteditable="false" data-startref="ix_memory_seq_values" data-type="indexterm" id="id774"/><a contenteditable="false" data-startref="ix_types_memory_seq_values" data-type="indexterm" id="id775"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="String and Character Types"><div class="sect1" id="string-and-character-types">
+<h1>String and Character Types</h1>
+
+<p>Programmers<a contenteditable="false" data-primary="String and str types" data-type="indexterm" id="ix_string_str_types_ch3"/> familiar with C‍++ will recall that there are two string types in the standard library. The type <code>std::string_view</code> is a read-only reference to some text. It can refer to any string anywhere, including string literals. The standard library also offers a class, <code>std::string</code>, for dynamically creating strings at run time.</p>
+
+<p>Rust has a similar design. The reference type <code>&amp;str</code> refers to some text anywhere in memory. The type <code>String</code> is for building strings dynamically. In the sections that follow, we’ll briefly introduce these types, as well as the Unicode character type, <code>char</code>. For much more about strings and text processing, see <a data-type="xref" href="ch17.html#strings-and-text">Chapter 17</a>.</p>
+
+<section data-type="sect2" data-pdf-bookmark="String and Character Literals"><div class="sect2" id="string-and-character-literals">
+<h2>String and Character Literals</h2>
+
+<p>String<a contenteditable="false" data-primary="string literals" data-type="indexterm" id="id776"/> literals are enclosed in double quotes.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types30">
+<code class="kd">let</code><code class="w"> </code><code class="n">quote</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"Editing is a rewording activity."</code><code class="p">;</code><code class="w">  </code><code class="c1">// Alan Perlis</code>
+</pre>
+
+<p>The type of a string literal is <code>&amp;str</code>.</p>
+
+<p>Character<a contenteditable="false" data-primary="character literals" data-type="indexterm" id="id777"/><a contenteditable="false" data-primary="Unicode" data-secondary="character literals" data-type="indexterm" id="id778"/> literals are enclosed in single quotes, like <code>'8'</code> or <code>'!'</code>. They have the type <code>char</code>, which can represent any single Unicode character: <code>'錆'</code> is a <code>char</code> literal representing the Japanese kanji for <em>sabi</em> (rust).</p>
+
+<p>A string may span multiple lines:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types31">
+<code class="fm">println!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="s">"In the room the women come and go,</code>
+<code class="s">    Singing of Mount Abora"</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The newline character in that string literal is included in the string and therefore in the output. So are the spaces at the beginning of the second line. (Windows-style line endings do not affect the string’s content. A line break in a string is always treated as a single newline character, <code>'\n'</code>.)</p>
+
+<p>If one line of a string ends with a backslash, then the newline character and the leading whitespace on the next line are dropped:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types32">
+<code class="fm">println!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="s">"It was a bright, cold day in April, and \</code>
+<code class="s">    there were four of us—\</code>
+<code class="s">    more or less."</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This prints a single line of text. The string contains a single space between “and” and “there” because there is a space before the backslash in the program, and no space between the em dash and “more.”</p>
+
+<p>As in many other languages, <em>escape sequences</em><a contenteditable="false" data-primary="escape sequences" data-type="indexterm" id="id779"/> stand for special characters (<a data-type="xref" href="#table0308">Table 3-6</a>).</p>
+
+<table id="table0308">
+	<caption><span class="label">Table 3-6. </span>Character escape sequences</caption>
+	<thead>
+		<tr class="header">
+			<th>Character</th>
+			<th>Escape sequence</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td>Single quote, <code>'</code></td>
+			<td><code>\'</code></td>
+		</tr>
+		<tr class="even">
+			<td>Backslash, <code>\</code></td>
+			<td><code>\\</code></td>
+		</tr>
+		<tr class="odd">
+			<td>Newline</td>
+			<td><code>\n</code></td>
+		</tr>
+		<tr class="even">
+			<td>Carriage return</td>
+			<td><code>\r</code></td>
+		</tr>
+		<tr class="odd">
+			<td>Tab</td>
+			<td><code>\t</code></td>
+		</tr>
+		<tr class="even">
+			<td>Any ASCII character (0 to 127)</td>
+			<td><code>\x</code> <i>exactly two hex digits</i></td>
+		</tr>
+		<tr class="odd">
+			<td>Any character</td>
+			<td><code>\u{</code> <i>up to six hex digits</i> <code>}</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>You can write any character as <code>\u{HHHHHH}</code>, where <code>HHHHHH</code> is the code point as a hexadecimal number of up to 6 digits, with underscores allowed for grouping as usual. For example, the character literal <code>'\u{CA0}'</code> represents the character “ಠ”, a Kannada letter used in the Unicode Look of Disapproval, “ಠ_ಠ”. The same literal could also be simply written as <code>'ಠ'</code>.</p>
+
+<p>In a few cases, the need to double every backslash in a string is a nuisance. (The classic examples are regular expressions and Windows paths.) For these cases, Rust offers <em>raw strings<a contenteditable="false" data-primary="raw strings" data-type="indexterm" id="id780"/></em>. A raw string is tagged with the lowercase letter <code>r</code>. All backslashes and whitespace characters inside a raw string are included verbatim in the string. No escape sequences are recognized:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types33">
+<code class="kd">let</code><code class="w"> </code><code class="n">default_win_install_path</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">r"C:\Program Files\Gorillas"</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">pattern</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Regex</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">r"\d+(\.\d+)*"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>You can’t include a double-quote character in a raw string simply by putting a backslash in front of it—remember, we said <em>no</em> escape sequences are recognized. However, there is a cure for that too. The start and end of a raw string can be marked with pound signs:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types34">
+<code class="fm">println!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="s">r###"</code>
+<code class="s">    This raw string started with 'r###"'.</code>
+<code class="s">    Therefore it does not end until we reach a quote mark ('"')</code>
+<code class="s">    followed immediately by three pound signs ('###'):</code>
+<code class="s">    "###</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+<p>You can add as few or as many pound signs as needed to make it clear where the raw string ends.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Characters and Strings in Memory"><div class="sect2" id="characters-and-strings-in-memory">
+<h2>Characters and Strings in Memory</h2>
+
+<p>Rust’s character type <code>char</code><a contenteditable="false" data-primary="characters (char)" data-type="indexterm" id="id781"/> represents a single Unicode character by its code point. Each <code>char</code> value takes up 4 bytes of memory, the same as a <code>u32</code>.</p>
+
+<p>Rust<a contenteditable="false" data-primary="memory" data-secondary="strings in" data-type="indexterm" id="ix_mem_strings"/><a contenteditable="false" data-primary="String and str types" data-secondary="strings in memory" data-type="indexterm" id="ix_string_str_types_mem"/> strings<a contenteditable="false" data-primary="String and str types" data-secondary="UTF-8 and" data-type="indexterm" id="id782"/> are sequences of Unicode characters, but they are not stored in memory as arrays of <code>char</code>s. Instead, they are stored using UTF-8, a variable-width encoding. Each ASCII character in a string is stored in one byte. Other characters take up multiple bytes.</p>
+
+<p><a data-type="xref" href="#string-layout-figure">Figure 3-3</a> shows the <code>String</code> and <code>&amp;str</code> values created by the following code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types36">
+<code class="kd">let</code><code class="w"> </code><code class="n">noodles</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"noodles"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">oodles</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">noodles</code><code class="p">[</code><code class="mi">1</code><code class="o">..</code><code class="p">];</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">disapproodles</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"ಠ_ಠ"</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>A <code>String</code> has a resizable buffer holding UTF-8 text<a contenteditable="false" data-primary="UTF-8" data-secondary="strings in memory" data-type="indexterm" id="id783"/>. The buffer is allocated in the heap, so it can be resized as needed. In the figure, <code>noodles</code> is a <code>String</code> that owns an eight-byte buffer, of which seven are in use. You can think of a <code>String</code> as a <code>Vec&lt;u8&gt;</code> that is guaranteed to hold well-formed UTF-8; in fact, this is how <code>String</code> is implemented.</p>
+
+<p>A <code>&amp;str</code> (pronounced “stir” or “string slice”) is a reference<a contenteditable="false" data-primary="&amp;str (string slice)" data-type="indexterm" id="id784"/> to a run of UTF-8 text owned by someone else: it “borrows” the text. In the example, <code>oodles</code> is a <code>&amp;str</code> referring to the last six bytes of the text belonging to <code>noodles</code>, so it represents the text <code>"oodles"</code>. Like other slice references, a <code>&amp;str</code> is a fat pointer, containing both the address of the actual data and its length.</p>
+
+<p>You can think of a <code>&amp;str</code> as being nothing more than a <code>&amp;[u8]</code> that is guaranteed to hold well-formed UTF-8. Likewise, a <code>char</code> is essentially a <code>u32</code> that is guaranteed to hold a valid Unicode scalar value. They are types with <em>invariants</em>:<a contenteditable="false" data-primary="invariants" data-secondary="str and char" data-type="indexterm" id="id785"/> rules about their values that are enforced by the implementation, that can’t be broken except by abusing unsafe code, and that programs can therefore rely on.</p>
+
+<figure><div id="string-layout-figure" class="figure"><img alt="(A String owns its buffer. A &amp;str is a fat pointer to someone else's characters.)" src="assets/pru3_0303.png" width="600" height="360"/>
+<h6><span class="label">Figure 3-3. </span><code>String</code>, <code>&amp;str</code>, and <code>str</code></h6>
+</div></figure>
+
+<p>A string literal is a <code>&amp;str</code> that refers to preallocated text, typically stored in read-only memory along with the program’s machine code. In the preceding example, <code>"ಠ_ಠ"</code> is a string literal, pointing to seven bytes that are loaded into memory when the program begins execution and that last until it exits.</p>
+
+<p>A <code>String</code> or <code>&amp;str</code>’s <code>.len()</code> method<a contenteditable="false" data-primary="len method" data-type="indexterm" id="id786"/> returns its length. The length is measured in bytes, not characters:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types38">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="s">"ಠ_ಠ"</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">7</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="s">"ಠ_ಠ"</code><code class="p">.</code><code class="n">chars</code><code class="p">().</code><code class="n">count</code><code class="p">(),</code><code class="w"> </code><code class="mi">3</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>It is impossible to modify a <code>&amp;str</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-modify-str">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"hello"</code><code class="p">;</code><code class="w"/>
+<code class="n">s</code><code class="p">[</code><code class="mi">0</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="sc">'c'</code><code class="p">;</code><code class="w">    </code><code class="c1">// error: `&amp;str` cannot be modified, and other reasons</code>
+<code class="n">s</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="sc">'\n'</code><code class="p">);</code><code class="w">  </code><code class="c1">// error: no method named `push` found for reference `&amp;str`</code>
+</pre>
+
+<p>To create new strings at run time, use <code>String</code><a contenteditable="false" data-startref="ix_string_str_types_mem" data-type="indexterm" id="id787"/><a contenteditable="false" data-startref="ix_mem_strings" data-type="indexterm" id="id788"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="String"><div class="sect2" id="string">
+<h2>String</h2>
+
+<p><code>&amp;str</code> is very much like <code>&amp;[T]</code>: a fat pointer to some data. <code>String</code> is analogous to <code>Vec&lt;T&gt;</code>, as described in <a data-type="xref" href="#table0309">Table 3-7</a>.</p>
+
+<table id="table0309">
+	<caption><span class="label">Table 3-7. </span><code>Vec〈T〉</code> and <code>String</code> comparison</caption>
+	<thead>
+		<tr class="header">
+			<th> </th>
+			<th>Vec&lt;T&gt;</th>
+			<th>String</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr class="odd">
+			<td>Automatically frees buffers</td>
+			<td>Yes</td>
+			<td>Yes</td>
+		</tr>
+		<tr class="even">
+			<td>Growable</td>
+			<td>Yes</td>
+			<td>Yes</td>
+		</tr>
+		<tr class="odd">
+			<td><code>::new()</code> and <code>::with_capacity()</code> associated functions</td>
+			<td>Yes</td>
+			<td>Yes</td>
+		</tr>
+		<tr class="even">
+			<td>Consists of pointer, capacity, and length</td>
+			<td>Yes</td>
+			<td>Yes</td>
+		</tr>
+		<tr class="odd">
+			<td><code>.push()</code> and <code>.pop()</code> methods</td>
+			<td>Yes</td>
+			<td>Yes</td>
+		</tr>
+		<tr class="even">
+			<td>Range syntax <code>&amp;v[start..stop]</code></td>
+			<td>Yes, returns <code>&amp;[T]</code></td>
+			<td>Yes, returns <code>&amp;str</code></td>
+		</tr>
+		<tr class="odd">
+			<td>Automatic conversion</td>
+			<td><code>&amp;Vec&lt;T&gt;</code> to <code>&amp;[T]</code></td>
+			<td><code>&amp;String</code> to <code>&amp;str</code></td>
+		</tr>
+		<tr class="even">
+			<td>Inherits methods</td>
+			<td>From <code>&amp;[T]</code></td>
+			<td>From <code>&amp;str</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Like a <code>Vec</code>, each <code>String</code> has its own heap-allocated buffer that isn’t shared with any other <code>String</code>. The <code>String</code> automatically frees this memory when it is dropped, just like a <code>Vec</code> or <code>Box</code>.</p>
+
+<p>There are several ways to create <code>String</code>s:</p>
+
+<ul>
+	<li>
+	<p>The <code>.to_string()</code> method<a contenteditable="false" data-primary="to_string method" data-type="indexterm" id="id789"/> converts<a contenteditable="false" data-primary="string slice (&amp;str)" data-type="indexterm" id="id790"/><a contenteditable="false" data-primary="slices" data-secondary="&amp;str (string slice)" data-type="indexterm" id="id791"/> a <code>&amp;str</code> to a <code>String</code>. This copies the string:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-types39">
+<code class="kd">let</code><code class="w"> </code><code class="n">error_message</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"too many pets"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+</pre>
+	</li>
+	<li>
+	<p><code>String::new()</code> returns an empty string. You can then build up the new string piece by piece using the <code>+=</code> operator. The value to the right of <code>+=</code> can be a <code>&amp;str</code> or <code>&amp;String</code>.</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-types-string-new">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="n">s</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="s">"You can see:</code><code class="se">\n</code><code class="s">"</code><code class="p">;</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">item</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">game</code><code class="p">.</code><code class="n">items</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">item</code><code class="p">.</code><code class="n">location</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">player</code><code class="p">.</code><code class="n">location</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">s</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="s">"    "</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="n">s</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">item</code><code class="p">.</code><code class="n">name</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="n">s</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="s">"</code><code class="se">\n</code><code class="s">"</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+	</li>
+	<li>
+	<p>The <code>format!()</code> macro<a contenteditable="false" data-primary="format! macro" data-type="indexterm" id="id792"/> works just like <code>println!()</code>, except<a contenteditable="false" data-primary="println! macro" data-type="indexterm" id="id793"/> that it returns a new <code>String</code> instead of writing text to stdout, and it doesn’t automatically add a newline at the end:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-types40">
+<code class="kd">let</code><code class="w"> </code><code class="n">place</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"Portland"</code><code class="p">;</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="fm">format!</code><code class="p">(</code><code class="s">"Hello, {place}!"</code><code class="p">),</code><code class="w"> </code><code class="s">"Hello, Portland!"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+</pre>
+
+	<p>The first argument to <code>format!()</code> or <code>println!()</code> is called a <em>format string</em>. The bits in curly braces are called <em>format specifiers</em>, and in the output, each format specifier is replaced with some value. Values can be passed as additional arguments to the macro or, for single identifiers only, included in the format specifier itself:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-types40a">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="fm">format!</code><code class="p">(</code><code class="s">"from {} to {}"</code><code class="p">,</code><code class="w"> </code><code class="n">start</code><code class="p">,</code><code class="w"> </code><code class="n">end</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="fm">format!</code><code class="p">(</code><code class="s">"from {start} to {end}"</code><code class="p">),</code><code class="w"/>
+<code class="p">);</code><code class="w"/>
+</pre>
+
+	<p>A format specifier of <code>{}</code> or <code>{<em>name</em>}</code> renders a value in <code>Display</code> format, for end users; <code>{:?}</code> or <code>{<em>name</em>:?}</code> renders it in <code>Debug</code> format, for debugging. An example of the difference is that if <code>s</code> is a string, <code>println!("{s}")</code> prints the content of the string verbatim, whereas <code>println!("{s:?}")</code> adds double quotes around it and renders any special characters in <code>s</code> as escape sequences. Not all types support <code>Display</code> format, but almost everything supports <code>Debug</code>. You’ll need <code>{:?}</code> to print a tuple, slice, <code>Vec</code>, or <code>Option</code>.</p>
+
+	<p>To include an actual curly brace in the output, double it: <code>println!("{{")</code>.</p>
+
+	<p>That should be enough to get on with. Rust format strings offer many more features for fine-tuning the output. We cover them in <a data-type="xref" href="ch17.html#formatting-values">“Formatting Values”</a>.</p>
+	</li>
+	<li>
+	<p>To concatenate a list of strings, use <code>.concat()</code> or<a contenteditable="false" data-primary="join method" data-secondary="combining strings" data-type="indexterm" id="id794"/><a contenteditable="false" data-primary="concat method" data-type="indexterm" id="id795"/> <code>.join(sep)</code>:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-types41">
+<code class="kd">let</code><code class="w"> </code><code class="n">bits</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"veni"</code><code class="p">,</code><code class="w"> </code><code class="s">"vidi"</code><code class="p">,</code><code class="w"> </code><code class="s">"vici"</code><code class="p">];</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">bits</code><code class="p">.</code><code class="n">concat</code><code class="p">(),</code><code class="w"> </code><code class="s">"venividivici"</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">bits</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="s">", "</code><code class="p">),</code><code class="w"> </code><code class="s">"veni, vidi, vici"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+	<p>These methods are defined for slices of type <code>[&amp;str]</code> and <code>[String]</code>, and are therefore available on arrays and vectors as well.</p>
+	</li>
+</ul>
+
+<p>The choice sometimes arises of which type to use: <code>&amp;str</code> or <code>String</code>. <a data-type="xref" href="ch05.html#references">Chapter 5</a> addresses this question in detail. For now it will suffice to point out that a <code>&amp;str</code> can refer to any slice of any string, so as with slices vs. vectors, <code>&amp;str</code> is usually preferable to <code>String</code> for function arguments.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Using Strings"><div class="sect2" id="using-strings">
+<h2>Using Strings</h2>
+
+<p>Strings support the <code>==</code> and <code>!=</code> operators. Two strings are equal if they contain the same characters in the same order, regardless of whether they point to the same location in memory:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types42">
+<code class="fm">assert!</code><code class="p">(</code><code class="s">"ONE"</code><code class="p">.</code><code class="n">to_lowercase</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="s">"one"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Strings also support the comparison<a contenteditable="false" data-primary="operators" data-secondary="comparison" data-type="indexterm" id="id796"/><a contenteditable="false" data-primary="comparison operators" data-secondary="with strings" data-secondary-sortas="strings" data-type="indexterm" id="id797"/> operators <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, and <code>&gt;=</code>, as well as many useful methods and functions that you can find in the online documentation under “Primitive Type <code>str</code>” or the “<code>std::str</code>” module (or just flip to <a data-type="xref" href="ch17.html#strings-and-text">Chapter 17</a>). Here are a few examples:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types43">
+<code class="fm">assert!</code><code class="p">(</code><code class="s">"peanut"</code><code class="p">.</code><code class="n">contains</code><code class="p">(</code><code class="s">"nut"</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="s">"ಠ_ಠ"</code><code class="p">.</code><code class="n">replace</code><code class="p">(</code><code class="s">"ಠ"</code><code class="p">,</code><code class="w"> </code><code class="s">"■"</code><code class="p">),</code><code class="w"> </code><code class="s">"■_■"</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="s">"    clean</code><code class="se">\n</code><code class="s">"</code><code class="p">.</code><code class="n">trim</code><code class="p">(),</code><code class="w"> </code><code class="s">"clean"</code><code class="p">);</code><code class="w"/>
+
+<code class="k">for</code><code class="w"> </code><code class="n">word</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="s">"veni, vidi, vici"</code><code class="p">.</code><code class="n">split</code><code class="p">(</code><code class="s">", "</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">word</code><code class="p">.</code><code class="n">starts_with</code><code class="p">(</code><code class="s">"v"</code><code class="p">));</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Characters have some methods of their own, for classification and conversions. They are documented under “Primitive Type <code>char</code>” (and in <a data-type="xref" href="ch17.html#characters-char">“Characters (char)”</a>).</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types43a">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="sc">'β'</code><code class="p">.</code><code class="n">is_alphabetic</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="fm">assert_eq!</code><code class="p">(</code><code class="kt">char</code><code class="p">::</code><code class="n">from_u32</code><code class="p">(</code><code class="mh">0x1f642</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="o">'</code><img alt="🙂" class="emoji" src="assets/1F642.png" width="72" height="72"/><code class="o">'</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="fm">assert_eq!</code><code class="p">(</code><code class="o">'</code><img alt="🙂" class="emoji" src="assets/1F642.png" width="72" height="72"/><code class="o">'</code><code class="p">.</code><code class="n">len_utf8</code><code class="p">(</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="mi">4</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="fm">assert_eq!</code><code class="p">(</code><code class="sc">'1'</code><code class="p">.</code><code class="n">to_digit</code><code class="p">(</code><code class="mi">10</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code><code class="fm">assert_eq!</code><code class="p">(</code><code class="kt">char</code><code class="p">::</code><code class="n">from_digit</code><code class="p">(</code><code class="mi">2</code><code class="p">,</code><code class="w"> </code><code class="mi">10</code><code class="p">)</code><code class="p">,</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="sc">'2'</code><code class="p">)</code><code class="p">)</code><code class="p">;</code><code class="w">
+</code></pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Other String-Like Types"><div class="sect2" id="other-string-like-types">
+<h2>Other String-Like Types</h2>
+
+<p>Rust guarantees that strings are valid UTF-8. Sometimes a program really needs to be able to deal with strings that are <em>not</em> valid Unicode<a contenteditable="false" data-primary="String and str types" data-secondary="non-Unicode strings" data-type="indexterm" id="id798"/>. This usually happens when a Rust program has to interoperate with some other system that doesn’t enforce any such rules. For example, in most operating systems it’s easy to create a file with a filename that isn’t valid Unicode. What should happen when a Rust program comes across this sort of filename?</p>
+
+<p>Rust’s solution is to offer a few string-like types for these situations:</p>
+
+<ul>
+	<li>
+	<p>For ordinary text, use <code>String</code> and <code>&amp;str</code>.</p>
+	</li>
+	<li>
+	<p>When working with filenames, use <code>PathBuf</code> and <code>&amp;Path</code> instead. You can import them from <code>std::path</code>.</p>
+	</li>
+	<li>
+	<p>When working with environment variable names and command-line arguments, if you need to handle non-UTF-8 values, use <code>OsString</code> and <code>&amp;OsStr</code> from <code>std::ffi</code>. But this is rarely necessary. Most programs just use <code>String</code>, as we did when handling command line arguments in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>.</p>
+	</li>
+	<li>
+	<p>When working with binary data that isn’t UTF-8 encoded at all, use <code>Vec&lt;u8&gt;</code> and <code>&amp;[u8]</code>.</p>
+	</li>
+	<li>
+	<p>When interoperating with C libraries that use null-terminated strings<a contenteditable="false" data-startref="ix_string_str_types_ch3" data-type="indexterm" id="id799"/>, use <code>CString</code> and <code>&amp;CStr</code> from <code>std::ffi</code>.</p>
+	</li>
+</ul>
+
+<p>For those last two situations, Rust has special syntax:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types46">
+<code class="kd">let</code><code class="w"> </code><code class="n">elf_magic</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">b"</code><code class="se">\x7f</code><code class="s">ELF"</code><code class="p">;</code><code class="w">   </code><code class="c1">// a byte string (not UTF-8)</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">elf_magic</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="p">[</code><code class="mi">127</code><code class="k">u8</code><code class="p">,</code><code class="w"> </code><code class="sc">b'E'</code><code class="p">,</code><code class="w"> </code><code class="sc">b'L'</code><code class="p">,</code><code class="w"> </code><code class="sc">b'F'</code><code class="p">]);</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">branch</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">c</code><code class="s">"main"</code><code class="p">;</code><code class="w">  </code><code class="c1">// a C string (null-terminated)</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">branch</code><code class="p">,</code><code class="w"> </code><code class="n">CStr</code><code class="p">::</code><code class="n">from_bytes_with_nul</code><code class="p">(</code><code class="s">b"main</code><code class="se">\0</code><code class="s">"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>A string literal prefixed with <code>b</code> is a <em>byte string</em><a contenteditable="false" data-primary="byte strings" data-type="indexterm" id="id800"/>. For example, <code>b"\x7fELF"</code> is a byte string; its type is <code>&amp;[u8; 4]</code>, a reference to an immutable array of bytes. Since a byte string represents bytes, not characters, it does not have to be valid UTF-8. (This particular example is the “magic number” that appears as the first four bytes of practically every Linux executable, including the ones you’ve been building with <code>cargo build</code>, if you’ve been working through the examples in this book on Linux.)</p>
+
+<p>Similarly, a <em>byte literal</em><a contenteditable="false" data-primary="byte literals" data-type="indexterm" id="id801"/> is a character-like literal prefixed with <code>b</code>. It has the type <code>u8</code>. For example, since the ASCII code<a contenteditable="false" data-primary="ASCII characters" data-type="indexterm" id="id802"/> for <code>A</code> is 65, the literals <code>b'A'</code> and <code>65u8</code> are exactly equivalent. Byte strings and byte literals can’t contain arbitrary Unicode characters; they must make do with ASCII and <code>\xHH</code> escape sequences.</p>
+
+<p>The string <code>c"main"</code> is a <em>C string</em><a contenteditable="false" data-primary="C strings" data-type="indexterm" id="id803"/><a contenteditable="false" data-primary="strings" data-secondary="null-terminated" data-type="indexterm" id="id804"/>. It is like the regular string <code>"main"</code> except it is <em>null-terminated</em>; that is, it’s stored with an extra 0 byte to indicate the end of the string, as required by many C APIs. Its type is <code>&amp;std::ffi::CStr</code>.</p>
+
+<p>You won’t use these features every day, but we will show example code using a byte string in <a data-type="xref" href="ch23.html#unsafe-code">Chapter 23</a> and a C string in <a data-type="xref" href="ch24.html#foreign-functions">Chapter 24</a>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Type Aliases"><div class="sect1" id="type-aliases">
+<h1>Type Aliases</h1>
+
+<p>The <code>type</code> keyword<a contenteditable="false" data-primary="type aliases" data-type="indexterm" id="id805"/> can be used like <code>typedef</code> in C‍++ to declare a new name for an existing type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types44">
+<code class="k">type</code><code class="w"> </code><code class="nc">Bytes</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The type <code>Bytes</code> that we’re declaring here is shorthand for this particular kind of <code>Vec</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-types45">
+<code class="k">fn</code><code class="w"> </code><code class="nf">encode</code><code class="p">(</code><code class="n">image</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Bitmap</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Bytes</code><code class="w"> </code><code class="p">{</code><code class="w">  </code><code class="c1">// returns a Vec&lt;u8&gt;</code>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Beyond the Basics"><div class="sect1" id="beyond-the-basics">
+<h1>Beyond the Basics</h1>
+
+<p>Types are a central part of Rust. We’ll continue talking about types and introducing new ones throughout the book. In particular, Rust’s user-defined types give the language much of its flavor, because that’s where methods are defined. There are three kinds of user-defined types, and we’ll cover them in three successive chapters: structs in <a data-type="xref" href="ch09.html#structs">Chapter 9</a>, enums in <a data-type="xref" href="ch10.html#enums-and-patterns">Chapter 10</a>, and traits in <a data-type="xref" href="ch11.html#traits-and-generics">Chapter 11</a>.</p>
+
+<p>Functions and closures have their own types, covered in <a data-type="xref" href="ch14.html#closures">Chapter 14</a>. And the types that make up the standard library are covered throughout the book. For example, <a data-type="xref" href="ch16.html#collections">Chapter 16</a> presents the standard collection types.</p>
+
+<p>All of that will have to wait, though. Before we move on, it’s time to tackle the concepts that are at the heart of Rust’s safety<a contenteditable="false" data-startref="ix_values_types_fund_ch3" data-type="indexterm" id="id806"/><a contenteditable="false" data-startref="ix_types_fund_ch3" data-type="indexterm" id="id807"/> rules.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

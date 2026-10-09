@@ -1,0 +1,914 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch21.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 21. Futures">
+        <div class="chapter" id="futures-chapter">
+<h1><span class="label">Chapter 21. </span>Futures</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id2439"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the twenty-first chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<p>In <a data-type="xref" href="ch20.html#asynchronous-programming">Chapter 20</a>, we covered how to use Rust’s asynchronous programming system with <code>async</code>/<code>await</code> syntax and the Tokio runtime. Enabling asynchronous programming without either violating Rust’s rules of ownership and memory safety or compromising on performance isn’t trivial.</p>
+
+<p>In this chapter, we’ll cover three foundational elements of asynchronous programming in Rust:</p>
+
+<ul>
+	<li>the <code>Future</code> trait, which defines an interface between things that need to be waited for and things that wait,</li>
+	<li>the waker mechanism, which allows futures to react to changes and I/O events without constantly polling,</li>
+	<li>and runtimes and reactors, which tie futures, wakers, and operating system interfaces together into a functioning system.</li>
+</ul>
+
+<p><code>async fn</code>s make it easy to create futures, but implementing futures by hand makes their exact size and layout visible in your code, makes it easier to understand exactly what they do, and, of course, is necessary for new operations and types of I/O that don’t already have an asynchronous implementation available. Understanding how futures are constructed and used allows you to write your own, as well as to read and debug those you encounter in the libraries your code depends on. In this chapter, we’ll implement a few futures of our own, as well as the code to drive them.</p>
+
+<section data-type="sect1" data-pdf-bookmark="The Future Trait"><div class="sect1" id="future-trait">
+<h1>The Future Trait</h1>
+
+<p>The standard library’s <code>Future</code> trait<a contenteditable="false" data-primary="Future trait" data-type="indexterm" id="ix_future_trait"/> is defined like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-faux-future-trait">
+<code class="k">trait</code><code class="w"> </code><code class="n">Future</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="c1">// For now, read `Pin&lt;&amp;mut Self&gt;` as `&amp;mut Self`.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">poll</code><code class="p">(</code><code class="bp">self</code><code class="p">:</code><code class="w"> </code><code class="nc">Pin</code><code class="o">&lt;&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">cx</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Context</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Poll</code><code class="o">&lt;</code><code class="bp">Self</code><code class="p">::</code><code class="n">Output</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">enum</code><code class="w"> </code><code class="nc">Poll</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Ready</code><code class="p">(</code><code class="n">T</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Pending</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The first time <code>Future::poll</code><a contenteditable="false" data-primary="polling interface, asynchronous programming" data-type="indexterm" id="ix_polling_interface"/><a contenteditable="false" data-primary="poll method" data-type="indexterm" id="id2440"/> is called, it kicks off the execution of the future. On each call, it tries to make progress without blocking. If <code>poll</code> finds that the future’s work is complete, it returns <code>Poll::Ready(output)</code>, where <code>output</code> is the future’s final result. Otherwise, it returns <code>Poll::Pending</code> and promises to let the caller know when the the future is worth polling again by invoking a <em>waker<a contenteditable="false" data-primary="waker" data-type="indexterm" id="id2441"/></em>, a callback function supplied in the <code>Context</code>. We call this the “piñata model” of asynchronous programming: the only thing you can do with a future is whack it with a <code>poll</code> until a value falls out.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Implementing and Instantiating Futures"><div class="sect1" id="implementing-instantiating-futures">
+<h1>Implementing and Instantiating Futures</h1>
+
+<p>All modern operating systems include variants of their system calls that we can use to implement this sort of polling interface. On Unix and Windows, for example, if you put a network socket in nonblocking mode, reads and writes return an error if they would block; you have to try again later. This nonblocking mode is the operating system’s version of the <code>Future</code> trait. It provides a way for the operating system to say, “please go away and come back later when I have bytes for you,” rather than blocking the calling thread.</p>
+
+<p>The standard library’s <code>read_to_end</code> method, which is synchronous, has the following signature:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-faux-sync-read-all">
+<code class="k">fn</code><code class="w"> </code><code class="nf">read_to_end</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">buf</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>On the other hand, an asynchronous version of <code>read_to_end</code> would have a signature roughly like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-faux-async-read-all">
+<code class="k">fn</code><code class="w"> </code><code class="nf">read_to_end</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">buf</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The future returned by an asynchronous method must hold all the information necessary to carry out the request made by the call. For example, the future returned by this <code>read_to_end</code> function must remember the input stream it was called on, and the <code>Vec&lt;u8&gt;</code> to which it should append the incoming data. Here’s what that might look like for an asynchronous read from a network socket:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-read-all-future">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">net</code><code class="p">::</code><code class="n">TcpStream</code><code class="p">;</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">ReadToEndFuture</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">stream</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">a</code><code class="w"> </code><code class="nc">mut</code><code class="w"> </code><code class="n">TcpStream</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">buf</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">a</code><code class="w"> </code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">bytes</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Of course, Tokio implements its own futures for reading from network sockets, which are more complex, but this <code>ReadToEndFuture</code> contains all the information needed to make progress on the read operation. Constructing it isn’t difficult, either; all we need is a non-blocking <code>TcpStream</code> and a buffer to write into. An asynchronous wrapper around <code>TcpStream</code> using this future might look like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-stream-reader">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">net</code><code class="p">::</code><code class="n">ToSocketAddrs</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// Open handle to a read-only TCP stream.</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">AsyncStreamReader</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">stream</code><code class="p">:</code><code class="w"> </code><code class="nc">TcpStream</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">AsyncStreamReader</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Connects to the given address to receive only.</code>
+<code class="w">    </code><code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">connect</code><code class="o">&lt;</code><code class="n">A</code><code class="p">:</code><code class="w"> </code><code class="nc">ToSocketAddrs</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="o">&gt;</code><code class="p">(</code><code class="n">addr</code><code class="p">:</code><code class="w"> </code><code class="nc">A</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="bp">Self</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// We need a blocking task here because making a network</code>
+<code class="w">        </code><code class="c1">// connection *blocks* until the connection is made.</code>
+<code class="w">        </code><code class="n">tokio</code><code class="p">::</code><code class="n">task</code><code class="p">::</code><code class="n">spawn_blocking</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">stream</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">TcpStream</code><code class="p">::</code><code class="n">connect</code><code class="p">(</code><code class="n">addr</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="c1">// Tell the operating system to return an error if there are no</code>
+<code class="w">            </code><code class="c1">// bytes available when we try to read.</code>
+<code class="w">            </code><code class="n">stream</code><code class="p">.</code><code class="n">set_nonblocking</code><code class="p">(</code><code class="kc">true</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="nb">Ok</code><code class="p">(</code><code class="bp">Self</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">stream</code><code class="w"> </code><code class="p">})</code><code class="w"/>
+<code class="w">        </code><code class="p">}).</code><code class="k">await</code><code class="p">.</code><code class="n">unwrap</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Asynchronously reads all data from the stream into `buf`.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">read_to_end</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="p">(</code><code class="o">&amp;'</code><code class="na">a</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">buf</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">a</code><code class="w"> </code><code class="nc">mut</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">ReadToEndFuture</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">ReadToEndFuture</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">stream</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">stream</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">buf</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">bytes</code><code class="p">:</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here, <code>AsyncStreamReader::read_to_end</code> adds lifetimes to indicate that the returned future can live only as long as the values that <code>stream</code> and <code>buf</code> are borrowing. But if <code>read_to_end</code> itself just returns a new <code>ReadToEndFuture</code>, how does anything actually get done?</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="How Do We Know When to Poll?"><div class="sect1" id="Wakers">
+<h1>How Do We Know When to Poll?</h1>
+
+<p>When a future is passed to an executor, or running async code <code>.await</code>s one, it immediately calls <code>Future::poll()</code>. This first call will generally do some setup, then check if the underlying operation is ready. If so, <code>poll()</code> returns <code>Poll::Ready</code>, and the program moves on. If not, the future returns <code>Poll::Pending</code> and has to coordinate with the executor to poll it again at the right time. Think about what happens when we run code like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-fake-stream-reader-main">
+<code class="n">runtime</code><code class="p">.</code><code class="n">block_on</code><code class="p">(</code><code class="k">async</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">response</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reader</code><code class="p">.</code><code class="n">read_to_end</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="p">).</code><code class="k">await</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">})</code><code class="w"/>
+</pre>
+
+<p>The first time <code>block_on</code> polls<a contenteditable="false" data-primary="block_on" data-type="indexterm" id="id2442"/><a contenteditable="false" data-primary="executors (asynchronous)" data-secondary="block_on" data-type="indexterm" id="id2443"/> the <code>async</code> block’s future, the network connection is almost certainly not ready immediately, so <code>block_on</code> goes to sleep. But when should it wake<a contenteditable="false" data-primary="waker" data-type="indexterm" id="ix_waker_polling"/> up? Somehow, once the network connection is ready, something needs to tell <code>block_on</code> that it should try polling the <code>async</code> block’s future again.</p>
+
+<p>When an executor like <code>block_on</code> polls a future, it must pass in a callback called a <em>waker</em>. If the future is not ready yet, the rules of the <code>Future</code> trait say that it must return <code>Poll::Pending</code> for now, and arrange for the waker to be invoked later, if and when the future is worth polling again.</p>
+
+<p>So a handwritten implementation of <code>Future</code> often looks something like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-my-primitive-future">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">task</code><code class="p">::</code><code class="n">Waker</code><code class="p">;</code><code class="w"/>
+
+<code class="k">struct</code><code class="w"> </code><code class="nc">MyPrimitiveFuture</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="n">waker</code><code class="p">:</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">Waker</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">Future</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">MyPrimitiveFuture</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">..</code><code class="p">.;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">poll</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">:</code><code class="w"> </code><code class="nc">Pin</code><code class="o">&lt;&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">cx</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Context</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Poll</code><code class="o">&lt;..</code><code class="p">.</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="n">future</code><code class="w"> </code><code class="n">is</code><code class="w"> </code><code class="n">ready</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="n">final_value</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Save the waker for later.</code>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">waker</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">cx</code><code class="p">.</code><code class="n">waker</code><code class="p">().</code><code class="n">clone</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="n">Poll</code><code class="p">::</code><code class="n">Pending</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In other words, if the future’s value is ready, return it. Otherwise, stash a clone of the <code>Context</code>’s waker somewhere, and return <code>Poll::Pending</code>.</p>
+
+<p>When the future is worth polling again, the future must notify the last executor that polled it by calling its waker’s <code>wake</code> method:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-my-primitive-future-wake">
+<code class="c1">// If we have a waker, invoke it, and clear `self.waker`.</code>
+<code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">waker</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">waker</code><code class="p">.</code><code class="n">take</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">waker</code><code class="p">.</code><code class="n">wake</code><code class="p">();</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Ideally, the executor and the future take turns polling and waking: the executor polls the future and goes to sleep, then the future invokes the waker, so the executor wakes up and polls the future again.</p>
+
+<p>Futures of <code>async</code> functions and blocks don’t deal with wakers themselves. They simply pass along the context they’re given to the subfutures they await, delegating to them the obligation to save and invoke wakers. In the <code>read_to_end</code> example, the first poll of the <code>async</code> block’s future just passes the context along when it awaits <code>ReadToEndFuture</code>. Subsequent polls similarly pass their context through to whatever future the block awaits next. (We’ll see exactly what <code>ReadToEndFuture</code> does with the waker in <a data-type="xref" href="#reactors">“Reactors”</a>.)</p>
+
+<p><code>Waker</code> implements <code>Clone</code> and <code>Send</code>, so a future can always make its own copy of the waker and send it to other threads as needed. The <code>Waker::wake</code> method consumes the waker. There is also a <code>wake_by_ref</code> method that does not, but some executors can implement the consuming version a bit more efficiently. (The difference is at most a <code>clone</code>.)</p>
+
+<p>Although it’s inefficient for an executor to overpoll a future, it’s harmless. Futures, however, should be careful to invoke a waker only when polling would make actual progress: a cycle of spurious wakeups and polls can prevent an executor from ever sleeping at all, wasting power and leaving the processor less responsive to other tasks.</p>
+
+<p>Now that we have shown how executors and primitive futures communicate, we’ll implement a future ourselves and then walk through an implementation of the <code>block_on</code> executor.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Invoking Wakers: spawn_blocking"><div class="sect2" id="spawn-blocking">
+<h2>Invoking Wakers: spawn_blocking</h2>
+
+<p>In <a contenteditable="false" data-primary="invoking wakers, in spawn_blocking" data-type="indexterm" id="ix_waker_spawn_block"/><a contenteditable="false" data-primary="futures" data-secondary="spawn_blocking" data-type="indexterm" id="ix_futures_spawn_block"/> <a data-type="xref" href="ch20.html#asynchronous-programming">Chapter 20</a>, we described the <code>spawn_blocking</code> function<a contenteditable="false" data-primary="spawn_blocking" data-type="indexterm" id="ix_spawn_block2"/>, which starts a given closure running on another thread and returns a future of its return value. We now have all the pieces we need to implement <code>spawn_blocking</code> ourselves. For simplicity, our version creates a fresh thread for each closure, rather than using a thread pool, as <code>tokio</code>’s version does.</p>
+
+<p>Although <code>spawn_blocking</code> returns a future, we’re not going to write it as an <code>async fn</code>. Rather, it’ll be an ordinary, synchronous function that returns a struct, <code>SpawnBlocking</code>, on which we’ll implement <code>Future</code> ourselves.</p>
+
+<p>The signature of our <code>spawn_blocking</code> is as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-spawn-blocking-sig">
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">spawn_blocking</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">F</code><code class="o">&gt;</code><code class="p">(</code><code class="n">closure</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">SpawnBlocking</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">FnOnce</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+</pre>
+
+<p>Since we need to send the closure to another thread and bring the return value back, both the closure <code>F</code> and its return value <code>T</code> must implement <code>Send</code>. And since we don’t have any idea how long the thread will run, they must both be <code>'static</code> as well. These are the same bounds that <code>std::thread::spawn</code> itself imposes.</p>
+
+<p><code>SpawnBlocking&lt;T&gt;</code> is a future of the closure’s return value. Here is its definition:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-SpawnBlocking">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">sync</code><code class="p">::{</code><code class="n">Arc</code><code class="p">,</code><code class="w"> </code><code class="n">Mutex</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">task</code><code class="p">::</code><code class="n">Waker</code><code class="p">;</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">SpawnBlocking</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">(</code><code class="n">Arc</code><code class="o">&lt;</code><code class="n">Mutex</code><code class="o">&lt;</code><code class="n">TaskState</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;&gt;&gt;</code><code class="p">);</code><code class="w"/>
+
+<code class="k">struct</code><code class="w"> </code><code class="nc">TaskState</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">value</code><code class="p">:</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">waker</code><code class="p">:</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">Waker</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>TaskState</code> struct<a contenteditable="false" data-primary="TaskState struct, spawn_blocking" data-type="indexterm" id="id2444"/> must serve as a rendezvous between the future and the thread running the closure, so it is owned by an <code>Arc</code> and protected with a <code>Mutex</code>. (A synchronous mutex is fine here.) Polling the future checks whether <code>value</code> is present and saves the waker in <code>waker</code> if not. The thread that runs the closure saves its return value in <code>value</code> and then invokes <code>waker</code>, if present.</p>
+
+<p>Here’s the full definition of <code>spawn_blocking</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-spawn-blocking">
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">spawn_blocking</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">F</code><code class="o">&gt;</code><code class="p">(</code><code class="n">closure</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">SpawnBlocking</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">FnOnce</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">state</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Arc</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">Mutex</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">TaskState</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">value</code><code class="p">:</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">waker</code><code class="p">:</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">}));</code><code class="w"/>
+
+<code class="w">    </code><code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">::</code><code class="n">spawn</code><code class="p">({</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">state</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">state</code><code class="p">.</code><code class="n">clone</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">value</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">closure</code><code class="p">();</code><code class="w"/>
+
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">maybe_waker</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">guard</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">state</code><code class="p">.</code><code class="n">lock</code><code class="p">().</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">                </code><code class="n">guard</code><code class="p">.</code><code class="n">value</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">value</code><code class="p">);</code><code class="w"/>
+<code class="w">                </code><code class="n">guard</code><code class="p">.</code><code class="n">waker</code><code class="p">.</code><code class="n">take</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">};</code><code class="w"/>
+
+<code class="w">            </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">waker</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">maybe_waker</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="n">waker</code><code class="p">.</code><code class="n">wake</code><code class="p">();</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">});</code><code class="w"/>
+
+<code class="w">    </code><code class="n">SpawnBlocking</code><code class="p">(</code><code class="n">state</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>After creating the <code>TaskState</code> value, this spawns a thread to run the closure, store the result in the <code>TaskState</code>’s <code>value</code> field, and invoke the waker, if any.</p>
+
+<p>We can implement <code>Future</code> for <code>SpawnBlocking</code> as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-impl-Future-for-SpawnBlocking">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">pin</code><code class="p">::</code><code class="n">Pin</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">task</code><code class="p">::{</code><code class="n">Context</code><code class="p">,</code><code class="w"> </code><code class="n">Poll</code><code class="p">};</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">Send</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Future</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">SpawnBlocking</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">T</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">poll</code><code class="p">(</code><code class="bp">self</code><code class="p">:</code><code class="w"> </code><code class="nc">Pin</code><code class="o">&lt;&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">cx</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Context</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Poll</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">guard</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="mf">0.</code><code class="n">lock</code><code class="p">().</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">value</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">guard</code><code class="p">.</code><code class="n">value</code><code class="p">.</code><code class="n">take</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="n">value</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="n">guard</code><code class="p">.</code><code class="n">waker</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">cx</code><code class="p">.</code><code class="n">waker</code><code class="p">().</code><code class="n">clone</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="n">Poll</code><code class="p">::</code><code class="n">Pending</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Polling a <code>SpawnBlocking</code> checks if the closure’s value is ready, taking ownership and returning it if so. Otherwise, the future is still pending, so it saves a clone of the context’s waker in the future’s <code>waker</code> field.</p>
+
+<p>Once a <code>Future</code> has returned <code>Poll::Ready</code>, you’re not supposed to poll it again. The usual ways of consuming futures, like <code>await</code> and <code>block_on</code>, all respect this rule. If a <code>SpawnBlocking</code> future is overpolled, nothing especially terrible happens, but it doesn’t go to any effort to handle that case, either. This is typical for handwritten futures<a contenteditable="false" data-startref="ix_spawn_block2" data-type="indexterm" id="id2445"/><a contenteditable="false" data-startref="ix_futures_spawn_block" data-type="indexterm" id="id2446"/><a contenteditable="false" data-startref="ix_waker_spawn_block" data-type="indexterm" id="id2447"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Implementing block_on"><div class="sect2" id="implementing-block_on">
+<h2>Implementing block_on</h2>
+
+<p>In addition<a contenteditable="false" data-primary="executors (asynchronous)" data-secondary="block_on" data-type="indexterm" id="ix_exec_block_on2"/><a contenteditable="false" data-primary="futures" data-secondary="block_on" data-type="indexterm" id="ix_futures_block_on2"/><a contenteditable="false" data-primary="block_on" data-type="indexterm" id="ix_block_on2"/> to being able to implement primitive futures, we also have all the pieces we need to build a simple executor. In this section, we’ll write our own version of <code>block_on</code>. It will be quite a bit simpler than Tokio’s version; for example, it won’t support task-local variables or nested invocations (calling <code>block_on</code> from asynchronous code). But it is sufficient to run our <code>read_to_end</code> future.</p>
+
+<p>Here’s the code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-bare-bones-block-on">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">pin</code><code class="p">::</code><code class="n">pin</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">task</code><code class="p">::{</code><code class="n">Context</code><code class="p">,</code><code class="w"> </code><code class="n">Poll</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">;</code><code class="w"/>
+
+<code class="k">use</code><code class="w"> </code><code class="n">waker_fn</code><code class="p">::</code><code class="n">waker_fn</code><code class="p">;</code><code class="w">       </code><code class="c1">// Cargo.toml: waker-fn = "1.2.0"</code>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">block_on</code><code class="o">&lt;</code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nc">Future</code><code class="o">&gt;</code><code class="p">(</code><code class="n">future</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">F</code><code class="p">::</code><code class="n">Output</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">executor_thread</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">thread</code><code class="p">::</code><code class="n">current</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">waker</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">waker_fn</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="n">executor_thread</code><code class="p">.</code><code class="n">unpark</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">context</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Context</code><code class="p">::</code><code class="n">from_waker</code><code class="p">(</code><code class="o">&amp;</code><code class="n">waker</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">future</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pin</code><code class="o">!</code><code class="p">(</code><code class="n">future</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">future</code><code class="p">.</code><code class="n">as_mut</code><code class="p">().</code><code class="n">poll</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">context</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="n">value</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="n">value</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">Poll</code><code class="p">::</code><code class="n">Pending</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">thread</code><code class="p">::</code><code class="n">park</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is pretty short, but there’s a lot going on, so let’s take it one piece at a time.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-make-parker">
+<code class="kd">let</code><code class="w"> </code><code class="n">executor_thread</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">thread</code><code class="p">::</code><code class="n">current</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>The standard library equips every thread with a simple blocking mechanism. Calling <code>std::thread::park()</code> blocks the thread until someone else calls <code>.unpark()</code> on the corresponding <code>Thread</code>, which you obtain beforehand, either from a <code>JoinHandle</code> for a thread you’ve spawned or from <code>std::thread::current()</code> for the current thread. If you <code>unpark</code> a thread that isn’t parked yet, its next call to <code>park</code> returns immediately, without blocking. Our <code>block_on</code> will use the <code>std::thread::park</code> to wait whenever the future isn’t ready, and the waker we pass to futures will unpark it.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-use-waker-fn">
+<code class="kd">let</code><code class="w"> </code><code class="n">waker</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">waker_fn</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="n">executor_thread</code><code class="p">.</code><code class="n">unpark</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>The <code>waker_fn</code> function, from the crate of the same name, creates a <code>Waker</code> from a given closure. Here, we make a <code>Waker</code> that, when invoked, calls the closure <code>move || thread.unpark()</code>. You can also create wakers by implementing the <code>std::task::Wake</code> trait, but <code>waker_fn</code> is more convenient here.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-pin-macro">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">future</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pin</code><code class="o">!</code><code class="p">(</code><code class="n">future</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This gives us the <code>Pin&lt;&amp;mut Self&gt;</code> required by the <code>poll</code> method. (We’ll discuss this in depth in <a data-type="xref" href="#pinning">“Pinning”</a>.)</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-poll-loop">
+<code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">future</code><code class="p">.</code><code class="n">as_mut</code><code class="p">().</code><code class="n">poll</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">context</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="n">value</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="n">value</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">Poll</code><code class="p">::</code><code class="n">Pending</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">thread</code><code class="p">::</code><code class="n">park</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Finally, the polling loop is quite simple. Passing a context carrying our waker, we poll the future until it returns <code>Poll::Ready</code>. If it returns <code>Poll::Pending</code>, we park the thread, which blocks until <code>waker</code> is invoked<a contenteditable="false" data-startref="ix_waker_polling" data-type="indexterm" id="id2448"/>. Then we try again.</p>
+
+<p>The <code>as_mut</code> call lets us poll <code>future</code> without giving up ownership; we’ll explain this more in <a data-type="xref" href="#pinned-pointers">“Pinned Pointers”</a><a contenteditable="false" data-startref="ix_futures_block_on2" data-type="indexterm" id="id2449"/><a contenteditable="false" data-startref="ix_block_on2" data-type="indexterm" id="id2450"/><a contenteditable="false" data-startref="ix_exec_block_on2" data-type="indexterm" id="id2451"/><a contenteditable="false" data-startref="ix_polling_async" data-type="indexterm" id="id2452"/><a contenteditable="false" data-startref="ix_futures2_ch20" data-type="indexterm" id="id2453"/><a contenteditable="false" data-startref="ix_async_prog_coord_futures" data-type="indexterm" id="id2454"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="The Role of Runtimes"><div class="sect1" id="the-role-of-runtimes">
+<h1>The Role of Runtimes</h1>
+
+<p>It’s entirely possible to write an efficient program using <code>async</code> without relying on any external libraries, or to use a patchwork of libraries that each provide just one component, but most asynchronous programs in Rust use an integrated runtime library. Runtimes provide an executor alongside I/O and synchronization facilities that are designed to work well with it. In this book, we’ve used the Tokio library, which provides a broad set of I/O operations, channels, and locks alongside a work-stealing executor designed to make efficient use of multiple threads. Other runtimes exist for specific use cases, like software running on embedded systems with limited concurrency facilities.</p>
+
+<p>In order to understand exactly what Tokio provides, let’s first implement an I/O future ourselves.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Implementing I/O Futures"><div class="sect2" id="implementing-io-futures">
+<h2>Implementing I/O Futures</h2>
+
+<p>As we saw in <a data-type="xref" href="ch20.html#async-versions-of-blocking-tools">“Asynchronous Versions of Blocking Tools”</a>, it’s entirely possible to make I/O operations asynchronous by simply spawning a thread to deal with each one, but in many cases, we can do better.</p>
+
+<p>Remember the <code>ReadToEndFuture</code> we briefly discussed in <a data-type="xref" href="#implementing-instantiating-futures">“Implementing and Instantiating Futures”</a>? Implementing <code>Future</code> for it is mostly straightforward:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unfinished-future-stream">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">ErrorKind</code><code class="p">,</code><code class="w"> </code><code class="n">prelude</code><code class="p">::</code><code class="o">*</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">pin</code><code class="p">::</code><code class="n">Pin</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">task</code><code class="p">::{</code><code class="n">Context</code><code class="p">,</code><code class="w"> </code><code class="n">Poll</code><code class="p">};</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Future</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">ReadToEndFuture</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">poll</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">:</code><code class="w"> </code><code class="nc">Pin</code><code class="o">&lt;&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">cx</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Context</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="w"/>
+<code class="w">    </code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Poll</code><code class="o">&lt;</code><code class="bp">Self</code><code class="p">::</code><code class="n">Output</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="mi">4096</code><code class="p">];</code><code class="w"/>
+<code class="w">        </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">match</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">stream</code><code class="p">.</code><code class="n">read</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="nb">Ok</code><code class="p">(</code><code class="mi">0</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="nb">Ok</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">bytes</code><code class="p">)),</code><code class="w"/>
+<code class="w">                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">n</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                    </code><code class="bp">self</code><code class="p">.</code><code class="n">buf</code><code class="p">.</code><code class="n">extend_from_slice</code><code class="p">(</code><code class="o">&amp;</code><code class="n">buf</code><code class="p">[</code><code class="mi">0</code><code class="o">..</code><code class="n">n</code><code class="p">]);</code><code class="w"/>
+<code class="w">                    </code><code class="bp">self</code><code class="p">.</code><code class="n">bytes</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="n">n</code><code class="p">;</code><code class="w"/>
+<code class="w">                    </code><code class="c1">// Repeat the loop and try to make more progress.</code>
+<code class="w">                </code><code class="p">}</code><code class="w"/>
+<code class="w">                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">e</code><code class="p">.</code><code class="n">kind</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">ErrorKind</code><code class="p">::</code><code class="n">WouldBlock</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                    </code><code class="fm">todo!</code><code class="p">(</code><code class="s">"Uh oh! How do we know when to poll() again?"</code><code class="p">);</code><code class="w"/>
+<code class="w">                    </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Pending</code><code class="p">;</code><code class="w"/>
+<code class="w">                </code><code class="p">}</code><code class="w"/>
+<code class="w">                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)),</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Each time <code>poll()</code> is called, it tries to <code>read()</code> some bytes into an intermediate buffer in a loop, which keeps running as long as <code>read()</code> is making progress. If <code>read()</code> returns <code>Ok(0)</code>, the TCP connection is closed and the future can return <code>Poll::Ready</code> with the total number of bytes read. If <code>read()</code> returns an <code>Error</code> with any <code>ErrorKind</code> other than <code>WouldBlock</code>, we want to stop and return that error immediately, so that results in a <code>Poll::Ready</code> too.</p>
+
+<p>When <code>read()</code> returns an <code>Error</code> with <code>ErrorKind::WouldBlock</code>, the operating system is telling our program that there’s no data available to read right now, but there might be some data in the future. We can’t <code>wake()</code> the waker immediately, because it’s very likely that calling <code>poll()</code> again will have exactly the same result: nothing. This would lead to the executor simply <code>poll()</code>ing the same future over and over again, wasting time.</p>
+
+<p>On the other hand, we can’t just return <code>Pending</code> and never call <code>wake_by_ref()</code>, because our future would never be woken up again. Unlike <code>spawn_blocking</code>, there’s no convenient thread to send our <code>Waker</code> to. We don’t want to spawn a new thread for every stream being read, since that would be no more efficient than simply using <code>std::thread::spawn()</code> without a future. So, how does our code know when to call its waker?</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Reactors"><div class="sect2" id="reactors">
+<h2>Reactors</h2>
+
+<p>One of the key features of Rust’s asynchronous programming ecosystem isn’t actually part of the language or its standard library at all. A <em>reactor</em><a contenteditable="false" data-primary="reactor (asynchronous I/O)" data-type="indexterm" id="id2455"/> is a single thread that interacts with the operating system on behalf of other parts of an asynchronous program. It allows futures to register their interest in certain events, such as time passing, signals or errors being raised by the operating system, or I/O events, and runs callbacks when those events occur. That’s exactly what <code>ReadToEndFuture</code> needs in order to work properly in an asynchronous program.</p>
+
+<p>Reactors aren’t unique to Rust. NodeJS, for example, is based on an event loop which drives the I/O operations represented in JavaScript programs as <code>Promise</code>s. The operating system machinery to support this paradigm has existed since the 1980s, and most high-performance servers use it. Asynchronous Rust is just an ergonomic way to program in this style.</p>
+
+<p>Over the next few pages, we will describe how reactors work, then show a Unix implementation of a reactor that can handle network reads. Before we begin, we need a little vocabulary about how I/O works on Unix. A <em>file descriptor</em> is an integer that acts as a handle to some system resource, usually something you can read or write: a file, pipe, network socket, or terminal. The <code>poll</code> API takes an array of file descriptors as an argument, waits until one or more are ready for reading or writing, and then tells us which ones need attention.</p>
+
+<p>Throughout this example, we will use Rust’s Unix-only file descriptor types: <code>std::os::fd::RawFd</code>, <code>BorrowedFd</code>, and <code>OwnedFd</code>. All three are just newtypes wrapping integers returned by the operating system in response to system calls like <code>open</code>, <code>dup</code>, and so forth. Types like <code>File</code>, <code>TcpStream</code>, and <code>PipeReader</code> are also just wrappers around these integers of special origin, with helpful methods attached. The <code>AsFd</code> and <code>AsRawFd</code> traits provide access to the underlying file descriptors.</p>
+
+<figure><div id="futures-reactor-figure" class="figure"><img alt="A sequence diagram with three participants: an async task, a reactor thread, and the operating system." src="assets/pru3_2101.png" width="600" height="695"/>
+<h6><span class="label">Figure 21-1. </span>A reactor participates in an asynchronous read</h6>
+</div></figure>
+
+<p><a data-type="xref" href="#futures-reactor-figure">Figure 21-1</a> shows a <code>poll</code>-based reactor in action.</p>
+
+<ul>
+	<li>
+	<p>First, the asynchronous task enters <code>ReadToEndFuture::poll</code> and tries to <code>read()</code> data from the network (❶). This is the part we already implemented in the last section. If this read succeeded right away, the reactor wouldn’t need to get involved. In the story this figure is telling, however, the operating system returns an error, saying that there’s no data ready and the read would therefore block. (Remember, earlier we called <code>set_nonblocking</code> on the socket specifically to request this error, so that we don’t block in asynchronous code.)</p>
+	</li>
+	<li>
+	<p>The task handles this error by passing the network connection’s file descriptor (<code>fd</code>) and its waker to the reactor (❷). The gist of this message is, “wake me up when this connection has data to read”. The task then generally won’t have anything to do until it’s awakened, so it returns <code>Pending</code> to the executor. The executor can go do other work.</p>
+	</li>
+	<li>
+	<p>The reactor adds <code>fd</code> to the list of connections it’s monitoring. As we mentioned, it might be responsible for monitoring connections for thousands of tasks, not just the one shown here. The reactor uses the <code>poll()</code> system call to wait for I/O on any of those connections (❸). This blocks the reactor thread.</p>
+	</li>
+	<li>
+	<p>Eventually, a network packet arrives on the connection. The operating system returns from <code>poll</code> to the reactor thread (❹), telling the reactor that <code>fd</code> is now ready to read.</p>
+	</li>
+	<li>
+	<p>The reactor then calls <code>waker.wake()</code> to wake up the task (❺). Its work for this task is now done, so it can drop the waker and its handle to the file descriptor.</p>
+	</li>
+	<li>
+	<p>The executor now polls the task again, and this time the <code>read</code> succeeds (❻).</p>
+	</li>
+</ul>
+
+<p>This is the arrangement that enables a small number of threads to service a large number of connections.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Implementating a Reactor"><div class="sect2" id="implementating-a-reactor">
+<h2>Implementating a Reactor</h2>
+
+<p>Our simple reactor is about 100 lines of code, so we’ll show it in pieces.</p>
+
+<p>First, we need a way for our asynchronous tasks to send requests to the reactor (step ❷ in the figure). We’ll use a channel. Since there’s just one reactor thread, we’ll create a single, global handle to it, which looks like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reactor-handle">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">PipeWriter</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">os</code><code class="p">::</code><code class="n">fd</code><code class="p">::</code><code class="n">OwnedFd</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">sync</code><code class="p">::{</code><code class="n">Arc</code><code class="p">,</code><code class="w"> </code><code class="n">Mutex</code><code class="p">,</code><code class="w"> </code><code class="n">mpsc</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">task</code><code class="p">::</code><code class="n">Waker</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[derive(Clone)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">ReactorHandle</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">fd_sender</code><code class="p">:</code><code class="w"> </code><code class="nc">mpsc</code><code class="p">::</code><code class="n">Sender</code><code class="o">&lt;</code><code class="p">(</code><code class="n">OwnedFd</code><code class="p">,</code><code class="w"> </code><code class="n">Waker</code><code class="p">)</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">interrupt_writer</code><code class="p">:</code><code class="w"> </code><code class="nc">Arc</code><code class="o">&lt;</code><code class="n">Mutex</code><code class="o">&lt;</code><code class="n">PipeWriter</code><code class="o">&gt;&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This <code>ReactorHandle</code> is just a way for asynchronous tasks to send <code>(fd, waker)</code> pairs to the reactor. We’ll see in a moment how it works and what the <code>interrupt_writer</code> is for.</p>
+
+<p>Creating the <code>ReactorHandle</code> is simple:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reactor-global">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">sync</code><code class="p">::</code><code class="n">OnceLock</code><code class="p">;</code><code class="w"/>
+
+<code class="k">static</code><code class="w"> </code><code class="n">REACTOR</code><code class="p">:</code><code class="w"> </code><code class="nc">OnceLock</code><code class="o">&lt;</code><code class="n">ReactorHandle</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">OnceLock</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">get_reactor</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">ReactorHandle</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">REACTOR</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">get_or_init</code><code class="p">(</code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">reader</code><code class="p">,</code><code class="w"> </code><code class="n">writer</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">pipe</code><code class="p">().</code><code class="n">expect</code><code class="p">(</code><code class="s">"Could not open pipe"</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">sender</code><code class="p">,</code><code class="w"> </code><code class="n">receiver</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">mpsc</code><code class="p">::</code><code class="n">channel</code><code class="p">::</code><code class="o">&lt;</code><code class="p">(</code><code class="n">OwnedFd</code><code class="p">,</code><code class="w"> </code><code class="n">Waker</code><code class="p">)</code><code class="o">&gt;</code><code class="p">();</code><code class="w"/>
+<code class="w">            </code><code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="n">reactor_loop</code><code class="p">(</code><code class="n">reader</code><code class="p">,</code><code class="w"> </code><code class="n">receiver</code><code class="p">));</code><code class="w"/>
+
+<code class="w">            </code><code class="n">ReactorHandle</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="n">fd_sender</code><code class="p">:</code><code class="w"> </code><code class="nc">sender</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="n">interrupt_writer</code><code class="p">:</code><code class="w"> </code><code class="nc">Arc</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">Mutex</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">writer</code><code class="p">)),</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">})</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">clone</code><code class="p">()</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>When <code>get_reactor</code> is called, it tries to return a clone of the <code>ReactorHandle</code> stored in the global <code>REACTOR</code> variable. If there isn’t one yet, the reactor hasn’t been started, so it creates all of the requisite parts and starts <code>reactor_loop</code> in a new thread—see below for what exactly that does.</p>
+
+<p>We use <code>std::io::pipe()</code> to create a Unix pipe, a pair of file descriptors that transport bytes between them. We’ll use this to notify the reactor thread when there’s something new in the channel. Since the reactor’s whole purpose is to wait for new data from file descriptors, a pipe is a form of notification it’ll find easy to handle.</p>
+
+<p>The <code>ReactorHandle</code> doesn’t provide a way to remove handles from the reactor explicitly, and we don’t need one. Once they have bytes available, their associated task will be woken up, and they’ll be removed.</p>
+
+<p>Having created both ends of the channel and pipe, <code>get_reactor</code> passes them into <code>reactor_loop</code>, which is spawned on a new thread. That’s where the core of the reactor lives:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reactor-loop">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">collections</code><code class="p">::</code><code class="n">HashMap</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">PipeReader</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">os</code><code class="p">::</code><code class="n">fd</code><code class="p">::{</code><code class="n">AsFd</code><code class="p">,</code><code class="w"> </code><code class="n">AsRawFd</code><code class="p">,</code><code class="w"> </code><code class="n">RawFd</code><code class="p">};</code><code class="w"/>
+
+<code class="k">use</code><code class="w"> </code><code class="n">nix</code><code class="p">::</code><code class="n">poll</code><code class="p">::{</code><code class="n">PollFd</code><code class="p">,</code><code class="w"> </code><code class="n">PollFlags</code><code class="p">,</code><code class="w"> </code><code class="n">PollTimeout</code><code class="p">,</code><code class="w"> </code><code class="n">poll</code><code class="p">};</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">reactor_loop</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="k">mut</code><code class="w"> </code><code class="n">interrupt_reader</code><code class="p">:</code><code class="w"> </code><code class="nc">PipeReader</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">handle_receiver</code><code class="p">:</code><code class="w"> </code><code class="nc">mpsc</code><code class="p">::</code><code class="n">Receiver</code><code class="o">&lt;</code><code class="p">(</code><code class="n">OwnedFd</code><code class="p">,</code><code class="w"> </code><code class="n">Waker</code><code class="p">)</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">fds</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">HashMap</code><code class="p">::</code><code class="o">&lt;</code><code class="n">RawFd</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="n">OwnedFd</code><code class="p">,</code><code class="w"> </code><code class="n">Waker</code><code class="p">)</code><code class="o">&gt;</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">interrupt_poller</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">PollFd</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">interrupt_reader</code><code class="p">.</code><code class="n">as_fd</code><code class="p">(),</code><code class="w"> </code><code class="n">PollFlags</code><code class="p">::</code><code class="n">POLLIN</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">pollers</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="n">interrupt_poller</code><code class="p">];</code><code class="w"/>
+
+<code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">fd</code><code class="p">,</code><code class="w"> </code><code class="n">_</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">fds</code><code class="p">.</code><code class="n">values</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">pollers</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">PollFd</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">fd</code><code class="p">.</code><code class="n">as_fd</code><code class="p">(),</code><code class="w"> </code><code class="n">PollFlags</code><code class="p">::</code><code class="n">POLLIN</code><code class="p">));</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Wait for one of the configured pollers to have data available</code>
+<code class="w">        </code><code class="n">poll</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">pollers</code><code class="p">,</code><code class="w"> </code><code class="n">PollTimeout</code><code class="p">::</code><code class="n">NONE</code><code class="p">).</code><code class="n">expect</code><code class="p">(</code><code class="s">"Unable to poll()"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Find out which file descriptors have data to read</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">awoken_fds</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pollers</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">iter</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">filter_map</code><code class="p">(</code><code class="o">|</code><code class="n">p</code><code class="o">|</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">p</code><code class="p">.</code><code class="n">revents</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="nb">Some</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="n">e</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">p</code><code class="p">.</code><code class="n">as_fd</code><code class="p">().</code><code class="n">as_raw_fd</code><code class="p">()),</code><code class="w"/>
+<code class="w">                </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="p">})</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Handle waking up the tasks for each fd</code>
+<code class="w">        </code><code class="n">awoken_fds</code><code class="p">.</code><code class="n">iter</code><code class="p">().</code><code class="n">for_each</code><code class="p">(</code><code class="o">|</code><code class="n">fd</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">((</code><code class="n">_</code><code class="p">,</code><code class="w"> </code><code class="n">waker</code><code class="p">))</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fds</code><code class="p">.</code><code class="n">remove</code><code class="p">(</code><code class="n">fd</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="n">waker</code><code class="p">.</code><code class="n">wake</code><code class="p">();</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="o">*</code><code class="n">fd</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">interrupt_reader</code><code class="p">.</code><code class="n">as_raw_fd</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="mi">0_</code><code class="k">u8</code><code class="p">;</code><code class="w"> </code><code class="mi">1024</code><code class="p">];</code><code class="w"/>
+<code class="w">                </code><code class="n">interrupt_reader</code><code class="w"/>
+<code class="w">                    </code><code class="p">.</code><code class="n">read</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="p">)</code><code class="w"/>
+<code class="w">                    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"Interrupt pipe closed"</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">});</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Insert newly queued files, if any, into the hashmap</code>
+<code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">fd</code><code class="p">,</code><code class="w"> </code><code class="n">waker</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">handle_receiver</code><code class="p">.</code><code class="n">try_iter</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">fds</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="n">fd</code><code class="p">.</code><code class="n">as_raw_fd</code><code class="p">(),</code><code class="w"> </code><code class="p">(</code><code class="n">fd</code><code class="p">,</code><code class="w"> </code><code class="n">waker</code><code class="p">));</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The reactor maintains its internal state as a map of <code>RawFd</code>s, the underlying representation of a file descriptor, to their associated <code>Waker</code>s. Within a process, currently open file descriptors are guaranteed to be unique, so there’s no danger of a collision.</p>
+
+<p>The rest of the reactor is one big loop. First, the reactor constructs the <code>PollFd</code> structs that indicate interest in particular events to the operating system. Each <code>PollFd</code> contains the file descriptor and <code>PollFlags::POLLIN</code>, which tells the operating system we only care about input. The first of these <code>PollFd</code> structs registers interest in the interrupt pipe, so writing to it will wake the reactor up and start another iteration of the loop.</p>
+
+<p>Those <code>PollFd</code>s are then passed to <code>poll</code>. We’re using <code>nix::poll::poll</code>, a thin safe wrapper around the <code>poll</code> system call. It blocks the reactor thread until one or more of the file descriptors has had something written to it. This call to <code>poll</code> is step ❸ of the figure; returning from it is step ❹.</p>
+
+<p>Before it returns, the operating system updates the <code>PollFd</code> structs with some flags, accessible in <code>nix</code> through the <code>revents</code> method. The reactor checks all the <code>PollFd</code>s, selecting only those <code>poll</code> marked as readable. It removes their entries from the file descriptor map, taking ownership of each associated <code>Waker</code> and calling <code>wake()</code> on it (step ❺). The executor will take care of step ❻, calling <code>Future::poll()</code> on the awakened tasks.</p>
+
+<p>The reactor then reads from the interrupt pipe to to clear it out. We aren’t interested in the values written to it, just the fact that something was written. Finally, the reactor checks for any newly submitted files to be watched and adds them to the map. Then it’s time to do the whole dance again.</p>
+
+<p>The last piece of the puzzle is actually getting the <code>(OwnedFd, Waker)</code> pairs sent to the reactor when they’re ready to be waited on, which happens in two parts. First, there’s a method on the <code>ReactorHandle</code> that accepts a <code>TcpStream</code> and a <code>Waker</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reactor-register">
+<code class="k">impl</code><code class="w"> </code><code class="n">ReactorHandle</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">request_wakeup</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">stream</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">TcpStream</code><code class="p">,</code><code class="w"> </code><code class="n">waker</code><code class="p">:</code><code class="w"> </code><code class="nc">Waker</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">fd</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">stream</code><code class="p">.</code><code class="n">as_fd</code><code class="p">().</code><code class="n">try_clone_to_owned</code><code class="p">().</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">interrupt_writer</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">interrupt_writer</code><code class="p">.</code><code class="n">lock</code><code class="p">().</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">fd_sender</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">send</code><code class="p">((</code><code class="n">fd</code><code class="p">,</code><code class="w"> </code><code class="n">waker</code><code class="p">))</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"Failed to send new subscription to reactor"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">interrupt_writer</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">write_all</code><code class="p">(</code><code class="s">b"</code><code class="se">\0</code><code class="s">"</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"Failed to interrupt reactor"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>First, <code>request_wakeup</code> has to get an <code>OwnedFd</code> from the borrowed <code>TcpStream</code>. The standard library allows us to get a <code>BorrowedFd</code> from a reference to a <code>TcpStream</code>, and a <code>BorrowedFd</code> can be turned into an <code>OwnedFd</code> by asking the operating system to make a new file descriptor, with a new number and its own open/closed state, which points to the same I/O object internally. This <code>OwnedFd</code> will be dropped and closed if the reactor wakes up the future that created it, but that won’t affect the file descriptor held by that future.</p>
+
+<p>With the <code>OwnedFd</code> in hand, <code>request_wakeup</code> adds the future’s <code>Waker</code> to the reactor’s queue along with its corresponding file descriptor, then writes a single byte to the interrupt pipe. This makes the reactor wake up, check if any of the already-registered streams are readable, and check the channel for new <code>Waker</code>s to add to its <code>HashMap</code>.</p>
+
+<p>So, we can finally properly implement that last match arm in <code>ReadToEndFuture::poll</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reactor-poll-edit">
+<code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">e</code><code class="p">.</code><code class="n">kind</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">ErrorKind</code><code class="p">::</code><code class="n">WouldBlock</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">get_reactor</code><code class="p">().</code><code class="n">request_wakeup</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">stream</code><code class="p">,</code><code class="w"> </code><code class="n">cx</code><code class="p">.</code><code class="n">waker</code><code class="p">().</code><code class="n">clone</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Pending</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>If the future sees that it can’t make more progress at the moment, it simply asks the reactor for a wake-up call and returns <code>Poll::Pending</code>.</p>
+
+<p>Writing reactors that handle I/O efficiently can be complex. For example, using unsafe code, it’s possible to avoid the call to <code>try_clone_to_owned</code> in <code>request_wakeup</code>. With some additional setup, the number of allocations within each iteration of the reactor’s loop can also be reduced, and we’ll see how to remove the intermediate buffer allocation in <code>poll</code> later in this chapter.</p>
+
+<p>Tokio provides a broad set of I/O futures which use a single, well-optimized event loop. They also have the advantage of being designed with the inner workings of Tokio’s runtime in mind.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Cooperative Multitasking"><div class="sect2" id="cooperative-multitasking">
+<h2>Cooperative Multitasking</h2>
+
+<p>In addition to responding to I/O events, Tokio keeps track of how active each task has been and balances time between them, ensuring that newly ready tasks don’t sit around waiting on tasks that have been consistently making progress. This mechanism is similar to the preemptive multitasking employed by an operating system’s scheduler, but Tokio can’t just pause a future whenever it likes. In its <em>cooperative multitasking</em> scheme, Tokio has to rely on every future that does long-running work to occasionally yield control.</p>
+
+<p>If you do long computations in a future or bring in a non-Tokio library to do I/O, this can become a problem. Consider this asynchronous message-counting middleware:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ansible-unyielding">
+<code class="c1">// Count the messages passed from one FTL communicator to another.</code>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">count</code><code class="p">(</code><code class="n">inbox</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Ansible</code><code class="p">,</code><code class="w"> </code><code class="n">outbox</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Ansible</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">usize</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">n</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">while</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">msg</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">inbox</code><code class="p">.</code><code class="n">read_message</code><code class="p">().</code><code class="k">await</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">outbox</code><code class="p">.</code><code class="n">send_message</code><code class="p">(</code><code class="n">msg</code><code class="p">).</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="n">n</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="n">n</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>If the futures returned by <code>read_message</code> and <code>send_message</code> usually—or, worse, always—return <code>Poll::Ready</code>, running this future under Tokio will cause other work on that thread to grind to a halt, because Tokio won’t have an opportunity to schedule anything else to run.. Even though execution is passing through <code>.await</code> points, it never yields control back to the executor. Fortunately, Tokio provides a way to opt in to the cooperative multitasking system in <code>consume_budget</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ansible-yielding">
+<code class="k">while</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">msg</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">inbox</code><code class="p">.</code><code class="n">read_message</code><code class="p">().</code><code class="k">await</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">outbox</code><code class="p">.</code><code class="n">send_message</code><code class="p">(</code><code class="n">msg</code><code class="p">).</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="n">n</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="mi">1</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="n">tokio</code><code class="p">::</code><code class="n">task</code><code class="p">::</code><code class="n">consume_budget</code><code class="p">().</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Polling the future returned by <code>consume_budget</code> updates the runtime’s understanding of how much work the awaiting task has done. The caller then receives <code>Poll::Ready</code> if the runtime is ready for the task to do some more work immediately, or <code>Poll::Pending</code> if Tokio wants to run something else and wake this task up again later.</p>
+
+<p>As a user of Tokio, you won’t usually need to call <code>consume_budget</code> yourself, because many of the futures returned by Tokio’s APIs, and the libraries that use them (like <code>reqwest</code>), participate in this system. Every time you <code>await</code> an I/O future under Tokio, your code is implicitly participating in cooperative multitasking already.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Tokio’s Executor"><div class="sect2" id="tokios-executor">
+<h2>Tokio’s Executor</h2>
+
+<p>You may remember from <a data-type="xref" href="ch20.html#tasks-and-send">“Tasks and Send”</a> that tasks spawned in Tokio must be <code>Send</code>, because Tokio’s executor is multi-threaded. Like Rayon, Tokio uses work-stealing<a contenteditable="false" data-primary="work-stealing" data-secondary="in Tokio" data-type="indexterm" id="id2456"/> to balance work across multiple threads. Tasks that are ready to run are placed in a queue and polled on whichever thread is available until they return either <code>Poll::Ready</code> or <code>Poll::Pending</code>. Periodically, and whenever there aren’t any tasks in the queue, Tokio checks for new I/O events that might wake up some tasks.</p>
+
+<p>Tokio also provides a single-threaded option in the current-thread executor, which is what you get if you call <code>block_on</code>. It works similarly to the work-stealing executor, but with just one thread, queueing work to be done and checking for new I/O events periodically. <code>block_on</code> can run a non-<code>Send</code> future, but still requires futures spawned from within that future to be <code>Send</code>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Pinning"><div class="sect1" id="pinning">
+<h1>Pinning</h1>
+
+<p>Most<a contenteditable="false" data-primary="pinning futures" data-type="indexterm" id="ix_pin_future"/><a contenteditable="false" data-primary="futures" data-secondary="pinning" data-type="indexterm" id="ix_futures_pin"/><a contenteditable="false" data-primary="asynchronous programming" data-secondary="pinning futures" data-type="indexterm" id="ix_async_prog_pin"/> things in Rust don’t care where they’re stored. You’re free to pass an <code>i32</code> or a <code>String</code> by value, return it, put it in a <code>Box</code>, and so forth, without worrying that accessing that value will cause undefined behavior. Not every value is like this, though. <em>Address-sensitive</em><a contenteditable="false" data-primary="address-sensitive types" data-type="indexterm" id="ix_addr_sensitive"/> values, whose validity depends on being at a particular address in memory, can’t be moved. Some futures are address-sensitive.</p>
+
+<p>In this section, we’ll show why futures of asynchronous function calls and blocks are address-sensitive, and why that means they can’t be handled as freely as ordinary Rust values. Then we’ll show how the <code>Pin</code> type serves as a “seal of approval” on pointers that can be counted on to manage such futures safely, and how the <code>Unpin</code> trait allows the compiler to tell which types need special handling. Finally, we’ll show a few ways to work with <code>Pin</code> values.</p>
+
+<section data-type="sect2" data-pdf-bookmark="The Two Life Stages of a Future"><div class="sect2" id="the-two-life-stages-of-a-future">
+<h2>The Two Life Stages of a Future</h2>
+
+<p>Consider this simple asynchronous function:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-fetch-string">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+
+<code class="k">use</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">AsyncReadExt</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">net</code><code class="p">::</code><code class="n">TcpStream</code><code class="p">;</code><code class="w"/>
+
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">fetch_string</code><code class="p">(</code><code class="n">address</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="err">❶</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">socket</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">TcpStream</code><code class="p">::</code><code class="n">connect</code><code class="p">(</code><code class="n">address</code><code class="p">).</code><code class="n">await❷</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">String</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">socket</code><code class="p">.</code><code class="n">read_to_string</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="p">).</code><code class="n">await❸</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">buf</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This opens a TCP connection to the given address and returns, as a <code>String</code>, whatever the server there wants to send. The points labeled ❶, ❷, and ❸ are the <em>resumption points</em>, the points in the <code>async fn</code>’s code at which execution may be <span class="keep-together">suspended.</span></p>
+
+<p>Suppose you call it, without awaiting, like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-call-fetch-string">
+<code class="kd">let</code><code class="w"> </code><code class="n">response_future</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">fetch_string</code><code class="p">(</code><code class="s">"localhost:6502"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Now <code>response_future</code> is a future ready to begin execution at the start of <code>fetch_string</code>, with the given argument. In memory, the future looks something like <a data-type="xref" href="#async-fetch-string-future-initial">Figure 21-2</a>.</p>
+
+<figure><div id="async-fetch-string-future-initial" class="figure"><img src="assets/pru3_2102.png" width="466" height="262"/>
+<h6><span class="label">Figure 21-2. </span>The future constructed for a call to <code>fetch_string</code></h6>
+</div></figure>
+
+<p>Since we just created this future, it says that execution should begin at resumption point ❶, at the top of the function body. In this state, the only values a future needs to proceed are the function arguments.</p>
+
+<p>Now suppose that you poll <code>response_future</code> a few times and it reaches this point in the <code>async</code> code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-fetch-string-read-to-string">
+<code class="n">socket</code><code class="p">.</code><code class="n">read_to_string</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">buf</code><code class="p">).</code><code class="n">await❸</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>Suppose further that the result of <code>read_to_string</code> isn’t ready, so the poll returns <code>Poll::Pending</code>. At this point, the future looks like <a data-type="xref" href="#async-fetch-string-future-borrowed">Figure 21-3</a>.</p>
+
+<p>A future must always hold all the information needed to resume execution the next time it is polled. In this case that is:</p>
+
+<ul>
+	<li>
+	<p>Resumption point ❸, saying that execution should resume in the <code>await</code> polling <code>read_to_string</code>’s future.</p>
+	</li>
+	<li>
+	<p>The variables that are alive at that resumption point: <code>socket</code> and <code>buf</code>. The value of <code>address</code> is no longer present in the future, since the function no longer needs it.</p>
+	</li>
+	<li>
+	<p>The <code>read_to_string</code> subfuture, which the <code>await</code> expression is in the midst of polling.</p>
+	</li>
+</ul>
+
+<figure><div id="async-fetch-string-future-borrowed" class="figure"><img src="assets/pru3_2103.png" width="515" height="282"/>
+<h6><span class="label">Figure 21-3. </span>The same future, in the midst of awaiting <code>read_to_string</code></h6>
+</div></figure>
+
+<p>Note that the call to <code>read_to_string</code> has borrowed<a contenteditable="false" data-primary="borrowing" data-secondary="futures and" data-type="indexterm" id="ix_borrow_future"/> references to <code>socket</code> and <code>buf</code>. In a synchronous function, all local variables live on the stack, but in an <code>async</code> function, local variables that are alive across an <code>await</code> must be located in the future, so they’ll be available when it is polled again. Borrowing a reference to such a variable borrows a part of the future.</p>
+
+<p>However, Rust requires that values not be moved while they are borrowed. Suppose you were to move this future to a new location:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-move-fetch-string-future">
+<code class="kd">let</code><code class="w"> </code><code class="n">new_variable</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">response_future</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>Rust has no means to find all the active references and adjust them accordingly. Instead of pointing to <code>socket</code> and <code>buf</code> at their new locations, the references continue to point at their old locations in the now-uninitialized <code>response_future</code>. They have become dangling pointers, as shown in <a data-type="xref" href="#async-fetch-string-future-moved">Figure 21-4</a>.</p>
+
+<p>Preventing borrowed values from being moved is generally the borrow checker’s responsibility. The borrow checker treats variables as the roots of ownership trees, but unlike variables stored on the stack, variables stored in futures get moved if the future itself moves. This means the borrows of <code>socket</code> and <code>buf</code> affect not just what <code>fetch_string</code> can do with its own variables, but what its caller can safely do with <code>response_future</code>, the future that holds them. Futures of <code>async</code> functions are a blind spot for the borrow checker, which Rust must cover somehow if it wants to keep its memory safety promises.</p>
+
+<figure><div id="async-fetch-string-future-moved" class="figure"><img src="assets/pru3_2104.png" width="600" height="225"/>
+<h6><span class="label">Figure 21-4. </span><code>fetch_string</code>’s future, moved while borrowed (Rust prevents this)</h6>
+</div></figure>
+
+<p>Rust’s solution to this problem rests on the insight that futures are always safe to move when they are first created, and only become unsafe to move when they are polled. A future that has just been created by calling an <code>async</code> function simply holds a resumption point and the function’s arguments’ values, while one created by evaluating an <code>async</code> block holds a resumption point and the values it captures. These are only in scope within the <code>async</code> function or block, which has not yet begun execution. Only polling a future can borrow its contents.</p>
+
+<p>From this, we can see that every future has two life stages:</p>
+
+<ul>
+	<li>
+	<p>The first stage begins when the future is created. Because the <code>async</code> code hasn’t begun execution, no part of it could possibly be borrowed yet. At this point, it’s as safe to move as any other Rust value.</p>
+	</li>
+	<li>
+	<p>The second stage begins the first time the future is polled. Once the <code>async</code> code has begun execution, it could borrow references to variables stored in the future and then await, leaving that part of the future borrowed. Starting after its first poll, we must assume the future may not be safe to move.</p>
+	</li>
+</ul>
+
+<p>The flexibility of the first life stage is what lets us pass futures to <code>block_on</code> and <code>spawn</code> and call adapter methods like <code>race</code> and <code>fuse</code>, all of which take futures by value. In fact, even the <code>async</code> function call that created the future in the first place had to return it to the caller; that was a move as well.</p>
+
+<p>To enter its second life stage, the future must be polled. The <code>poll</code> method requires the future be passed as a <code>Pin&lt;&amp;mut Self&gt;</code> value. <code>Pin</code> is a wrapper for pointer types (like <code>&amp;mut Self</code>) that restricts how the pointers can be used, ensuring that their referents (like <code>Self</code>) cannot ever be moved again. So you must produce a <code>Pin</code>-wrapped pointer to the future before you can poll it.</p>
+
+<p>This, then, is Rust’s strategy for keeping futures safe: a future can’t become dangerous to move until it’s polled; you can’t poll a future until you’ve constructed a <code>Pin</code>-wrapped pointer to it; and once you’ve done that, the future can’t be moved.</p>
+
+<p>“A value you can’t move” sounds impossible: moves are everywhere in Rust. We’ll explain exactly how <code>Pin</code> protects futures in the next section.<a contenteditable="false" data-startref="ix_borrow_future" data-type="indexterm" id="id2457"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Pinned Pointers"><div class="sect2" id="pinned-pointers">
+<h2>Pinned Pointers</h2>
+
+<p>The <code>Pin</code> type<a contenteditable="false" data-primary="pointer types" data-secondary="pinned pointer" data-type="indexterm" id="ix_pointer_pinned"/><a contenteditable="false" data-primary="pinned pointer" data-type="indexterm" id="ix_pinned_pointer"/> is a wrapper for pointers that prevents the pointer’s referent from being moved. It was introduced at the same time as <code>async</code>, <code>await</code>, and <code>Future</code>, specifically to solve the problems caused by address-sensitive futures.</p>
+
+<p>By <em>pointer</em>, we mean any type that implements <code>Deref</code>, and possibly <code>DerefMut</code>. A <code>Pin</code> wrapped around a pointer is called a <em>pinned pointer</em>. <code>Pin&lt;&amp;mut T&gt;</code> and <code>Pin&lt;Box&lt;T&gt;&gt;</code> are typical.</p>
+
+<p>The definition of <code>Pin</code> in the standard library is simple:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-fake-pin">
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Pin</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">pointer</code><code class="p">:</code><code class="w"> </code><code class="nc">P</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Note that the <code>pointer</code> field is <em>not</em> <code>pub</code>. This means that the only way to construct a <code>Pin</code> is to get the standard library to make it for you. There are a few features that do so, and each one is carefully designed to ensure that once a pinned pointer exists, you can’t move the value:</p>
+
+<ul>
+	<li>
+	<p>The <code>pin!</code> macro takes a value of type <code>T</code>, stores it in a hidden local variable, and returns a pinned pointer to that variable, a <code>Pin&lt;&amp;mut T&gt;</code>. Simply putting the value in a variable that you can’t name is sufficient to keep you from moving it again. It’ll be dropped when control reaches the end of the current block. We used <code>pin!</code> in our <code>block_on</code> implementation to pin the future we wanted to poll.</p>
+	</li>
+	<li>
+	<p>The standard library’s <code>Box::pin</code> constructor takes ownership of a value of any type <code>T</code>, moves it into the heap, and returns a <code>Pin&lt;Box&lt;T&gt;&gt;</code>.</p>
+	</li>
+	<li>
+	<p><code>Pin&lt;Box&lt;T&gt;&gt;</code> implements <code>From&lt;Box&lt;T&gt;&gt;</code>, so <code>Pin::from(boxed)</code> takes ownership of <code>boxed</code> and gives you back a pinned box pointing at the same <code>T</code> in the heap.</p>
+	</li>
+</ul>
+
+<p>Every way to obtain a pinned pointer entails giving up ownership of the value being pinned, and there is no way to get it back out. The pinned pointer itself can be moved in any way you please, of course, but moving a pointer doesn’t move its referent. So possession of a pinned pointer to a future serves as proof that you have permanently given up the ability to move that future. This is all we need to know that it can be polled safely.</p>
+
+<p>Once you’ve pinned a future, if you’d like to poll it, all <code>Pin&lt;pointer to T&gt;</code> types have an <code>as_mut</code> method that dereferences the pointer and returns the <code>Pin&lt;&amp;mut T&gt;</code> that <code>poll</code> requires.</p>
+
+<p>The <code>as_mut</code> method can also help you poll a future without giving up ownership. Our <code>block_on</code> implementation used it in this role:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-pin-and-poll-loop">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">future</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pin</code><code class="o">!</code><code class="p">(</code><code class="n">future</code><code class="p">);</code><code class="w"/>
+
+<code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">future</code><code class="p">.</code><code class="n">as_mut</code><code class="p">().</code><code class="n">poll</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">context</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="n">value</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="n">value</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">Poll</code><code class="p">::</code><code class="n">Pending</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">thread</code><code class="p">::</code><code class="n">park</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here, the <code>pin!</code> macro has redeclared <code>future</code> as a <code>Pin&lt;&amp;mut F&gt;</code>, so we could just pass that to <code>poll</code>. But mutable references are not <code>Copy</code>, so <code>Pin&lt;&amp;mut F&gt;</code> cannot be <code>Copy</code> either, meaning that calling <code>future.poll()</code> directly would take ownership of <code>future</code>, leaving the next iteration of the loop with an uninitialized variable. To avoid this, we call <code>future.as_mut()</code> to reborrow a fresh <code>Pin&lt;&amp;mut F&gt;</code> for each loop iteration.</p>
+
+<p>There is no way to get a <code>&amp;mut</code> reference to a pinned future: if you could, you could use <code>std::mem::replace</code> or <code>std::mem::swap</code> to move it out and put a different future in its place.</p>
+
+<p>The reason we don’t have to worry about pinning futures in ordinary asynchronous code is that the most common ways to obtain a future’s value—awaiting it or passing to an executor—all take ownership of the future and manage the pinning internally. For example, our <code>block_on</code> implementation takes ownership of the future and uses the <code>pin!</code> macro to produce the <code>Pin&lt;&amp;mut F&gt;</code> needed to poll. An <code>await</code> expression also takes ownership of the future and uses an approach similar to the <code>pin!</code> macro <span class="keep-together">internally</span><a contenteditable="false" data-startref="ix_pinned_pointer" data-type="indexterm" id="id2458"/><a contenteditable="false" data-startref="ix_pointer_pinned" data-type="indexterm" id="id2459"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="The Unpin Trait"><div class="sect2" id="the-unpin-trait">
+<h2>The Unpin Trait</h2>
+
+<p>However, not all futures require this kind of careful handling. For any handwritten implementation of <code>Future</code> for an ordinary type, like our <code>SpawnBlocking</code> type mentioned earlier, the restrictions on constructing and using pinned pointers are unnecessary.</p>
+
+<p>Such durable types implement the <code>Unpin</code> marker<a contenteditable="false" data-primary="marker traits" data-type="indexterm" id="ix_marker_traits3"/><a contenteditable="false" data-primary="Unpin marker trait" data-type="indexterm" id="ix_unpin_trait"/> trait:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-fake-unpin">
+<code class="k">trait</code><code class="w"> </code><code class="nb">Unpin</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+</pre>
+
+<p>Almost all types in Rust automatically implement <code>Unpin</code>, using special support in the compiler. <code>async</code> futures are the exceptions to this rule.</p>
+
+<p>For <code>Unpin</code> types, <code>Pin</code> imposes no restrictions whatsoever. You can make a pinned pointer from an ordinary pointer with <code>Pin::new</code> and get the pointer back out with <code>Pin::into_inner</code>. The <code>Pin</code> itself passes along the pointer’s own <code>Deref</code> and <code>DerefMut</code> implementations.</p>
+
+<p>For example, <code>String</code> implements <code>Unpin</code>, so we can write:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unpin-wild">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">string</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"Pinned?"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">pinned</code><code class="p">:</code><code class="w"> </code><code class="nc">Pin</code><code class="o">&lt;&amp;</code><code class="k">mut</code><code class="w"> </code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Pin</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">string</code><code class="p">);</code><code class="w"/>
+
+<code class="n">pinned</code><code class="p">.</code><code class="n">push_str</code><code class="p">(</code><code class="s">" Not"</code><code class="p">);</code><code class="w"/>
+<code class="n">Pin</code><code class="p">::</code><code class="n">into_inner</code><code class="p">(</code><code class="n">pinned</code><code class="p">).</code><code class="n">push_str</code><code class="p">(</code><code class="s">" so much."</code><code class="p">);</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">new_home</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">string</code><code class="p">;</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">new_home</code><code class="p">,</code><code class="w"> </code><code class="s">"Pinned? Not so much."</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Even after making a <code>Pin&lt;&amp;mut String&gt;</code>, we have full mutable access to the string and can move it to a new variable once the <code>Pin</code> has been consumed by <code>into_inner</code> and the mutable reference is gone. So for types that are <code>Unpin</code>—which is almost all of them—<code>Pin</code> is mostly just a boring wrapper around pointers to that type.</p>
+
+<p>This means that when you implement <code>Future</code> for your own <code>Unpin</code> types, your <code>poll</code> implementation can treat <code>self</code> as if it were <code>&amp;mut Self</code>, not <code>Pin&lt;&amp;mut Self&gt;</code>. Pinning becomes something you can mostly ignore, unless you need to make disjoint mutable borrows of the fields of the future - like, for example, a buffer and a file, as in <code>ReadToEndFuture</code>.</p>
+
+<p>The <code>ReadToEndFuture::poll</code> method that we implemented above reads into an intermediate buffer and then copies its contents into the future’s output buffer. It would be more natural to skip the intermediate buffer and write straight into the output vector, and the crate <code>rustix</code> provides a wrapper type for <code>Vec</code> that allows us to do just that:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-pin-prevents-disjoint-borrows">
+<code class="k">use</code><code class="w"> </code><code class="n">rustix</code><code class="p">::</code><code class="n">buffer</code><code class="p">::</code><code class="n">spare_capacity</code><code class="p">;</code><code class="w"> </code><code class="c1">// Cargo.toml: rustix = "1"</code>
+
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">poll</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">:</code><code class="w"> </code><code class="nc">Pin</code><code class="o">&lt;&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">cx</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Context</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Poll</code><code class="o">&lt;</code><code class="bp">Self</code><code class="p">::</code><code class="n">Output</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">buf</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">buf</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="bp">self</code><code class="p">.</code><code class="n">buf</code><code class="p">.</code><code class="n">reserve</code><code class="p">(</code><code class="mi">4096</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="n">rustix</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">read</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">stream</code><code class="p">,</code><code class="w"> </code><code class="n">spare_capacity</code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">buf</code><code class="p">))</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p><code>rustix::io::read</code> can read bytes into a variety of places in memory. Using <code>spare_capacity</code>, we’re telling it to write into the unused capacity of <code>self.buf</code>. This requires two mutable borrows of <code>self</code>: one for <code>self.stream</code> and one for <code>self.buf</code>. The Rust compiler is smart enough to know that these fields are not the same—unless those fields are being accessed through <code>DerefMut</code>, which is how <code>Pin</code> works. And indeed, this code does not compile:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: cannot borrow `self` as mutable more than once at a time</code>
+<code class="go">    match rustix::io::read(&amp;mut self.stream, spare_capacity(self.buf)) {</code>
+<code class="go">          ----------------      ----                        ^^^^</code>
+<code class="go">          |                     |                           second mutable</code>
+<code class="go">          |                     |                           borrow occurs here</code>
+<code class="go">          |                     |</code>
+<code class="go">          |                     first mutable borrow occurs here</code>
+<code class="go">          first borrow later used by call</code>
+</pre>
+
+<p>Fortunately, <code>ReadToEndFuture</code> is <code>Unpin</code>, so all we need to do is call <code>Pin::into_inner</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reactor-unpin">
+<code class="k">use</code><code class="w"> </code><code class="n">rustix</code><code class="p">::</code><code class="n">io</code><code class="p">::</code><code class="n">read</code><code class="p">;</code><code class="w"> </code><code class="c1">// Cargo.toml: rustix = "1"</code>
+<code class="k">use</code><code class="w"> </code><code class="n">rustix</code><code class="p">::</code><code class="n">buffer</code><code class="p">::</code><code class="n">spare_capacity</code><code class="p">;</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Future</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">ReadToEndFuture</code><code class="o">&lt;'</code><code class="na">a</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+
+
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">poll</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">:</code><code class="w"> </code><code class="nc">Pin</code><code class="o">&lt;&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">cx</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Context</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="w"/>
+<code class="w">    </code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Poll</code><code class="o">&lt;</code><code class="bp">Self</code><code class="p">::</code><code class="n">Output</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">unpinned</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Pin</code><code class="p">::</code><code class="n">into_inner</code><code class="p">(</code><code class="bp">self</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">if</code><code class="w"> </code><code class="n">unpinned</code><code class="p">.</code><code class="n">buf</code><code class="p">.</code><code class="n">capacity</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">unpinned</code><code class="p">.</code><code class="n">buf</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="n">unpinned</code><code class="p">.</code><code class="n">buf</code><code class="p">.</code><code class="n">reserve</code><code class="p">(</code><code class="mi">4096</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+
+<code class="w">            </code><code class="k">match</code><code class="w"> </code><code class="n">read</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">unpinned</code><code class="p">.</code><code class="n">stream</code><code class="p">,</code><code class="w"> </code><code class="n">spare_capacity</code><code class="p">(</code><code class="n">unpinned</code><code class="p">.</code><code class="n">buf</code><code class="p">))</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="nb">Ok</code><code class="p">(</code><code class="mi">0</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="nb">Ok</code><code class="p">(</code><code class="n">unpinned</code><code class="p">.</code><code class="n">bytes</code><code class="p">)),</code><code class="w"/>
+<code class="w">                </code><code class="nb">Ok</code><code class="p">(</code><code class="n">n</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                    </code><code class="n">unpinned</code><code class="p">.</code><code class="n">bytes</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="n">n</code><code class="p">;</code><code class="w"/>
+<code class="w">                </code><code class="p">}</code><code class="w"/>
+<code class="w">                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="n">e</code><code class="p">.</code><code class="n">kind</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">ErrorKind</code><code class="p">::</code><code class="n">WouldBlock</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                    </code><code class="n">get_reactor</code><code class="p">().</code><code class="n">request_wakeup</code><code class="p">(</code><code class="n">unpinned</code><code class="p">.</code><code class="n">stream</code><code class="p">,</code><code class="w"> </code><code class="n">cx</code><code class="p">.</code><code class="n">waker</code><code class="p">().</code><code class="n">clone</code><code class="p">());</code><code class="w"/>
+<code class="w">                    </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Pending</code><code class="p">;</code><code class="w"/>
+<code class="w">                </code><code class="p">}</code><code class="w"/>
+<code class="w">                </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="n">Poll</code><code class="p">::</code><code class="n">Ready</code><code class="p">(</code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">.</code><code class="n">into</code><code class="p">())),</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Pinning shows up whenever you have a reference to a future. Most of the time, this is in <code>Future::poll</code> or when using <code>select!</code> in a loop, as we showed in <a data-type="xref" href="ch20.html#racing-with-select">“Racing futures with tokio::select!”</a>.<a contenteditable="false" data-startref="ix_unpin_trait" data-type="indexterm" id="id2460"/><a contenteditable="false" data-startref="ix_marker_traits3" data-type="indexterm" id="id2461"/><a contenteditable="false" data-startref="ix_pin_future" data-type="indexterm" id="id2462"/><a contenteditable="false" data-startref="ix_async_prog_pin" data-type="indexterm" id="id2463"/><a contenteditable="false" data-startref="ix_futures_pin" data-type="indexterm" id="id2464"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Conclusion"><div class="sect1" id="conclusion_21">
+<h1>Conclusion</h1>
+
+<p>If you look inside something like the HTTP library <code>hyper</code>, you will find futures carefully hand-coded to ensure cancel safety, memory efficiency, and low latency. The work that goes into designing and refining these smallest units of code is justified because of the massive leverage they offer. A decrease in the time it takes to poll a future in <code>hyper</code> translates directly to web applications, proxies, and caches across the ecosystem handling more requests per second, on the same hardware, for the same power consumption.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

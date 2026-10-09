@@ -1,0 +1,955 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch09.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 9. Structs">
+        <div class="chapter" id="structs">
+<h1><span class="label">Chapter 9. </span>Structs</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id1217"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the ninth chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>Long ago, when shepherds wanted to see if two herds of sheep were isomorphic, they would look for an explicit isomorphism.</p>
+
+<p data-type="attribution">John C. Baez and James Dolan, <a href="https://oreil.ly/EpGpb">“Categorification”</a></p>
+</blockquote>
+
+<p>Rust<a contenteditable="false" data-primary="structs" data-type="indexterm" id="ix_structs_ch8"/> structs resemble <code>struct</code> types in C and C‍++, classes in Python, and objects in JavaScript. A struct assembles several values of assorted types together into a single value so you can deal with them as a unit. Given a struct, you can read and modify its individual components. And a struct can have methods associated with it that operate on its components.</p>
+
+<p>In this chapter, we’ll explain in detail how structs are defined, how they are used, and what they look like in memory. We’ll cover how to add methods to them, how to define generic struct types that work with many different component types, and how to ask Rust to generate some handy methods for your structs.</p>
+
+<section data-type="sect1" data-pdf-bookmark="Defining Structs"><div class="sect1" id="defining-structs">
+<h1>Defining Structs</h1>
+
+<p>The most common way to define a struct<a contenteditable="false" data-primary="structs" data-secondary="defining" data-type="indexterm" id="ix_structs_defining"/><a contenteditable="false" data-primary="defining structs" data-type="indexterm" id="ix_defining_structs"/> type looks like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct0">
+<code class="sd">/// A rectangle of eight-bit grayscale pixels.</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">GrayscaleMap</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">size</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This declares a type <code>GrayscaleMap</code> with two fields named <code>pixels</code> and <code>size</code>, of the given types. The convention in Rust is for all types, structs included, to have names that capitalize the first letter of each word, a convention called <code>UpperCamelCase</code><a contenteditable="false" data-primary="camel case" data-type="indexterm" id="id1218"/><a contenteditable="false" data-primary="upper camel case" data-type="indexterm" id="id1219"/>. Fields and functions are lowercase, with words separated by underscores. This is called <code>snake_case</code><a contenteditable="false" data-primary="snake case" data-type="indexterm" id="id1220"/>.</p>
+
+<p>You can construct a value of this type with a <em>struct expression</em>, like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct1">
+<code class="kd">let</code><code class="w"> </code><code class="n">width</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">1024</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">height</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">576</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">image</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">GrayscaleMap</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="nc">vec</code><code class="o">!</code><code class="p">[</code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="n">width</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">height</code><code class="p">],</code><code class="w"/>
+<code class="w">    </code><code class="n">size</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="n">width</code><code class="p">,</code><code class="w"> </code><code class="n">height</code><code class="p">),</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>A struct expression<a contenteditable="false" data-primary="expressions" data-secondary="struct" data-type="indexterm" id="id1221"/><a contenteditable="false" data-primary="struct expression" data-type="indexterm" id="id1222"/> starts with the type name (<code>GrayscaleMap</code>) and lists the name and value of each field, all enclosed in curly braces. There’s also shorthand for populating fields from local variables or arguments with the same name:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct2">
+<code class="k">fn</code><code class="w"> </code><code class="nf">new_map</code><code class="p">(</code><code class="n">size</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"> </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">GrayscaleMap</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">pixels</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="n">size</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">size</code><code class="p">.</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">GrayscaleMap</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">pixels</code><code class="p">,</code><code class="w"> </code><code class="n">size</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The struct expression <code>GrayscaleMap { pixels, size }</code> is short for <code>GrayscaleMap { pixels: pixels, size: size }</code>. You can use <code>key: value</code> syntax for some fields and shorthand for others in the same struct expression.</p>
+
+<p>To access a struct’s fields, use the familiar <code>.</code> operator:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct3">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">image</code><code class="p">.</code><code class="n">size</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="mi">1024</code><code class="p">,</code><code class="w"> </code><code class="mi">576</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">image</code><code class="p">.</code><code class="n">pixels</code><code class="p">.</code><code class="n">len</code><code class="p">(),</code><code class="w"> </code><code class="mi">1024</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">576</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Like all other items, structs are private by default, visible only in the module where they’re declared and its submodules. You can make a struct visible outside its module by prefixing its definition with <code>pub</code>. The same goes for each of its fields, which are also private by default:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct6">
+<code class="sd">/// A rectangle of eight-bit grayscale pixels.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">GrayscaleMap</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="n">size</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Even if a struct is declared <code>pub</code>, its fields can be private:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct7">
+<code class="sd">/// A rectangle of eight-bit grayscale pixels.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">GrayscaleMap</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">size</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Other modules can use this struct and any public associated functions it might have, but can’t access the private fields by name or use struct expressions to create new <code>GrayscaleMap</code> values. That is, creating a struct value requires all the struct’s fields to be visible. This is why you can’t write a struct expression to create a new <code>String</code> or <code>Vec</code>. These standard types are structs, but all their fields are private. To create one, you must use public associated functions like <code>Vec::new()</code>.</p>
+
+<p>When creating a struct value, you can use another struct of the same type to supply values for fields you omit. In a struct expression, if the named fields are followed by <code>..</code> and an expression of the same type, any fields not mentioned previously take their values from the given expression. Suppose we have a struct representing a monster in a game:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct8">
+<code class="c1">// In this game, brooms are monsters. You'll see.</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Broom</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">name</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">height</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">health</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">position</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">f32</code><code class="p">,</code><code class="w"> </code><code class="kt">f32</code><code class="p">,</code><code class="w"> </code><code class="kt">f32</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">intent</code><code class="p">:</code><code class="w"> </code><code class="nc">BroomIntent</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="sd">/// Two possible alternatives for what a `Broom` could be working on.</code>
+<code class="cp">#[derive(Copy, Clone)]</code><code class="w"/>
+<code class="k">enum</code><code class="w"> </code><code class="nc">BroomIntent</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">FetchWater</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">DumpWater</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The best fairy tale for programmers is <em>The Sorcerer’s Apprentice</em>: a novice magician enchants a broom to do his work for him, but doesn’t know how to stop it when the job is done. Chopping the broom in half with an axe just produces two brooms, each of half the size, but continuing the task with the same blind dedication as the original:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct9">
+<code class="c1">// Receive the input Broom by value, taking ownership.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">chop</code><code class="p">(</code><code class="n">b</code><code class="p">:</code><code class="w"> </code><code class="nc">Broom</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="p">(</code><code class="n">Broom</code><code class="p">,</code><code class="w"> </code><code class="n">Broom</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Initialize `broom1` mostly from `b`, changing only `height`. Since</code>
+<code class="w">    </code><code class="c1">// `String` is not `Copy`, `broom1` takes ownership of `b`'s name.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">broom1</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Broom</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">height</code><code class="p">:</code><code class="w"> </code><code class="nc">b</code><code class="p">.</code><code class="n">height</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="mi">2</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="n">b</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Initialize `broom2` mostly from `broom1`. Since `String` is not</code>
+<code class="w">    </code><code class="c1">// `Copy`, we must clone `name` explicitly.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">broom2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Broom</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">name</code><code class="p">:</code><code class="w"> </code><code class="nc">broom1</code><code class="p">.</code><code class="n">name</code><code class="p">.</code><code class="n">clone</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="n">broom1</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Give each fragment a distinct name.</code>
+<code class="w">    </code><code class="n">broom1</code><code class="p">.</code><code class="n">name</code><code class="p">.</code><code class="n">push_str</code><code class="p">(</code><code class="s">" I"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">broom2</code><code class="p">.</code><code class="n">name</code><code class="p">.</code><code class="n">push_str</code><code class="p">(</code><code class="s">" II"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="p">(</code><code class="n">broom1</code><code class="p">,</code><code class="w"> </code><code class="n">broom2</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>With that definition in place, we can create a broom, chop it in two, and see what <span class="keep-together">we get:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct10">
+<code class="kd">let</code><code class="w"> </code><code class="n">hokey</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Broom</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">name</code><code class="p">:</code><code class="w"> </code><code class="s">"Hokey"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="n">height</code><code class="p">:</code><code class="w"> </code><code class="mi">60</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">health</code><code class="p">:</code><code class="w"> </code><code class="mi">100</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">position</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="mf">100.0</code><code class="p">,</code><code class="w"> </code><code class="mf">200.0</code><code class="p">,</code><code class="w"> </code><code class="mf">0.0</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">intent</code><code class="p">:</code><code class="w"> </code><code class="nc">BroomIntent</code><code class="p">::</code><code class="n">FetchWater</code><code class="p">,</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">hokey1</code><code class="p">,</code><code class="w"> </code><code class="n">hokey2</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">chop</code><code class="p">(</code><code class="n">hokey</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">hokey1</code><code class="p">.</code><code class="n">name</code><code class="p">,</code><code class="w"> </code><code class="s">"Hokey I"</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">hokey1</code><code class="p">.</code><code class="n">height</code><code class="p">,</code><code class="w"> </code><code class="mi">30</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">hokey1</code><code class="p">.</code><code class="n">health</code><code class="p">,</code><code class="w"> </code><code class="mi">100</code><code class="p">);</code><code class="w"/>
+
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">hokey2</code><code class="p">.</code><code class="n">name</code><code class="p">,</code><code class="w"> </code><code class="s">"Hokey II"</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">hokey2</code><code class="p">.</code><code class="n">height</code><code class="p">,</code><code class="w"> </code><code class="mi">30</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">hokey2</code><code class="p">.</code><code class="n">health</code><code class="p">,</code><code class="w"> </code><code class="mi">100</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The new <code>hokey1</code> and <code>hokey2</code> brooms have received adjusted names, half the height, and all the health of the original<a contenteditable="false" data-startref="ix_defining_structs" data-type="indexterm" id="id1223"/><a contenteditable="false" data-startref="ix_structs_defining" data-type="indexterm" id="id1224"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Other Kinds of Structs"><div class="sect1" id="other-kinds-of-structs">
+<h1>Other Kinds of Structs</h1>
+
+<p>Struct<a contenteditable="false" data-primary="structs" data-secondary="named-field" data-type="indexterm" id="id1225"/> <a contenteditable="false" data-primary="named-field" data-secondary="structs" data-type="indexterm" id="id1226"/> types like those discussed above are called <em>named-field</em> structs, and while they are by far the most common struct types Rust programmers will encounter, there are also two simpler kinds of struct types, called <em>tuple structs</em> and <em>unit-like structs</em>. Both are very similar to named-field structs in functionality and in-memory representation.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Tuple Structs"><div class="sect2" id="tuple-structs">
+<h2>Tuple Structs</h2>
+
+<p>The second kind of struct<a contenteditable="false" data-primary="tuple structs" data-type="indexterm" id="id1227"/><a contenteditable="false" data-primary="structs" data-secondary="tuple" data-type="indexterm" id="id1228"/> type is called a <em>tuple struct</em>, because it resembles a tuple:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-tuple">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Bounds</code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>You construct a value of this type much as you would construct a tuple, except that you must include the struct name:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-tuple-expr">
+<code class="kd">let</code><code class="w"> </code><code class="n">image_bounds</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Bounds</code><code class="p">(</code><code class="mi">1024</code><code class="p">,</code><code class="w"> </code><code class="mi">768</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The fields of a tuple struct can be accessed using the usual tuple syntax:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-tuple-field">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">image_bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">image_bounds</code><code class="p">.</code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="mi">786432</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Individual fields of a tuple struct may be public or not:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-tuple-pub">
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Bounds</code><code class="p">(</code><code class="k">pub</code><code class="w"> </code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="k">pub</code><code class="w"> </code><code class="kt">usize</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The expression <code>Bounds(1024, 768)</code> looks like a function call, and in fact it is: defining the type also implicitly defines a function:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-tuple-constructor">
+<code class="k">fn</code><code class="w"> </code><code class="nf">Bounds</code><code class="p">(</code><code class="n">elem0</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="n">elem1</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Bounds</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Tuple structs are good for <em>newtypes<a contenteditable="false" data-primary="newtypes" data-type="indexterm" id="id1229"/></em>, structs with a single component that you define to get stricter type checking. For example, if you are working with ASCII-only text, you might define a newtype like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-tuple-ascii">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Ascii</code><code class="p">(</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Using this type for your ASCII strings is much better than simply passing around <code>Vec&lt;u8&gt;</code> buffers and explaining what they are in the comments. The newtype helps Rust catch mistakes where some other byte buffer is passed to a function expecting ASCII text. We’ll expand on this example in <a data-type="xref" href="ch23.html#unsafe-code">Chapter 23</a>.</p>
+
+<p>Newtypes allow the compiler to type-check your integers:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-tuple-newtype">
+<code class="k">struct</code><code class="w"> </code><code class="nc">StudentId</code><code class="p">(</code><code class="kt">u32</code><code class="p">);</code><code class="w"/>
+<code class="k">struct</code><code class="w"> </code><code class="nc">CourseId</code><code class="p">(</code><code class="kt">u32</code><code class="p">);</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">enroll</code><code class="p">(</code><code class="n">s</code><code class="p">:</code><code class="w"> </code><code class="nc">StudentId</code><code class="p">,</code><code class="w"> </code><code class="n">c</code><code class="p">:</code><code class="w"> </code><code class="nc">CourseId</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>You could just use <code>u32</code> for both arguments in this code, but if you use newtypes, Rust will catch the mistake when a caller accidentally reverses the arguments.</p>
+
+<p>Now a word of caution. Tuple structs are essentially the same thing as regular named-field structs, but with meaningless integers for field names. Except for newtypes, we have found we often regret our tuple structs and change them to named-field structs later:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-tuple-disillusionment">
+<code class="c1">// this seemed fine at first...</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">OldRgbColor</code><code class="p">(</code><code class="kt">u8</code><code class="p">,</code><code class="w"> </code><code class="kt">u8</code><code class="p">,</code><code class="w"> </code><code class="kt">u8</code><code class="p">);</code><code class="w"/>
+
+<code class="c1">// ...but ultimately `color.r` reads better than `color.0`</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">NewRgbColor</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">r</code><code class="p">:</code><code class="w"> </code><code class="kt">u8</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">g</code><code class="p">:</code><code class="w"> </code><code class="kt">u8</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">b</code><code class="p">:</code><code class="w"> </code><code class="kt">u8</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>When in doubt, we recommend named-field structs.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Unit-Like Structs"><div class="sect2" id="unit-like-structs">
+<h2>Unit-Like Structs</h2>
+
+<p>The third kind of struct<a contenteditable="false" data-primary="unit-like structs" data-type="indexterm" id="id1230"/><a contenteditable="false" data-primary="structs" data-secondary="unit-like" data-type="indexterm" id="id1231"/> declares a type with no fields at all:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-unitlike">
+<code class="sd">/// An error type indicating that the server is on fire.</code>
+<code class="sd">/// No fields -- when this occurs, there's not much to say.</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">ServerOnFireError</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>A value of such a type occupies no memory, much like the unit type <code>()</code>. Rust doesn’t bother actually storing unit-like struct values in memory or generating code to operate on them. But logically, an empty struct is a type with values like any other—or more precisely, a type with <em>one</em> value:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-unitlike-value">
+<code class="kd">let</code><code class="w"> </code><code class="n">err</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ServerOnFireError</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>This is similar to declaring a named-field struct without any fields:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-structs-no-fields">
+<code class="k">struct</code><code class="w"> </code><code class="nc">NoFields</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">n</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">NoFields</code><code class="w"> </code><code class="p">{};</code><code class="w"/>
+</pre>
+
+<p>You’ve already encountered a unit-like struct when reading about the <code>..</code> range operator in <a data-type="xref" href="ch06.html#fields-and-elements">“Fields and Elements”</a>. Whereas an expression like <code>3..5</code> is shorthand for the struct value <code>Range { start: 3, end: 5 }</code>, the expression <code>..</code>, a range omitting both endpoints, is shorthand for the unit-like struct value <code>RangeFull</code>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Struct Layout"><div class="sect1" id="struct-layout">
+<h1>Struct Layout</h1>
+
+<p>In memory, both named-field and tuple structs<a contenteditable="false" data-primary="structs" data-secondary="layout" data-type="indexterm" id="id1232"/> are the same thing: a collection of values, of possibly mixed types, laid out in a particular way in memory. For example, earlier in the chapter we defined this struct:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct19">
+<code class="k">struct</code><code class="w"> </code><code class="nc">GrayscaleMap</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">u8</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">size</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>A <code>GrayscaleMap</code> value is laid out in memory as diagrammed in <a data-type="xref" href="#fig0901">Figure 9-1</a>.</p>
+
+<figure><div id="fig0901" class="figure"><img alt="" src="assets/pru3_0901.png" width="600" height="343"/>
+<h6><span class="label">Figure 9-1. </span>A <code>GrayscaleMap</code> struct in memory</h6>
+</div></figure>
+
+<p>Unlike C and C‍++, Rust doesn’t make specific promises about how it will order a struct’s fields in memory; this diagram shows only one possible arrangement. However, Rust does promise to store fields’ values directly in the struct’s block of memory. Whereas JavaScript, Python, and Java would put the <code>pixels</code> and <code>size</code> values each in their own heap-allocated blocks and have <code>GrayscaleMap</code>’s fields point at them, Rust embeds <code>pixels</code> and <code>size</code> directly in the <code>GrayscaleMap</code> value. Only the heap-allocated buffer owned by the <code>pixels</code> vector remains in its own block.</p>
+
+<p>You can ask Rust to lay out structs in a way compatible with C and C‍++, using the <code>#[repr(C)]</code> attribute. We’ll cover this in detail in <a data-type="xref" href="ch24.html#foreign-functions">Chapter 24</a>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Defining Methods with impl"><div class="sect1" id="defining-methods-with-impl">
+<h1>Defining Methods with impl</h1>
+
+<p>Throughout<a contenteditable="false" data-primary="structs" data-secondary="defining methods with impl" data-type="indexterm" id="ix_structs_impl"/><a contenteditable="false" data-primary="methods" data-secondary="defining with impl" data-type="indexterm" id="ix_methods_impl"/><a contenteditable="false" data-primary="impl block" data-type="indexterm" id="ix_impl_block"/><a contenteditable="false" data-primary="blocks" data-secondary="impl block" data-type="indexterm" id="ix_blocks_impl"/> the book we’ve been calling methods on all sorts of values. We’ve pushed elements onto vectors with <code>v.push(e)</code>, fetched their length with <code>v.len()</code>, checked <code>Result</code> values for errors with <code>r.expect("msg")</code>, and so on. You can define methods on your own struct types as well. Rather than appearing inside the struct definition, as in C‍++ or Java, Rust methods appear in a separate <code>impl</code> block.</p>
+
+<p>Here, for example, we define a public struct <code>Queue</code>, and then give it two public methods, <code>push_back</code> and <code>pop_front</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct20">
+<code class="sd">/// A first-in, first-out queue of characters.</code>
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">older</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">char</code><code class="o">&gt;</code><code class="p">,</code><code class="w">    </code><code class="c1">// older elements, eldest last.</code>
+<code class="w">    </code><code class="n">younger</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">char</code><code class="o">&gt;</code><code class="p">,</code><code class="w">  </code><code class="c1">// younger elements, youngest last.</code>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Pushes a character onto the back of a queue.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">push_back</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">c</code><code class="p">:</code><code class="w"> </code><code class="kt">char</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">younger</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">c</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Pops a character off the front of a queue. Returns `Some(c)` if there</code>
+<code class="w">    </code><code class="sd">/// was a character to pop, or `None` if the queue was empty.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">pop_front</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="kt">char</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">older</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">younger</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="k">return</code><code class="w"> </code><code class="nb">None</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+
+<code class="w">            </code><code class="c1">// Bring the elements in younger over to older, and put them in</code>
+<code class="w">            </code><code class="c1">// the promised order.</code>
+<code class="w">            </code><code class="n">std</code><code class="p">::</code><code class="n">mem</code><code class="p">::</code><code class="n">swap</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">older</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">younger</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="bp">self</code><code class="p">.</code><code class="n">older</code><code class="p">.</code><code class="n">reverse</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// Now older is guaranteed to have something. Vec's pop method</code>
+<code class="w">        </code><code class="c1">// already returns an Option, so we're set.</code>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">older</code><code class="p">.</code><code class="n">pop</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Functions defined in an <code>impl</code> block are called <em>associated functions<a contenteditable="false" data-primary="functions" data-secondary="associated" data-type="indexterm" id="id1233"/><a contenteditable="false" data-primary="associated functions" data-type="indexterm" id="id1234"/></em>, since they’re associated with a specific type. Functions defined anywhere else are sometimes called <em>free functions<a contenteditable="false" data-primary="functions" data-secondary="free" data-type="indexterm" id="id1235"/><a contenteditable="false" data-primary="free functions" data-type="indexterm" id="id1236"/></em>—“free” as in unattached.</p>
+
+<p>Associated functions that have a <code>self</code> argument are called <em>methods</em>. Associated functions without <code>self</code> are like static methods or constructors in other languages; we will cover them in a few pages.</p>
+
+<p>Rust passes a method the value it’s being called on as its first argument, which must have the special name <code>self</code>. Since <code>self</code>’s type is obviously the one named at the top of the <code>impl</code> block, or a reference to that, Rust lets you omit the type, and write <code>self</code>, <code>&amp;self</code>, or <code>&amp;mut self</code> as shorthand for <code>self: Queue</code>, <code>self: &amp;Queue</code>, or <code>self: &amp;mut Queue</code>. You can use the longhand forms if you like, but almost all Rust code uses the shorthand.</p>
+
+<p>In our example, the <code>push_back</code> and <code>pop_front</code> methods refer to the <code>Queue</code>’s fields as <code>self.older</code> and <code>self.younger</code>. Unlike C‍++ and Java, where the members of the “this” object are directly visible in method bodies as unqualified identifiers, a Rust method must explicitly use <code>self</code> to refer to the value it was called on, similar to the way Python methods use <code>self</code>, and the way JavaScript methods use <code>this</code>.</p>
+
+<p>Since <code>push_back</code> and <code>pop_front</code> need to modify the <code>Queue</code>, they both take <code>&amp;mut self</code>. However, when you call a method, you don’t need to borrow the mutable reference yourself; the ordinary method call syntax takes care of that implicitly. So with these definitions in place, you can use <code>Queue</code> like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct21">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">q</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">older</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="n">younger</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+
+<code class="n">q</code><code class="p">.</code><code class="n">push_back</code><code class="p">(</code><code class="sc">'0'</code><code class="p">);</code><code class="w"/>
+<code class="n">q</code><code class="p">.</code><code class="n">push_back</code><code class="p">(</code><code class="sc">'1'</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">q</code><code class="p">.</code><code class="n">pop_front</code><code class="p">(),</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="sc">'0'</code><code class="p">));</code><code class="w"/>
+
+<code class="n">q</code><code class="p">.</code><code class="n">push_back</code><code class="p">(</code><code class="sc">'∞'</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">q</code><code class="p">.</code><code class="n">pop_front</code><code class="p">(),</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="sc">'1'</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">q</code><code class="p">.</code><code class="n">pop_front</code><code class="p">(),</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="sc">'∞'</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">q</code><code class="p">.</code><code class="n">pop_front</code><code class="p">(),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Simply writing <code>q.push_back(...)</code> borrows a mutable reference to <code>q</code>, as if you had written <code>(&amp;mut q).push_back(...)</code>, since that’s what the <code>push_back</code> method’s <code>self</code> requires.</p>
+
+<p>If a method doesn’t need to modify its <code>self</code>, then you can define it to take a shared reference instead. For example:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct22">
+<code class="k">impl</code><code class="w"> </code><code class="n">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">is_empty</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">older</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"> </code><code class="o">&amp;&amp;</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">younger</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Again, the method call expression knows which sort of reference to borrow:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct23">
+<code class="fm">assert!</code><code class="p">(</code><code class="n">q</code><code class="p">.</code><code class="n">is_empty</code><code class="p">());</code><code class="w"/>
+<code class="n">q</code><code class="p">.</code><code class="n">push_back</code><code class="p">(</code><code class="sc">'☉'</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="o">!</code><code class="n">q</code><code class="p">.</code><code class="n">is_empty</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>Or, if a method wants to take ownership of <code>self</code>, it can take <code>self</code> by value:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct24">
+<code class="k">impl</code><code class="w"> </code><code class="n">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">split</code><code class="p">(</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="p">(</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">char</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">char</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="p">(</code><code class="bp">self</code><code class="p">.</code><code class="n">older</code><code class="p">,</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">younger</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Calling this <code>split</code> method looks like the other method calls:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct25">
+<code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">older</code><code class="p">,</code><code class="w"> </code><code class="n">younger</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">q</code><code class="p">.</code><code class="n">split</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>But note that, since <code>split</code> takes its <code>self</code> by value, this <em>moves</em> the <code>Queue</code> out of <code>q</code>, meaning that <code>q</code> can no longer be used. Since <code>split</code>’s <code>self</code> now owns the queue, it’s able to move the individual vectors out of it and return them to the caller.</p>
+
+<p>Sometimes, taking <code>self</code> by value like this, or even by reference, isn’t enough, so Rust also lets you pass <code>self</code> via smart pointer types.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Passing Self as a Box, Rc, or Arc"><div class="sect2" id="passing-self-as-a-box-rc-or-arc">
+<h2>Passing Self as a Box, Rc, or Arc</h2>
+
+<p>A method’s <code>self</code> argument<a contenteditable="false" data-primary="self argument" data-type="indexterm" id="ix_self_argument"/> can also be a <code>Box&lt;Self&gt;</code>, <code>Rc&lt;Self&gt;</code>, or <code>Arc&lt;Self&gt;</code>. Such a method<a contenteditable="false" data-primary="Box type" data-type="indexterm" id="ix_box_type_ch9"/><a contenteditable="false" data-primary="Rc pointer type" data-type="indexterm" id="ix_rc_pointer_ch9"/><a contenteditable="false" data-primary="Arc pointer type" data-type="indexterm" id="ix_arc_pointer_ch9"/> can only be called on a value of the given pointer type. Calling the method passes ownership of the pointer to it.</p>
+
+<p>You won’t usually need to do this. A method that expects <code>self</code> by reference works fine when called on any of those pointer types:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-boxed-self-rare">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">bq</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">Queue</code><code class="p">::</code><code class="n">new</code><code class="p">());</code><code class="w"/>
+
+<code class="c1">// `Queue::push_back` expects a `&amp;mut Queue`, but `bq` is a `Box&lt;Queue&gt;`.</code>
+<code class="c1">// This is fine: Rust borrows a `&amp;mut Queue` from the `Box` for the</code>
+<code class="c1">// duration of the call.</code>
+<code class="n">bq</code><code class="p">.</code><code class="n">push_back</code><code class="p">(</code><code class="sc">'■'</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>For method calls and field access, Rust automatically borrows a reference from pointer types like <code>Box</code>, <code>Rc</code>, and <code>Arc</code>, so <code>&amp;self</code> and <code>&amp;mut self</code> are almost always the right thing in a method signature, along with the occasional <code>self</code>.</p>
+
+<p>But if it does come to pass that some method needs ownership of a pointer to <code>Self</code>, and its callers have such a pointer handy, Rust will let you pass it as the method’s <code>self</code> argument. To do so, you must spell out the type of <code>self</code>, as if it were an ordinary parameter:<a contenteditable="false" data-startref="ix_self_argument" data-type="indexterm" id="id1237"/><a contenteditable="false" data-startref="ix_rc_pointer_ch9" data-type="indexterm" id="id1238"/><a contenteditable="false" data-startref="ix_box_type_ch9" data-type="indexterm" id="id1239"/><a contenteditable="false" data-startref="ix_arc_pointer_ch9" data-type="indexterm" id="id1240"/></p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-orbit-job">
+<code class="k">impl</code><code class="w"> </code><code class="n">OrbitComputeJob</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Adds this job to the application-wide list of active jobs, so that</code>
+<code class="w">    </code><code class="sd">/// we'll wait for it to finish on shutdown.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">mark_active</code><code class="p">(</code><code class="bp">self</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Arc</code><code class="o">&lt;</code><code class="bp">Self</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">new_ref</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Arc</code><code class="p">::</code><code class="n">clone</code><code class="p">(</code><code class="bp">self</code><code class="p">);</code><code class="w"> </code><code class="c1">// bump reference count</code>
+<code class="w">        </code><code class="n">App</code><code class="p">::</code><code class="n">add_active_job</code><code class="p">(</code><code class="n">new_ref</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Non-Method Associated Functions"><div class="sect2" id="non-method-associated-functions">
+<h2>Non-Method Associated Functions</h2>
+
+<p>An <code>impl</code> block can also define associated functions<a contenteditable="false" data-primary="functions" data-secondary="associated" data-type="indexterm" id="id1241"/><a contenteditable="false" data-primary="associated functions" data-type="indexterm" id="id1242"/> that don’t take a <code>self</code> argument at all. They’re often used to provide constructor functions, like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct26">
+<code class="k">impl</code><code class="w"> </code><code class="n">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">older</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="n">younger</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This defines the associated function <code>Queue::new</code>. Now our example code becomes a bit more svelte:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct27">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">q</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Queue</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+
+<code class="n">q</code><code class="p">.</code><code class="n">push_back</code><code class="p">(</code><code class="sc">'*'</code><code class="p">);</code><code class="w"/>
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>It’s conventional in Rust for constructor functions to be named <code>new</code>; we’ve already seen <code>Vec::new</code>, <code>Box::new</code>, <code>HashMap::new</code>, and others. But there’s nothing special about the name <code>new</code>. It’s not a keyword, and types often have other associated functions that serve as constructors, like <code>Vec::with_capacity</code>.</p>
+
+<p>Although you can have many separate <code>impl</code> blocks for a single type, they must all be in the same crate that defines that type. However, Rust does let you attach your own methods to other types; we’ll explain how in <a data-type="xref" href="ch11.html#traits-and-generics">Chapter 11</a>.</p>
+
+<p>If you’re used to C‍++ or Java, separating a type’s methods from its definition may seem unusual, but there are several advantages to doing so:</p>
+
+<ul>
+	<li>
+	<p>It’s always easy to find a type’s data members. In large C‍++ class definitions, you might need to skim hundreds of lines of member function definitions to be sure you haven’t missed any of the class’s data members; in Rust, they’re all in one place.</p>
+	</li>
+	<li>
+	<p>Although one can imagine fitting methods into the syntax for named-field structs, it’s not so neat for tuple and unit-like structs. Pulling methods out into an <code>impl</code> block allows a single syntax for all three. In fact, Rust uses this same syntax for defining methods on types that are not structs at all, such as <code>enum</code> types and primitive types like <code>i32</code>. (The fact that any type can have methods is one reason Rust doesn’t use the term <em>object</em> much, preferring to call everything a <em>value</em>.)</p>
+	</li>
+	<li>
+	<p>The same <code>impl</code> syntax also serves neatly for implementing traits<a contenteditable="false" data-startref="ix_structs_impl" data-type="indexterm" id="id1243"/><a contenteditable="false" data-startref="ix_methods_impl" data-type="indexterm" id="id1244"/><a contenteditable="false" data-startref="ix_blocks_impl" data-type="indexterm" id="id1245"/><a contenteditable="false" data-startref="ix_impl_block" data-type="indexterm" id="id1246"/>, which we’ll go into in <a data-type="xref" href="ch11.html#traits-and-generics">Chapter 11</a>.</p>
+	</li>
+</ul>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Associated Constants"><div class="sect1" id="associated-constants">
+<h1>Associated Constants</h1>
+
+<p>Another feature<a contenteditable="false" data-primary="associated constants" data-type="indexterm" id="id1247"/><a contenteditable="false" data-primary="constants" data-secondary="associated" data-type="indexterm" id="id1248"/> of languages like C# and Java that Rust adopts in its type system is the idea of values associated with a type, rather than a specific instance of that type. In Rust, these are known as <em>associated constants</em>.</p>
+
+<p>As the name implies, associated constants are constant values. They’re often used to specify commonly used values of a type. For instance, you could define a two-dimensional vector for use in linear algebra with an associated unit vector:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct-assoc-const0">
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Vector2</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="kt">f32</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">y</code><code class="p">:</code><code class="w"> </code><code class="kt">f32</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">Vector2</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">const</code><code class="w"> </code><code class="n">ZERO</code><code class="p">:</code><code class="w"> </code><code class="nc">Vector2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Vector2</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="mf">0.0</code><code class="p">,</code><code class="w"> </code><code class="n">y</code><code class="p">:</code><code class="w"> </code><code class="mf">0.0</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="k">const</code><code class="w"> </code><code class="n">UNIT</code><code class="p">:</code><code class="w"> </code><code class="nc">Vector2</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Vector2</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="mf">1.0</code><code class="p">,</code><code class="w"> </code><code class="n">y</code><code class="p">:</code><code class="w"> </code><code class="mf">0.0</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>These values are associated with the type itself, and you can use them without referring to another instance of <code>Vector2</code>. Much like associated functions, they are accessed by naming the type with which they’re associated, followed by their name:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct-assoc-const2">
+<code class="kd">let</code><code class="w"> </code><code class="n">scaled</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Vector2</code><code class="p">::</code><code class="n">UNIT</code><code class="p">.</code><code class="n">scaled_by</code><code class="p">(</code><code class="mf">2.0</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Nor does an associated constant have to be of the same type as the type it’s associated with; we could use this feature to add IDs or names to types. For example, if there were several types similar to <code>Vector2</code> that needed to be written to a file and then loaded into memory later, an associated constant could be used to add names or numeric IDs that could be written next to the data to identify its type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct-assoc-const1">
+<code class="k">impl</code><code class="w"> </code><code class="n">Vector2</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">const</code><code class="w"> </code><code class="n">NAME</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="nb">static</code><code class="w"> </code><code class="kt">str</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"Vector2"</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">const</code><code class="w"> </code><code class="n">ID</code><code class="p">:</code><code class="w"> </code><code class="kt">u32</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mi">18</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Generic Structs"><div class="sect1" id="generic-structs">
+<h1>Generic Structs</h1>
+
+<p>Our earlier<a contenteditable="false" data-primary="structs" data-secondary="generic" data-type="indexterm" id="ix_structs_generic"/><a contenteditable="false" data-primary="generic structs" data-type="indexterm" id="ix_generic_structs"/> definition of <code>Queue</code> is unsatisfying: it is written to store characters, but there’s nothing about its structure or methods that is specific to characters at all. If we were to define another struct that held, say, <code>String</code> values, the code could be identical, except that <code>char</code> would be replaced with <code>String</code>. That would be a waste of time.</p>
+
+<p>Fortunately, Rust structs can be <em>generic</em>, meaning that their definition is a template into which you can plug whatever types you like. For example, here’s a definition for <code>Queue</code> that can hold values of any type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct29">
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">Queue</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">older</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">younger</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>You can read the <code>&lt;T&gt;</code> in <code>Queue&lt;T&gt;</code> as “for any element type <code>T</code>...”. So this definition reads, “For any type <code>T</code>, a <code>Queue&lt;T&gt;</code> is two fields of type <code>Vec&lt;T&gt;</code>.” For example, in <code>Queue&lt;String&gt;</code>, <code>T</code> is <code>String</code>, so <code>older</code> and <code>younger</code> have type <code>Vec&lt;String&gt;</code>. In <code>Queue&lt;char&gt;</code>, <code>T</code> is <code>char</code>, and we get a struct identical to the <code>char</code>-specific definition we started with. In fact, <code>Vec</code> itself is a generic struct, defined in just this way.</p>
+
+<p>In generic struct definitions, the type names used in <code>&lt;</code>angle brackets<code>&gt;</code> are called <em>type parameters<a contenteditable="false" data-primary="parameters" data-secondary="type" data-type="indexterm" id="id1249"/><a contenteditable="false" data-primary="type parameters" data-type="indexterm" id="id1250"/><a contenteditable="false" data-primary="types" data-secondary="parameters" data-type="indexterm" id="id1251"/></em>. An <code>impl</code> block for a generic struct looks like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct30">
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Queue</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Queue</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">older</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="n">younger</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">push_back</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">t</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">younger</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">t</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">is_empty</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">older</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"> </code><code class="o">&amp;&amp;</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">younger</code><code class="p">.</code><code class="n">is_empty</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>You can read the line <code>impl&lt;T&gt; Queue&lt;T&gt;</code> as something like, “for any type <code>T</code>, here are some associated functions available on <code>Queue&lt;T&gt;</code>.” Then, you can use the type parameter <code>T</code> as a type in the associated function definitions.</p>
+
+<p>The syntax may look a bit redundant, but the <code>impl&lt;T&gt;</code> makes it clear that the <code>impl</code> block covers any type <code>T</code>, which distinguishes it from an <code>impl</code> block written for one specific kind of <code>Queue</code>, like this one:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-generic-queue-specific-instance">
+<code class="k">impl</code><code class="w"> </code><code class="n">Queue</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">sum</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">f64</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This <code>impl</code> block header reads, “Here are some associated functions specifically for <code>Queue&lt;f64&gt;</code>.” This gives <code>Queue&lt;f64&gt;</code> a <code>sum</code> method, available on no other kind of <code>Queue</code>.</p>
+
+<p>Every <code>impl</code> block, generic or not, defines the special type parameter <code>Self</code> (note the <code>CamelCase</code> name) to be whatever type we’re adding methods to. In the preceding code, <code>Self</code> would be <code>Queue&lt;T&gt;</code>, so we can abbreviate <code>Queue::new</code>’s definition a bit <span class="keep-together">further:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct31">
+<code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Queue</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">older</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">        </code><code class="n">younger</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>You might have noticed that, in the body of <code>new</code>, we didn’t need to write the type parameter in the construction expression; simply writing <code>Queue { ... }</code> was good enough. This is Rust’s type inference at work: since there’s only one type that works for that function’s return value—namely, <code>Queue&lt;T&gt;</code>—Rust supplies the parameter for us. However, you’ll always need to supply type parameters in function signatures and type definitions. Rust doesn’t infer those; instead, it uses those explicit types as the basis from which it infers types within function bodies.</p>
+
+<p><code>Self</code> can also be used in this way; we could have written <code>Self { ... }</code> instead. It’s up to you to decide which you find easiest to understand.</p>
+
+<p><a contenteditable="false" data-primary="::&lt;...&gt; (turbofish symbol)" data-type="indexterm" id="id1252"/>For associated function calls, you can supply the type parameter explicitly using the <code>::&lt;&gt;</code> (turbofish) notation:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct32">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">q</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Queue</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">char</code><code class="o">&gt;</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>But in practice, you can usually just let Rust figure it out for you:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct33">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">q</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Queue</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">r</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Queue</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+
+<code class="n">q</code><code class="p">.</code><code class="n">push_back</code><code class="p">(</code><code class="s">"Marrakesh"</code><code class="p">);</code><code class="w">  </code><code class="c1">// apparently a Queue&lt;&amp;str&gt;</code>
+<code class="n">r</code><code class="p">.</code><code class="n">push_back</code><code class="p">(</code><code class="mf">6798.383</code><code class="p">);</code><code class="w">     </code><code class="c1">// apparently a Queue&lt;f64&gt;</code>
+</pre>
+
+<p>In fact, this is exactly what we’ve been doing with <code>Vec</code>, another generic struct type, throughout the book.<a contenteditable="false" data-startref="ix_generic_structs" data-type="indexterm" id="id1253"/><a contenteditable="false" data-startref="ix_structs_generic" data-type="indexterm" id="id1254"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Generic Structs with Lifetime Parameters"><div class="sect1" id="generic-structs-with-lifetime-parameters">
+<h1>Generic Structs with Lifetime Parameters</h1>
+
+<p>As we discussed in <a data-type="xref" href="ch05.html#structs-containing-references">“Structs Containing References”</a>, if a struct type contains references, you must name those references’ lifetimes<a contenteditable="false" data-primary="lifetime" data-secondary="structs with" data-type="indexterm" id="id1255"/><a contenteditable="false" data-primary="structs" data-secondary="with lifetime parameters" data-secondary-sortas="lifetime parameters" data-type="indexterm" id="id1256"/>. For example, here’s a struct that might hold references to the greatest and least elements of some slice:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct34">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Extrema</code><code class="o">&lt;'</code><code class="na">elt</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">greatest</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">elt</code><code class="w"> </code><code class="kt">i32</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">least</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">elt</code><code class="w"> </code><code class="kt">i32</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Earlier, we invited you to think of a declaration like <code>struct Queue&lt;T&gt;</code> as meaning that, given any specific type <code>T</code>, you can make a <code>Queue&lt;T&gt;</code> that holds that type. Similarly, you can think of <code>struct Extrema&lt;'elt&gt;</code> as meaning that, given any specific lifetime <code>'elt</code>, you can make an <code>Extrema&lt;'elt&gt;</code> that holds references with that <span class="keep-together">lifetime.</span></p>
+
+<p>Here’s a function to scan a slice and return an <code>Extrema</code> value whose fields refer to its elements:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct35">
+<code class="k">fn</code><code class="w"> </code><code class="nf">find_extrema</code><code class="o">&lt;'</code><code class="na">s</code><code class="o">&gt;</code><code class="p">(</code><code class="n">slice</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">s</code><code class="w"> </code><code class="p">[</code><code class="kt">i32</code><code class="p">])</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Extrema</code><code class="o">&lt;'</code><code class="na">s</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">greatest</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">slice</code><code class="p">[</code><code class="mi">0</code><code class="p">];</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">least</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">slice</code><code class="p">[</code><code class="mi">0</code><code class="p">];</code><code class="w"/>
+
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">1</code><code class="o">..</code><code class="n">slice</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">slice</code><code class="p">[</code><code class="n">i</code><code class="p">]</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="o">*</code><code class="n">least</code><code class="w">    </code><code class="p">{</code><code class="w"> </code><code class="n">least</code><code class="w">    </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">slice</code><code class="p">[</code><code class="n">i</code><code class="p">];</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">slice</code><code class="p">[</code><code class="n">i</code><code class="p">]</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="o">*</code><code class="n">greatest</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">greatest</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">slice</code><code class="p">[</code><code class="n">i</code><code class="p">];</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">Extrema</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">greatest</code><code class="p">,</code><code class="w"> </code><code class="n">least</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here, since <code>find_extrema</code> borrows elements of <code>slice</code>, which has lifetime <code>'s</code>, the <code>Extrema</code> struct we return also uses <code>'s</code> as the lifetime of its references. Rust always infers lifetime parameters for calls, so calls to <code>find_extrema</code> needn’t mention them:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct36">
+<code class="kd">let</code><code class="w"> </code><code class="n">a</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="o">-</code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="mi">15</code><code class="p">,</code><code class="w"> </code><code class="mi">48</code><code class="p">];</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">e</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">find_extrema</code><code class="p">(</code><code class="o">&amp;</code><code class="n">a</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="o">*</code><code class="n">e</code><code class="p">.</code><code class="n">least</code><code class="p">,</code><code class="w"> </code><code class="o">-</code><code class="mi">3</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="o">*</code><code class="n">e</code><code class="p">.</code><code class="n">greatest</code><code class="p">,</code><code class="w"> </code><code class="mi">48</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Because it’s so common for the return type to use the same lifetime as an argument, Rust lets us abbreviate functions like this by leaving out the lifetime parameter. We can write <code>find_extrema</code>’s signature like this, with no change in meaning:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct37">
+<code class="k">fn</code><code class="w"> </code><code class="nf">find_extrema</code><code class="p">(</code><code class="n">slice</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="p">[</code><code class="kt">i32</code><code class="p">])</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Extrema</code><code class="o">&lt;'</code><code class="nb">_</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Rust sees that the argument <code>slice</code> is a reference and infers that this function has an unwritten lifetime parameter. In the return type, <code>Extrema&lt;'_&gt;</code>, the <em>placeholder lifetime</em> <code>'_</code> refers to this implicit lifetime.<a contenteditable="false" data-primary="'_ (placeholder lifetime)" data-type="indexterm" id="id1257"/><a contenteditable="false" data-primary="placeholder lifetime ('_)" data-type="indexterm" id="id1258"/><a contenteditable="false" data-primary="lifetime" data-secondary="placeholder ('_)" data-type="indexterm" id="id1259"/></p>
+
+<p>However, for functions with multiple arguments that carry lifetimes, Rust often refuses to guess about lifetimes in the return type and makes you spell everything out.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Generic Structs with Constant Parameters"><div class="sect1" id="generic-structs-with-constant-parameters">
+<h1>Generic Structs with Constant Parameters</h1>
+
+<p><a contenteditable="false" data-primary="const generics" data-type="indexterm" id="id1260"/> <a contenteditable="false" data-primary="generic parameters" data-secondary="constants" data-type="indexterm" id="id1261"/> <a contenteditable="false" data-primary="generic types" data-secondary="with constant parameters" data-type="indexterm" id="id1262"/> A generic struct can also take parameters that are constant values. For example, you could define a type representing polynomials of arbitrary degree like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-poly-struct">
+<code class="sd">/// A polynomial of degree N - 1.</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Polynomial</code><code class="o">&lt;</code><code class="k">const</code><code class="w"> </code><code class="n">N</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// The coefficients of the polynomial.</code>
+<code class="w">    </code><code class="sd">///</code>
+<code class="w">    </code><code class="sd">/// For a polynomial a + bx + cx² + ... + zxⁿ⁻¹,</code>
+<code class="w">    </code><code class="sd">/// the `i`'th element is the coefficient of xⁱ.</code>
+<code class="w">    </code><code class="n">coefficients</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">f64</code><code class="p">;</code><code class="w"> </code><code class="n">N</code><code class="p">],</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>With this definition, <code>Polynomial&lt;3&gt;</code> is a quadratic polynomial, for example. The <code>&lt;const N: usize&gt;</code> clause says that the <code>Polynomial</code> type expects a <code>usize</code> value as its generic parameter, which it uses to decide how many coefficients to store.</p>
+
+<p>Unlike <code>Vec</code>, which has fields holding its length and capacity and stores its elements in the heap, <code>Polynomial</code> stores its coefficients directly in the value, and nothing else. The length is given by the type. (The capacity isn’t needed, because <code>Polynomial</code>s can’t grow dynamically.)</p>
+
+<p>We can use the parameter <code>N</code> in the type’s associated functions:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-poly-associated-fns">
+<code class="k">impl</code><code class="o">&lt;</code><code class="k">const</code><code class="w"> </code><code class="n">N</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Polynomial</code><code class="o">&lt;</code><code class="n">N</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">(</code><code class="n">coefficients</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">f64</code><code class="p">;</code><code class="w"> </code><code class="n">N</code><code class="p">])</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Polynomial</code><code class="o">&lt;</code><code class="n">N</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Polynomial</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">coefficients</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Evaluates the polynomial at `x`.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">eval</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">f64</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// Horner's method is numerically stable, efficient, and simple:</code>
+<code class="w">        </code><code class="c1">// c₀ + x(c₁ + x(c₂ + x(c₃ + ... x(c[n-1] + x c[n]))))</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">sum</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mf">0.0</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="p">(</code><code class="mi">0</code><code class="o">..</code><code class="n">N</code><code class="p">).</code><code class="n">rev</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">sum</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">coefficients</code><code class="p">[</code><code class="n">i</code><code class="p">]</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">sum</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+
+<code class="w">        </code><code class="n">sum</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here, the <code>new</code> function accepts an array of length <code>N</code>, and takes its elements as the coefficients of a fresh <code>Polynomial</code> value. The <code>eval</code> method iterates over the range <code>0..N</code> to find the value of the polynomial at a given point <code>x</code>.</p>
+
+<p>As with type and lifetime parameters, Rust can often infer the right values for constant parameters:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-poly-infer-length">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="kt">f64</code><code class="p">::</code><code class="n">consts</code><code class="p">::</code><code class="n">FRAC_PI_2</code><code class="p">;</code><code class="w">   </code><code class="c1">// π/2</code>
+
+<code class="c1">// Approximate the `sin` function: sin x ≅ x - 1/6 x³ + 1/120 x⁵</code>
+<code class="c1">// Around zero, it's pretty accurate!</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">sine_poly</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Polynomial</code><code class="p">::</code><code class="n">new</code><code class="p">([</code><code class="mf">0.0</code><code class="p">,</code><code class="w"> </code><code class="mf">1.0</code><code class="p">,</code><code class="w"> </code><code class="mf">0.0</code><code class="p">,</code><code class="w"> </code><code class="o">-</code><code class="mf">1.0</code><code class="o">/</code><code class="mf">6.0</code><code class="p">,</code><code class="w"> </code><code class="mf">0.0</code><code class="p">,</code><code class="w"> </code><code class="mf">1.0</code><code class="o">/</code><code class="mf">120.0</code><code class="p">]);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">sine_poly</code><code class="p">.</code><code class="n">eval</code><code class="p">(</code><code class="mf">0.0</code><code class="p">),</code><code class="w"> </code><code class="mf">0.0</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">((</code><code class="n">sine_poly</code><code class="p">.</code><code class="n">eval</code><code class="p">(</code><code class="n">FRAC_PI_2</code><code class="p">)</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="mf">1.</code><code class="p">).</code><code class="n">abs</code><code class="p">()</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="mf">0.005</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Since we pass <code>Polynomial::new</code> an array with six elements, Rust knows we must be constructing a <code>Polynomial&lt;6&gt;</code>. The <code>eval</code> method knows how many iterations the <code>for</code> loop should run simply by consulting its <code>Self</code> type. Since the length is known at compile time, the compiler will probably replace the loop entirely with straight-line code.</p>
+
+<p>A <code>const</code> generic parameter may be any integer type, <code>char</code>, or <code>bool</code>. Floating-point numbers, enums, and other types are not permitted.</p>
+
+<p>If the struct takes other kinds of generic parameters, lifetime parameters must come first, followed by types, followed by any <code>const</code> values. For example, a type that holds an array of references could be declared like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-lump-of-references">
+<code class="k">struct</code><code class="w"> </code><code class="nc">LumpOfReferences</code><code class="o">&lt;'</code><code class="na">a</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="k">const</code><code class="w"> </code><code class="n">N</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">the_lump</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="o">&amp;'</code><code class="na">a</code><code class="w"> </code><code class="n">T</code><code class="p">;</code><code class="w"> </code><code class="n">N</code><code class="p">],</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Constant generic parameters are a relatively new addition to Rust, and their use is somewhat restricted for now. For example, it would have been nicer to define <code>Polynomial</code> like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-const-parameter-arithmetic">
+<code class="sd">/// A polynomial of degree N.</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Polynomial</code><code class="o">&lt;</code><code class="k">const</code><code class="w"> </code><code class="n">N</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">coefficients</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">f64</code><code class="p">;</code><code class="w"> </code><code class="n">N</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="p">],</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>However, Rust rejects this definition:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: generic parameters may not be used in const operations</code>
+<code class="go">  |</code>
+<code class="go">6 |     coefficients: [f64; N + 1]</code>
+<code class="go">  |                         ^ cannot perform const operation using `N`</code>
+<code class="go">  |</code>
+<code class="go">  = help: const parameters may only be used as standalone arguments</code>
+<code class="go">          here, i.e. `N`</code>
+</pre>
+
+<p>While it’s fine to say <code>[f64; N]</code>, a type like <code>[f64; N + 1]</code> is apparently too risqué for Rust. But Rust imposes this restriction for the time being to avoid confronting issues like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-const-parameter-daring-arithmetic">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Ketchup</code><code class="o">&lt;</code><code class="k">const</code><code class="w"> </code><code class="n">N</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">tomayto</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">i32</code><code class="p">;</code><code class="w"> </code><code class="n">N</code><code class="w"> </code><code class="o">&amp;</code><code class="w"> </code><code class="o">!</code><code class="mi">31</code><code class="p">],</code><code class="w"/>
+<code class="w">    </code><code class="n">tomahto</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="kt">i32</code><code class="p">;</code><code class="w"> </code><code class="n">N</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="p">(</code><code class="n">N</code><code class="w"> </code><code class="o">%</code><code class="w"> </code><code class="mi">32</code><code class="p">)],</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p><span data-claim-test="mask-and-modulo-equality">As it turns out, <code>N &amp; !31</code> and <code>N - (N % 32)</code> are equal for all values of <code>N</code></span>, so <code>tomayto</code> and <code>tomahto</code> always have the same type. It should be permitted to assign one to the other, for example. But teaching Rust’s type checker the bit-fiddling algebra it would need to be able to recognize this fact risks introducing confusing corner cases to an aspect of the language that is already quite complicated. Of course, simple expressions like <code>N + 1</code> are much more well-behaved, and there is work underway to teach Rust to handle those smoothly.</p>
+
+<p>Since the concern here is with the type checker’s behavior, this restriction applies only to constant parameters appearing in types, like the length of an array. In an ordinary expression, you can use <code>N</code> however you like: <code>N + 1</code> and <code>N &amp; !31</code> are perfectly <span class="keep-together">acceptable</span>.</p>
+
+<p><span data-claim-test="const-generic-braces">If the value you want to supply for a <code>const</code> generic parameter is not simply a literal or a single identifier, then you must wrap it in braces, as in <code>Polynomial&lt;{5 + 1}&gt;</code>.</span> This rule allows Rust to report syntax errors more accurately.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Deriving Common Traits for Struct Types"><div class="sect1" id="deriving-common-traits-for-struct-types">
+<h1>Deriving Common Traits for Struct Types</h1>
+
+<p>Structs<a contenteditable="false" data-primary="structs" data-secondary="deriving common traits for struct types" data-type="indexterm" id="id1263"/> can be very easy to write:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct38">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Point</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">y</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>However, if you were to start using this <code>Point</code> type, you would quickly notice that it’s a bit of a pain. As written, <code>Point</code> is not copyable or cloneable. You can’t print it with <code>println!("{point:?}");</code> and it does not support the <code>==</code> and <code>!=</code> operators.</p>
+
+<p>Each of these features has a name in Rust—<code>Copy</code>, <code>Clone</code>, <code>Debug</code>, and <code>PartialEq</code>. They are called <em>traits<a contenteditable="false" data-primary="traits" data-secondary="for struct types" data-secondary-sortas="struct types" data-type="indexterm" id="id1264"/></em>. In <a data-type="xref" href="ch11.html#traits-and-generics">Chapter 11</a>, we’ll show how to implement traits by hand for your own structs. But in the case of these standard traits, and several others, you don’t need to implement them by hand unless you want some kind of custom behavior. Rust can automatically implement them for you, with mechanical accuracy. Just add a <code>#[derive]</code> attribute to the struct:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct39">
+<code class="cp">#[derive(Copy, Clone, Debug, PartialEq)]</code><code class="w"/>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Point</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">y</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Each of these traits can be implemented automatically for a struct, provided that each of its fields implements the trait. We can ask Rust to derive <code>PartialEq</code> for <code>Point</code> because its two fields are both of type <code>f64</code>, which already implements <code>PartialEq</code>.</p>
+
+<p>Rust can also derive <code>PartialOrd</code>, which would add support for the comparison operators <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, and <code>&gt;=</code>. We haven’t done so here, because comparing two points to see if one is “less than” the other is actually a pretty weird thing to do. There’s no one conventional order on points. So we choose not to support those operators for <code>Point</code> values. Cases like this are one reason that Rust makes us write the <code>#[derive]</code> attribute rather than automatically deriving every trait it can. Another reason is that implementing a trait is automatically a public feature, so copyability, cloneability, and so forth are all part of your struct’s public API and should be chosen deliberately.</p>
+
+<p>We’ll describe Rust’s standard traits in detail and explain which ones are <code>#[derive]</code>able in <a data-type="xref" href="ch13.html#utility-traits">Chapter 13</a>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Interior Mutability"><div class="sect1" id="interior-mutability">
+<h1>Interior Mutability</h1>
+
+<p>Mutability<a contenteditable="false" data-primary="structs" data-secondary="interior mutability" data-type="indexterm" id="ix_structs_interior_mut"/><a contenteditable="false" data-primary="mutability, interior" data-type="indexterm" id="ix_mut_interior"/><a contenteditable="false" data-primary="interior mutability" data-type="indexterm" id="ix_interior_mut"/> is like wasabi: in excess, it causes problems, but you often want just a little bit of it. For example, say your spider robot control system has a central struct, <code>SpiderRobot</code>, that contains settings and I/O handles. It’s set up when the robot boots, and the values never change:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct40">
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">SpiderRobot</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">species</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">web_enabled</code><code class="p">:</code><code class="w"> </code><code class="kt">bool</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">leg_devices</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="n">OwnedFd</code><code class="p">;</code><code class="w"> </code><code class="mi">8</code><code class="p">],</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Every major system of the robot is handled by a different struct, and each one has a pointer back to the <code>SpiderRobot</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct41">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">rc</code><code class="p">::</code><code class="n">Rc</code><code class="p">;</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">SpiderSenses</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">robot</code><code class="p">:</code><code class="w"> </code><code class="nc">Rc</code><code class="o">&lt;</code><code class="n">SpiderRobot</code><code class="o">&gt;</code><code class="p">,</code><code class="w">  </code><code class="c1">// &lt;-- pointer to settings and I/O</code>
+<code class="w">    </code><code class="n">eyes</code><code class="p">:</code><code class="w"> </code><code class="p">[</code><code class="n">Camera</code><code class="p">;</code><code class="w"> </code><code class="mi">32</code><code class="p">],</code><code class="w"/>
+<code class="w">    </code><code class="n">motion</code><code class="p">:</code><code class="w"> </code><code class="nc">Accelerometer</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The structs for web construction, predation, venom flow control, and so forth also all have an <code>Rc&lt;SpiderRobot&gt;</code> smart pointer. Recall that <code>Rc</code> stands for <a href="ch04.html#rc">reference counting</a>, and a value in an <code>Rc</code> box is always shared and therefore always immutable.</p>
+
+<p>Now suppose you want to add a little logging to the <code>SpiderRobot</code> struct, using the standard <code>File</code> type. There’s a problem: a <code>File</code> has to be <code>mut</code>. All the methods for writing to it require a <code>mut</code> reference.</p>
+
+<p>This sort of situation comes up fairly often. What we need is a little bit of mutable data (a <code>File</code>) inside an otherwise immutable value (the <code>SpiderRobot</code> struct). This is called <em>interior mutability</em>. Rust offers several flavors of it; in this section, we’ll discuss the two most straightforward types: <code>Cell&lt;T&gt;</code> and <code>RefCell&lt;T&gt;</code>, both in the <code>std::cell</code> module.</p>
+
+<p>A <code>Cell&lt;T&gt;</code> is a struct<a contenteditable="false" data-primary="Cell type" data-type="indexterm" id="id1265"/> that contains a single private value of type <code>T</code>. The only special thing about a <code>Cell</code> is that you can get and set the field even if you don’t have <code>mut</code> access to the <code>Cell</code> itself:</p>
+
+<dl>
+	<dt><code>Cell::new(value)</code></dt>
+	<dd>
+	<p>Creates a new <code>Cell</code>, moving the given <code>value</code> into it.</p>
+	</dd>
+	<dt><code>cell.get()</code></dt>
+	<dd>
+	<p>Returns a copy of the value in the <code>cell</code>.</p>
+	</dd>
+	<dt><code>cell.set(value)</code></dt>
+	<dd>
+	<p>Stores the given <code>value</code> in the <code>cell</code>, dropping the previously stored value.</p>
+
+	<p>This method takes <code>self</code> as a non-<code>mut</code> reference:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-struct46">
+<code class="k">fn</code><code class="w"> </code><code class="nf">set</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">value</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">)</code><code class="w">    </code><code class="c1">// note: not `&amp;mut self`</code>
+</pre>
+
+	<p>This is, of course, unusual for methods named<a contenteditable="false" data-primary="set method" data-type="indexterm" id="id1266"/> <code>set</code>. By now, Rust has trained us to expect that we need <code>mut</code> access if we want to make changes to data. But by the same token, this one unusual detail is the whole point of <code>Cell</code>s. They’re simply a safe way of bending the rules on immutability—no more, no less.</p>
+	</dd>
+</dl>
+
+<p>Cells also have a few other methods, which you can read about <a href="https://oreil.ly/WqRrt">in the documentation</a>.</p>
+
+<p>A <code>Cell</code> would be handy if you were adding a simple counter to your <code>SpiderRobot</code>. You could write:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct42">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">cell</code><code class="p">::</code><code class="n">Cell</code><code class="p">;</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">SpiderRobot</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="n">hardware_error_count</code><code class="p">:</code><code class="w"> </code><code class="nc">Cell</code><code class="o">&lt;</code><code class="kt">u32</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Then even non-<code>mut</code> methods of <code>SpiderRobot</code> can access that <code>u32</code>, using the <code>.get()</code> and <code>.set()</code> methods:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct43">
+<code class="k">impl</code><code class="w"> </code><code class="n">SpiderRobot</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Increases the error count by 1.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">add_hardware_error</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">n</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">hardware_error_count</code><code class="p">.</code><code class="n">get</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">hardware_error_count</code><code class="p">.</code><code class="n">set</code><code class="p">(</code><code class="n">n</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// True if any hardware errors have been reported.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">has_hardware_errors</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">hardware_error_count</code><code class="p">.</code><code class="n">get</code><code class="p">()</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="mi">0</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is easy enough, but it doesn’t solve our logging problem. <code>Cell</code> does <em>not</em> let you call <code>mut</code> methods on a shared value. The <code>.get()</code> method<a contenteditable="false" data-primary="get method" data-type="indexterm" id="id1267"/> returns a copy of the value in the cell, so it works only if <code>T</code> implements <a href="ch04.html#copy-types-the-exception-to-moves">the <code>Copy</code> trait</a>. For logging, we need a mutable <code>File</code>, and <a href="ch18.html#files"><code>File</code></a> isn’t copyable.</p>
+
+<p>The right tool in this case<a contenteditable="false" data-primary="RefCell&lt;T&gt; struct" data-type="indexterm" id="id1268"/> is a <code>RefCell</code>. Like <code>Cell&lt;T&gt;</code>, <code>RefCell&lt;T&gt;</code> is a generic type that contains a single value of type <code>T</code>. Unlike <code>Cell</code>, <code>RefCell</code> supports borrowing references to its <code>T</code> value:</p>
+
+<dl>
+	<dt><code>RefCell::new(value)</code></dt>
+	<dd>
+	<p>Creates<a contenteditable="false" data-primary="RefCell::new(value)" data-type="indexterm" id="id1269"/> a new <code>RefCell</code>, moving <code>value</code> into it.</p>
+	</dd>
+	<dt><code>ref_cell.borrow()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="RefCell type" data-secondary="borrow method" data-type="indexterm" id="id1270"/> a <code>Ref&lt;T&gt;</code>, which is essentially just a shared reference to the value stored in <code>ref_cell</code>.</p>
+
+	<p>This method panics if the value is already mutably borrowed; see details to follow.</p>
+	</dd>
+	<dt><code>ref_cell.borrow_mut()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="RefCell type" data-secondary="borrow_mut method" data-type="indexterm" id="id1271"/> a <code>RefMut&lt;T&gt;</code>, essentially a mutable reference to the value in <code>ref_cell</code>.</p>
+
+	<p>This method panics if the value is already borrowed; see details to follow.</p>
+	</dd>
+	<dt><code>ref_cell.try_borrow()</code>, <code>ref_cell.try_borrow_mut()</code></dt>
+	<dd>
+	<p>Work<a contenteditable="false" data-primary="RefCell type" data-secondary="try_borrow method" data-type="indexterm" id="id1272"/><a contenteditable="false" data-primary="RefCell type" data-secondary="try_borrow_mut method" data-type="indexterm" id="id1273"/> just like <code>borrow()</code> and <code>borrow_mut()</code>, but return a <code>Result</code>. Instead of panicking if the value is already mutably borrowed, they return an <code>Err</code> value.</p>
+	</dd>
+</dl>
+
+<p>Again, <code>RefCell</code> has a few other methods, which you can find <a href="https://oreil.ly/FtnIO">in the documentation</a>.</p>
+
+<p>The two <code>borrow</code> methods panic only if you try to break the Rust rule that <code>mut</code> references are exclusive references. For example, this would panic:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct44">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">cell</code><code class="p">::</code><code class="n">RefCell</code><code class="p">;</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">ref_cell</code><code class="p">:</code><code class="w"> </code><code class="nc">RefCell</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">RefCell</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"hello"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">r</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ref_cell</code><code class="p">.</code><code class="n">borrow</code><code class="p">();</code><code class="w">      </code><code class="c1">// ok, returns a Ref&lt;String&gt;</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">r</code><code class="p">.</code><code class="n">len</code><code class="p">();</code><code class="w">            </code><code class="c1">// ok, returns "hello".len()</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">count</code><code class="p">,</code><code class="w"> </code><code class="mi">5</code><code class="p">);</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">w</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">ref_cell</code><code class="p">.</code><code class="n">borrow_mut</code><code class="p">();</code><code class="w">  </code><code class="c1">// panic: already borrowed</code>
+<code class="n">w</code><code class="p">.</code><code class="n">push_str</code><code class="p">(</code><code class="s">" world"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>To avoid panicking, you could put these two borrows into separate blocks. That way, <code>r</code> would be dropped before you try to borrow <code>w</code>.</p>
+
+<p>This is a lot like how normal references work. The only difference is that normally, when you borrow a reference to a variable, Rust checks <em>at compile time</em> to ensure that you’re using the reference safely. If the checks fail, you get a compiler error. <code>RefCell</code> enforces the same rule using run-time checks. So if you’re breaking the rules, you get a panic (or an <code>Err</code>, for <code>try_borrow</code> and <code>try_borrow_mut</code>).</p>
+
+<p>Now we’re ready to put <code>RefCell</code> to work in our <code>SpiderRobot</code> type:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-struct45">
+<code class="k">pub</code><code class="w"> </code><code class="k">struct</code><code class="w"> </code><code class="nc">SpiderRobot</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="n">log_file</code><code class="p">:</code><code class="w"> </code><code class="nc">RefCell</code><code class="o">&lt;</code><code class="n">File</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">SpiderRobot</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Writes a line to the log file.</code>
+<code class="w">    </code><code class="k">pub</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">log</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">log_file</code><code class="p">.</code><code class="n">borrow_mut</code><code class="p">();</code><code class="w"/>
+<code class="w">        </code><code class="c1">// `writeln!` is like `println!`, but sends</code>
+<code class="w">        </code><code class="c1">// output to the given file.</code>
+<code class="w">        </code><code class="fm">writeln!</code><code class="p">(</code><code class="n">file</code><code class="p">,</code><code class="w"> </code><code class="s">"{message}"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The variable <code>file</code> has type <code>RefMut&lt;File&gt;</code>. It can be used just like a mutable reference to a <code>File</code>. For details about writing to files, see <a data-type="xref" href="ch18.html#input-and-output">Chapter 18</a>.</p>
+
+<p>Cells are easy to use. Having to call <code>.get()</code> and <code>.set()</code> or <code>.borrow()</code> and <span class="keep-together"><code>.borrow_mut()</code></span> is slightly awkward, but that’s just the price we pay for bending the rules. The other drawback is less obvious and more serious: cells—and any types that contain them—are not thread-safe. Rust therefore <a href="ch19.html#thread-safety-send-and-sync">will not allow</a> multiple threads to access them at once<a contenteditable="false" data-startref="ix_structs_interior_mut" data-type="indexterm" id="id1274"/><a contenteditable="false" data-startref="ix_mut_interior" data-type="indexterm" id="id1275"/><a contenteditable="false" data-startref="ix_interior_mut" data-type="indexterm" id="id1276"/>. We’ll describe thread-safe flavors of interior mutability in <a data-type="xref" href="ch19.html#threads">Chapter 19</a>, when we discuss <a data-type="xref" href="ch19.html#mutex-in-rust">“Mutex&lt;T&gt;”</a>, <a data-type="xref" href="ch19.html#atomics">“Atomics”</a>, and <a data-type="xref" href="ch19.html#global-variables">“Global Variables”</a>.</p>
+
+<p>Whether a struct has named fields or is a tuple struct, it is an aggregation of other values: if I have a <code>SpiderSenses</code> struct, then I have an <code>Rc</code> pointer to a shared <code>SpiderRobot</code> struct, and I have eyes, and I have an accelerometer, and so on. Rust also supports types that are designed to select one among several possible types of value. Such types turn out to be so useful that they’re ubiquitous in the language, and they are the subject of the next chapter<a contenteditable="false" data-startref="ix_structs_ch8" data-type="indexterm" id="id1277"/>.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

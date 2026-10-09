@@ -1,0 +1,857 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch07.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 7. Error Handling">
+        <div class="chapter" id="error-handling">
+<h1><span class="label">Chapter 7. </span>Error Handling</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id1040"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the seventh chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<blockquote data-type="epigraph" epub:type="epigraph">
+<p>I knew if I stayed around long enough, something like this would happen.</p>
+
+<p data-type="attribution">George Bernard Shaw on dying</p>
+</blockquote>
+
+<p>Rust’s approach to error handling<a contenteditable="false" data-primary="error handling" data-type="indexterm" id="ix_error_ch7"/> is unusual enough to warrant a short chapter on the topic. There aren’t any difficult ideas here, just ideas that might be new to you. This chapter covers the two different kinds of error handling in Rust: panic and <code>Result</code>s.</p>
+
+<p>Ordinary errors are handled using the <code>Result</code> type<a contenteditable="false" data-primary="Result type" data-secondary="catching errors" data-type="indexterm" id="id1041"/>. <code>Result</code>s typically represent problems caused by things outside the program, like erroneous input, a network outage, or a permissions problem. That such situations occur is not up to us; even a bug-free program will encounter them from time to time. Most of this chapter is dedicated to that kind of error. We’ll cover panic first, though, because it’s the simpler of the two.</p>
+
+<p>Panic is for the other kind of error, the kind that <em>should never happen</em>.</p>
+
+<section data-type="sect1" data-pdf-bookmark="Panic"><div class="sect1" id="panic">
+<h1>Panic</h1>
+
+<p>A program panics<a contenteditable="false" data-primary="panic" data-type="indexterm" id="ix_panic_ch7"/><a contenteditable="false" data-primary="error handling" data-secondary="panic" data-type="indexterm" id="ix_error_panic_ch7"/> when it encounters something so messed up that there must be a bug in the program itself. Something like:</p>
+
+<ul>
+	<li>
+	<p>Out-of-bounds array access</p>
+	</li>
+	<li>
+	<p>Integer division by zero</p>
+	</li>
+	<li>
+	<p>Calling <code>.expect()</code> on a <code>Result</code> that happens to be <code>Err</code></p>
+	</li>
+	<li>
+	<p>Assertion failure</p>
+	</li>
+</ul>
+
+<p>There’s also the macro <code>panic!()</code>, for cases where your own code discovers that it has gone wrong, and you therefore need to trigger a panic directly. <code>panic!()</code> accepts<a contenteditable="false" data-primary="panic! macro" data-type="indexterm" id="id1042"/> optional <code>println!()</code>-style arguments, for building an error message.</p>
+
+<p>What these conditions have in common is that they are all—not to put too fine a point on it—the programmer’s fault. A good rule of thumb is: “Don’t panic.”</p>
+
+<p>But we all make mistakes. When these errors that shouldn’t happen do happen—what then? Remarkably, Rust gives you a choice. Rust can either unwind the stack when a panic happens or abort the process. Unwinding is the default.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Unwinding"><div class="sect2" id="unwinding">
+<h2>Unwinding</h2>
+
+<p>When<a contenteditable="false" data-primary="stack unwinding" data-type="indexterm" id="ix_stack_unwind"/><a contenteditable="false" data-primary="unwinding" data-type="indexterm" id="ix_unwinding_ch7"/><a contenteditable="false" data-primary="panic" data-secondary="unwinding" data-type="indexterm" id="ix_panic_unwind"/> pirates divvy up the booty from a raid, the captain gets half of the loot. Ordinary crew members earn equal shares of the other half. (Pirates hate fractions, so if either division does not come out even, the result is rounded down, with the remainder going to the ship’s parrot.)</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unwind0">
+<code class="k">fn</code><code class="w"> </code><code class="nf">pirate_share</code><code class="p">(</code><code class="n">total</code><code class="p">:</code><code class="w"> </code><code class="kt">u64</code><code class="p">,</code><code class="w"> </code><code class="n">crew_size</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">u64</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">half</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">total</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="mi">2</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="n">half</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="n">crew_size</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u64</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This may work fine for centuries until one day it transpires that the captain is the sole survivor of a raid. If we pass a <code>crew_size</code> of zero to this function, it will divide by zero. In C‍++, this would be undefined behavior. In Rust, it triggers a panic, which typically proceeds as follows:</p>
+
+<ul>
+	<li>
+	<p>An error message is printed to the terminal:</p>
+
+	<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">thread 'main' panicked at pirates.rs:3780:9:</code>
+<code class="go">attempt to divide by zero</code>
+<code class="go">note: Run with `RUST_BACKTRACE=1` for a backtrace.</code>
+</pre>
+
+	<p>If you set the <code>RUST_BACKTRACE</code> environment variable, as the messages suggests, Rust will also dump the stack at this point.</p>
+	</li>
+	<li>
+	<p>The stack is unwound. This is a lot like C‍++ exception handling.</p>
+
+	<p>Any temporary values, local variables, or arguments that the current function was using are dropped. Dropping a value simply means cleaning up after it: any <code>String</code>s or <code>Vec</code>s the program was using are freed, any open <code>File</code>s are closed, and so on. User-defined <code>drop</code> methods are called too; see <a data-type="xref" href="ch13.html#drop">“Drop”</a>. In the particular case of <code>pirate_share()</code>, there’s nothing to clean up.</p>
+
+	<p>Once the current function call is cleaned up, we move on to its caller, dropping its variables and arguments the same way. Then we move to <em>that</em> function’s caller, and so on up the stack.</p>
+	</li>
+	<li>
+	<p>Finally, the thread exits. If the panicking thread was the main thread, then the whole process exits (with a nonzero exit code).</p>
+	</li>
+</ul>
+
+<p>Perhaps <em>panic</em> is a misleading name for this orderly process. A panic is not a crash. It’s not undefined behavior. It’s more like a <code>RuntimeException</code> in Java or a <code>std::logic_error</code> in C‍++. The behavior is well-defined; it just shouldn’t be <span class="keep-together">happening.</span></p>
+
+<p>Panic is safe. It doesn’t violate any of Rust’s safety rules; even if you manage to panic in the middle of a standard library method, it will never leave a dangling pointer or a half-initialized value in memory. The idea is that Rust catches the invalid array access, or whatever it is, <em>before</em> anything bad happens. It would be unsafe to proceed, so Rust unwinds the stack. But the rest of the process can continue running.</p>
+
+<p>Panic is per thread. One thread can be panicking while other threads are going on about their normal business. In <a data-type="xref" href="ch19.html#threads">Chapter 19</a>, we’ll show how a parent thread can find out when a child thread panics and handle the error gracefully.</p>
+
+<p>There is also a way to <em>catch</em> stack unwinding, allowing the thread to survive and continue running. The standard library function<a contenteditable="false" data-primary="catch_unwind function" data-type="indexterm" id="id1043"/> <code>std::panic::catch_unwind()</code> does this. We won’t cover how to use it, but this is the mechanism used by Rust’s test harness to recover when an assertion fails in a test. (It can also be necessary when writing Rust code that can be called from C or C‍++, because unwinding across non-Rust code causes the process to immediately abort; see <a data-type="xref" href="ch24.html#foreign-functions">Chapter 24</a>.)</p>
+
+<p>You can use threads and <code>catch_unwind()</code> to handle panic, making your program more robust. One important caveat is that these tools only catch panics that unwind the stack. Not every panic proceeds this way<a contenteditable="false" data-startref="ix_unwinding_ch7" data-type="indexterm" id="id1044"/><a contenteditable="false" data-startref="ix_panic_unwind" data-type="indexterm" id="id1045"/><a contenteditable="false" data-startref="ix_stack_unwind" data-type="indexterm" id="id1046"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Aborting"><div class="sect2" id="aborting">
+<h2>Aborting</h2>
+
+<p>Stack<a contenteditable="false" data-primary="aborting" data-secondary="on panic" data-type="indexterm" id="id1047"/><a contenteditable="false" data-primary="panic" data-secondary="aborting" data-type="indexterm" id="id1048"/> unwinding is the default panic behavior, but there are a few circumstances in which Rust does not try to unwind the stack.</p>
+
+<dl>
+	<dt><em>Stack overflow<a contenteditable="false" data-primary="stack overflow" data-type="indexterm" id="id1049"/></em></dt>
+	<dd>
+	<p>A program with runaway recursion will eventually run out of stack space. <span data-claim-test="errors-stack-overflow-aborts">This is fatal. Rust prints a message and aborts the whole process.</span></p>
+
+	<p>On Linux, for example, Rust installs a <code>SIGSEGV</code> handler that detects when the program tries to write to the guard page just past the end of the stack. <span data-claim-test="errors-stack-overflow-large-frames">For functions with abnormally large stack frames, where an ordinary variable access could skip over the guard page, the compiler emits “stack probing” code to ensure this technique still works.</span></p>
+	</dd>
+	<dt><em>Out of memory<a contenteditable="false" data-primary="out of memory" data-type="indexterm" id="id1050"/></em></dt>
+	<dd>
+	<p>This situation is not normally under Rust’s control. When your program asks for memory, most operating systems virtually always say yes, even when there’s not enough physical memory free to satisfy the request. <span data-claim-test="errors-out-of-memory-killed">Then, if memory runs low, the system frees up resources by looking around for large processes and terminating them. If your program uses too much memory, it will simply be killed. There’s nothing Rust can do about it.</span></p>
+
+	<p><span data-claim-test="errors-out-of-memory-abort">In the rare case that memory allocation does fail, Rust aborts the process.</span> If there are particular points in your program where you need to handle allocation failure, you can use a fallible method like <code>Vec::try_reserve</code>, described in <a data-type="xref" href="ch16.html#growing-and-shrinking-vectors">“Growing and Shrinking Vectors”</a>.</p>
+	</dd>
+	<dt><em>Double panic<a contenteditable="false" data-primary="double panic" data-type="indexterm" id="id1051"/><a contenteditable="false" data-primary="panic" data-secondary="while unwinding" data-type="indexterm" id="id1052"/></em></dt>
+	<dd>
+	<p><span data-claim-test="errors-double-panic">If a <code>.drop()</code> method triggers a second panic while Rust is still trying to clean up after the first, Rust aborts the process.</span></p>
+	</dd>
+	<dt><code>panic=abort</code></dt>
+	<dd>
+	<p>Rust’s panic behavior is customizable. If you compile with <code>-C panic=abort</code>, the <em>first</em> panic in your program aborts the process. (With this option, Rust does not need to know how to unwind the stack, so this can reduce the size of your compiled code.)</p>
+	</dd>
+</dl>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="The Panic Hook"><div class="sect2" id="the-panic-hook">
+<h2>The Panic Hook</h2>
+
+<p>The<a contenteditable="false" data-primary="panic hook" data-type="indexterm" id="ix_panic_hook_ch7"/> first thing a panicking thread does, before unwinding or aborting, is call the <em>panic hook</em>, a function that can be configured by calling <code>std::panic::set_hook()</code>. The default panic hook writes its message and (depending on <code>RUST_BACKTRACE</code>) a stack trace to <code>stderr</code>.</p>
+
+<p>If your program has a log file, it’s a good idea to set a panic hook that ensures all panic messages are logged. Otherwise, panics might easily go unreported by accident, especially panics in non-main threads and asynchronous tasks. In a project that uses the <code>tracing</code> crate for logging, the panic hook might look like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-panic-hook">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">backtrace</code><code class="p">::</code><code class="n">Backtrace</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">panic</code><code class="p">::</code><code class="n">PanicHookInfo</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// Panic hook to log panic info using the `tracing` crate,</code>
+<code class="sd">/// instead of the default behavior of printing to stderr.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">report_panic</code><code class="p">(</code><code class="n">panic_info</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">PanicHookInfo</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">stack</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Backtrace</code><code class="p">::</code><code class="n">force_capture</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">tracing</code><code class="p">::</code><code class="n">error</code><code class="o">!</code><code class="p">(</code><code class="s">"{panic_info}</code><code class="se">\n\n</code><code class="s">{stack}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">setup_logging</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="n">std</code><code class="p">::</code><code class="n">panic</code><code class="p">::</code><code class="n">set_hook</code><code class="p">(</code><code class="nb">Box</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">report_panic</code><code class="p">));</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The standard <code>Backtrace</code> type captures the call stack. It supports <code>Display</code> and <code>Debug</code> formatting, and so far not much else. Note that Rust makes no guarantees about backtrace completeness or accuracy. What’s captured can depend on your build profile, hardware platform, and many other factors.</p>
+
+<p>Calling <code>set_hook</code> once sets the panic hook for the whole process.<a contenteditable="false" data-startref="ix_panic_hook_ch7" data-type="indexterm" id="id1053"/></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Other Panic Macros"><div class="sect2" id="other-panic-macros">
+<h2>Other Panic Macros</h2>
+
+<p>Rust offers a few more macros that unconditionally panic, with optional format string arguments, just like <code>panic!()</code>. Each adds a different short prefix to the panic message, but the real difference between them is in what they mean to programmers.</p>
+
+<dl>
+	<dt><code>todo!(message...)</code><a contenteditable="false" data-primary="todo! macro" data-type="indexterm" id="id1054"/></dt>
+	<dd>
+	<p>A placeholder for code you’ll write in a minute. If you see this in a code review, it’s probably a simple mistake; the author presumably meant to finish writing the code before requesting a review. The panic message is <code>not yet implemented</code>.</p>
+	</dd>
+	<dt><code>unimplemented!(message...)</code><a contenteditable="false" data-primary="unimplemented! macro" data-type="indexterm" id="id1055"/></dt>
+	<dd>
+	<p>This is like <code>todo!()</code>, but suggests that the omission is on purpose. The panic message is <code>not implemented</code>.</p>
+	</dd>
+	<dt><code>unreachable!(message...)</code><a contenteditable="false" data-primary="unreachable! macro" data-type="indexterm" id="id1056"/></dt>
+	<dd>
+	<p>This is for places in your code that control can’t reach, such as after a <code>for</code> loop when you know the iterator produces values forever. The panic message is <code>internal error: entered unreachable code</code>.</p>
+	</dd>
+</dl>
+
+<p>This concludes our discussion of panic in Rust. There is not much to say, because ordinary Rust code has no obligation to handle panic. Even if you do use threads, <code>catch_unwind()</code>, or a panic hook, all your panic-handling code will likely be concentrated in a few places. It’s unreasonable to expect every function in a program to anticipate and cope with bugs in its own code. Errors caused by other factors are another kettle of fish<a contenteditable="false" data-startref="ix_error_panic_ch7" data-type="indexterm" id="id1057"/><a contenteditable="false" data-startref="ix_panic_ch7" data-type="indexterm" id="id1058"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Result"><div class="sect1" id="result">
+<h1>Result</h1>
+
+<p>Rust<a contenteditable="false" data-primary="types" data-secondary="error handling" data-type="indexterm" id="ix_types_error"/><a contenteditable="false" data-primary="error handling" data-secondary="Result type" data-type="indexterm" id="ix_errors_result_type_ch7"/><a contenteditable="false" data-primary="Result type" data-type="indexterm" id="ix_result_type_ch7"/> doesn’t have exceptions. Instead, functions that can fail have a return type that says so:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result0">
+<code class="k">fn</code><code class="w"> </code><code class="nf">get_weather</code><code class="p">(</code><code class="n">location</code><code class="p">:</code><code class="w"> </code><code class="nc">LatLng</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">WeatherReport</code><code class="p">,</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="o">&gt;</code><code class="w"/>
+</pre>
+
+<p>The <code>Result</code> type indicates possible failure. When we call the <code>get_weather()</code> function, it will return either a <em>success result</em> <code>Ok(weather)</code>, where <code>weather</code> is a new <code>WeatherReport</code> value, or an <em>error result</em> <code>Err(error_value)</code>, where <code>error_value</code> is an <code>io::Error</code> explaining what went wrong.</p>
+
+<p>Rust requires us to write some kind of error handling whenever we call this function. We can’t get at the <code>WeatherReport</code> without doing <em>something</em> to the <code>Result</code>, and you’ll get a compiler warning if a <code>Result</code> value isn’t used.</p>
+
+<p>In <a data-type="xref" href="ch10.html#enums-and-patterns">Chapter 10</a>, we’ll see how the standard library defines <code>Result</code> and how you can define your own similar types. For now, we’ll take a “cookbook” approach and focus on how to use <code>Result</code>s to get the error-handling behavior you want. We’ll look at how to catch, propagate, and report errors, as well as common patterns for organizing and working with <code>Result</code> types.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Catching Errors"><div class="sect2" id="catching-errors">
+<h2>Catching Errors</h2>
+
+<p>The<a contenteditable="false" data-primary="Result type" data-secondary="catching errors" data-type="indexterm" id="id1059"/><a contenteditable="false" data-primary="error handling" data-secondary="catching errors" data-type="indexterm" id="id1060"/> most thorough way of dealing with a <code>Result</code> is the way we showed in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>: use a <code>match</code> expression.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result1">
+<code class="k">match</code><code class="w"> </code><code class="n">get_weather</code><code class="p">(</code><code class="n">hometown</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">report</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">display_weather</code><code class="p">(</code><code class="n">hometown</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">report</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"error querying the weather: {err}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">schedule_weather_retry</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is Rust’s equivalent of <code>try/catch</code> in other languages. It’s what you use when you want to handle errors head-on, not pass them on to your caller.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Printing Errors"><div class="sect2" id="printing-errors">
+<h2>Printing Errors</h2>
+
+<p>Sometimes<a contenteditable="false" data-primary="Result type" data-secondary="printing errors" data-type="indexterm" id="ix_result_print_error"/><a contenteditable="false" data-primary="error handling" data-secondary="printing errors" data-type="indexterm" id="ix_error_print_ch7"/> the only way to handle an error is by dumping it to the terminal and moving on. The previous example showed one way to do this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result6">
+<code class="fm">eprintln!</code><code class="p">(</code><code class="s">"error querying the weather: {err}"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The standard library defines several error types with boring names: <code>std::io::Error</code>, <code>std::fmt::Error</code>, <code>std::str::Utf8Error</code>, and so on. All of them implement a <span class="keep-together">common</span> interface, the <code>std::error::Error</code> trait, which means they share the following features and methods:</p>
+
+<dl>
+	<dt><code>println!()</code>, etc.</dt>
+	<dd>
+	<p>All error types support the <code>Display</code> and <code>Debug</code> traits, so they can be used with any of the macros that use format strings, including <code>println!()</code>, <code>eprintln!()</code>, <code>format!()</code>, and <code>panic!()</code>. Printing an error with the <code>{}</code> format specifier typically displays only a brief error message. Alternatively, you can print with the <code>{:?}</code> format specifier to get a <code>Debug</code> view of the error. This is less human-friendly, but sometimes includes extra technical information.</p>
+
+	<pre class="console" data-code-language="console" data-testing-pragma="oneliners" data-type="programlisting" id="test-error-fmt">
+<code class="go">// result of `eprintln!("error: {err}");`</code>
+<code class="go">error: No such file or directory (os error 2)</code>
+
+<code class="go">// result of `eprintln!("error: {err:?}");`</code>
+<code class="go">error: Os { code: 2, kind: NotFound, message: "No such file or directory" }</code>
+</pre>
+	</dd>
+	<dt><code>err.to_string()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Error trait" data-secondary="to_string method" data-type="indexterm" id="id1061"/> an error message as a <code>String</code>. This is equivalent to <code>format!("{err}")</code>.</p>
+	</dd>
+	<dt><code>err.source()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Error trait" data-secondary="source method" data-type="indexterm" id="id1062"/> an <code>Option</code> of the underlying error, if any, that caused <code>err</code>. For example, a networking error might cause a banking transaction to fail, which could in turn cause your boat to be repossessed. If <code>err.to_string()</code> is <code>"boat was repossessed"</code>, then <code>err.source()</code> might return an error about the failed transaction. That error’s <code>.to_string()</code> might be <code>"failed to transfer $300 to <span class="keep-together">United</span> Yacht Supply"</code>, and its <code>.source()</code> might be an <code>io::Error</code> with details about the specific network outage that caused all the fuss. This third error is the root cause, so its <code>.source()</code> method would return <code>None</code>. Since the standard library only includes rather low-level features, the source of errors returned from the standard library is usually <code>None</code>.</p>
+	</dd>
+</dl>
+
+<p>Printing an error value does not also print out its source. If you want to be sure to print all the available information, use this function:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result7">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">Write</code><code class="p">};</code><code class="w"/>
+
+<code class="sd">/// Dumps an error message to `stderr`.</code>
+<code class="sd">///</code>
+<code class="sd">/// If another error happens while building the error message or</code>
+<code class="sd">/// writing to `stderr`, it is ignored.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">print_error</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">err</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">dyn</code><code class="w"> </code><code class="n">Error</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">writeln!</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">stderr</code><code class="p">(),</code><code class="w"> </code><code class="s">"error: {err}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="k">while</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">source</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">err</code><code class="p">.</code><code class="n">source</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">writeln!</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">stderr</code><code class="p">(),</code><code class="w"> </code><code class="s">"caused by: {source}"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">err</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">source</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>writeln!</code> macro<a contenteditable="false" data-primary="writeln! macro" data-type="indexterm" id="id1063"/> works like <code>println!</code>, except that it writes the data to a stream of your choice. Here, we write the error messages to the standard error stream, <code>std::io::stderr</code>. We could use the <code>eprintln!</code> macro to do the same thing, but <code>eprintln!</code> panics if an error occurs. In <code>print_error</code>, we want to ignore errors that arise while writing the message; we explain why in <a data-type="xref" href="#ignoring-errors">“Ignoring Errors”</a>, later in the chapter.</p>
+
+<p>Most Rust error types do not include a stack trace, since the cost of capturing a trace is not always negligible. However, the popular <code>anyhow</code> crate provides a ready-made error type that includes a stack if <code>RUST_BACKTRACE</code> is set.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Propagating Errors"><div class="sect2" id="propagating-errors">
+<h2>Propagating Errors</h2>
+
+<p>In most places<a contenteditable="false" data-primary="error handling" data-secondary="propagating errors" data-type="indexterm" id="id1064"/><a contenteditable="false" data-primary="propagating errors" data-type="indexterm" id="id1065"/><a contenteditable="false" data-primary="Result type" data-secondary="propagating errors" data-type="indexterm" id="id1066"/> where we try something that could fail, we don’t want to catch and handle the error immediately. It is simply too much code to use a 10-line <code>match</code> statement every place where something could go wrong.</p>
+
+<p>Instead, if an error occurs, we usually want to let our caller deal with it. We want errors to <em>propagate</em> up the call stack.</p>
+
+<p>Rust has a <code>?</code> operator<a contenteditable="false" data-primary="? operator" data-type="indexterm" id="id1067"/> that does this. You can add a <code>?</code> to any expression that produces a <code>Result</code>, such as the result of a function call:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result8">
+<code class="kd">let</code><code class="w"> </code><code class="n">weather</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">get_weather</code><code class="p">(</code><code class="n">hometown</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The behavior of <code>?</code> depends on whether this function returns a success result or an error result:</p>
+
+<ul>
+	<li>
+	<p>On success, it unwraps the <code>Result</code> to get the success value inside. The type of <code>weather</code> here is not <code>Result&lt;WeatherReport, io::Error&gt;</code> but simply <span class="keep-together"><code>WeatherReport</code></span>.</p>
+	</li>
+	<li>
+	<p>On error, it immediately returns from the enclosing function, passing the error result up the call chain. To ensure that this works, <code>?</code> can only be used on a <code>Result</code> in functions that have a <code>Result</code> return type.</p>
+	</li>
+</ul>
+
+<p>There’s nothing magical about the <code>?</code> operator. You can express the same thing using a <code>match</code> expression, although it’s much wordier:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result9">
+<code class="kd">let</code><code class="w"> </code><code class="n">weather</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">get_weather</code><code class="p">(</code><code class="n">hometown</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">success_value</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">success_value</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">),</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>The only differences between this and the <code>?</code> operator are some fine points involving types and conversions. We’ll cover those details in the next section.</p>
+
+<p>It’s easy to forget just how pervasive the possibility of errors is in a program, particularly in code that interfaces with the operating system. The <code>?</code> operator sometimes shows up on almost every line of a function:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result11">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fs</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">path</code><code class="p">::</code><code class="n">Path</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">move_all</code><code class="p">(</code><code class="n">src</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">,</code><code class="w"> </code><code class="n">dst</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(),</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">entry_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">src</code><code class="p">.</code><code class="n">read_dir</code><code class="p">()</code><code class="o">?</code><code class="w"> </code><code class="p">{</code><code class="w">  </code><code class="c1">// opening dir could fail</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">entry</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">entry_result</code><code class="o">?</code><code class="p">;</code><code class="w">         </code><code class="c1">// reading dir could fail</code>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">dst_file</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">dst</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="n">entry</code><code class="p">.</code><code class="n">file_name</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="n">fs</code><code class="p">::</code><code class="n">rename</code><code class="p">(</code><code class="n">entry</code><code class="p">.</code><code class="n">path</code><code class="p">(),</code><code class="w"> </code><code class="n">dst_file</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w">  </code><code class="c1">// renaming could fail</code>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w">  </code><code class="c1">// phew!</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p><code>?</code> also works similarly with the <code>Option</code> type. In a function that returns <code>Option</code>, you can use <code>?</code> to unwrap a value and return early in the case of <code>None</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-option_try">
+<code class="c1">// If reports.get() returns an Option&lt;&amp;WeatherReport&gt;...</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">weather</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reports</code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="n">hometown</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="c1">// ...then `weather` is a &amp;WeatherReport.</code>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Result Methods"><div class="sect2" id="result-methods">
+<h2>Result Methods</h2>
+
+<p>One can only propagate errors for so long. Ultimately, somewhere, they must be properly handled.</p>
+
+<p>We showed how this can be done using <code>match</code> expressions, handling the error in the <code>Err(err) =&gt;</code> arm. However, it would be a bit wordy to do that in every case, so the <code>Result</code> type offers a few methods for common error-handling patterns. Each of these methods has a <code>match</code> expression in its implementation. (For the full list of <code>Result</code> methods, consult the online documentation. The methods listed here are the ones we use the most.)</p>
+
+<dl>
+	<dt><code>result.is_ok()</code>, <code>result.is_err()</code></dt>
+	<dd>
+	<p>Return<a contenteditable="false" data-primary="Result type" data-secondary="is_err method" data-type="indexterm" id="id1068"/><a contenteditable="false" data-primary="Result type" data-secondary="is_ok method" data-type="indexterm" id="id1069"/> a <code>bool</code> telling if <code>result</code> is a success result or an error result.</p>
+	</dd>
+	<dt><code>result.ok()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Result type" data-secondary="ok method" data-type="indexterm" id="id1070"/> the success value, if any, as an <code>Option&lt;T&gt;</code>. If <code>result</code> is a success result, this returns <code>Some(success_value)</code>; otherwise, it returns <code>None</code>, discarding the error value.</p>
+	</dd>
+	<dt><code>result.err()</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Result type" data-secondary="err method" data-type="indexterm" id="id1071"/> the error value, if any, as an <code>Option&lt;E&gt;</code>.</p>
+	</dd>
+	<dt><code>result.unwrap_or(fallback)</code></dt>
+	<dd>
+	<p>Returns<a contenteditable="false" data-primary="Result type" data-secondary="unwrap_or method" data-type="indexterm" id="id1072"/> the success value, if <code>result</code> is a success result. Otherwise, it returns <code>fallback</code>, discarding the error value.</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-result2">
+<code class="c1">// A fairly safe prediction for Southern California.</code>
+<code class="k">const</code><code class="w"> </code><code class="n">THE_USUAL</code><code class="p">:</code><code class="w"> </code><code class="nc">WeatherReport</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">WeatherReport</code><code class="p">::</code><code class="n">Sunny</code><code class="p">(</code><code class="mi">72</code><code class="p">);</code><code class="w"/>
+
+<code class="c1">// Get a real weather report, if possible.</code>
+<code class="c1">// If not, fall back on the usual.</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">report</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">get_weather</code><code class="p">(</code><code class="n">los_angeles</code><code class="p">).</code><code class="n">unwrap_or</code><code class="p">(</code><code class="n">THE_USUAL</code><code class="p">);</code><code class="w"/>
+<code class="n">display_weather</code><code class="p">(</code><code class="n">los_angeles</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">report</code><code class="p">);</code><code class="w"/>
+</pre>
+
+	<p>This is a nice alternative to <code>.ok()</code> because the return type is <code>T</code>, not <code>Option&lt;T&gt;</code>. Of course, it works only when there’s an appropriate fallback value.</p>
+	</dd>
+	<dt><code>result.unwrap_or_else(fallback_fn)</code></dt>
+	<dd>
+	<p>This is the same<a contenteditable="false" data-primary="Result type" data-secondary="unwrap_or_else method" data-type="indexterm" id="id1073"/>, but instead of passing a fallback value directly, you pass a function or closure. This is for cases where it would be wasteful to compute a fallback value if you’re not going to use it. The <code>fallback_fn</code> is called only if we have an error result.</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-result3">
+<code class="kd">let</code><code class="w"> </code><code class="n">report</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">get_weather</code><code class="p">(</code><code class="n">hometown</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">unwrap_or_else</code><code class="p">(</code><code class="o">|</code><code class="n">_err</code><code class="o">|</code><code class="w"> </code><code class="n">vague_prediction</code><code class="p">(</code><code class="n">hometown</code><code class="p">));</code><code class="w"/>
+</pre>
+
+	<p>(<a data-type="xref" href="ch14.html#closures">Chapter 14</a> covers closures in detail.)</p>
+	</dd>
+	<dt><code>result.unwrap()</code></dt>
+	<dd>
+	<p>Also returns<a contenteditable="false" data-primary="Result type" data-secondary="unwrap method" data-type="indexterm" id="id1074"/> the success value, if <code>result</code> is a success result. However, if <code>result</code> is an error result, this method panics. This method has its uses; we’ll talk more about it later.</p>
+	</dd>
+	<dt><code>result.expect(message)</code></dt>
+	<dd>
+	<p>This<a contenteditable="false" data-primary="Result type" data-secondary="expect method" data-type="indexterm" id="id1075"/> the same as <code>.unwrap()</code>, but lets you provide a message that it prints in case of panic.</p>
+	</dd>
+	<dt><code>result.map(convert_fn)</code></dt>
+	<dd>
+	<p>This method provides a way to change the value in the <code>Result</code> only if it’s an <code>Ok</code> value. The argument is usually a closure, which will be called only if the result is <code>Ok</code>. If it’s an <code>Err</code> result, <code>map</code> returns it unchanged.</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-result-map">
+<code class="n">reqwest</code><code class="p">::</code><code class="n">blocking</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="n">url</code><code class="p">)</code><code class="w">             </code><code class="c1">// do an HTTP request...</code>
+<code class="w">    </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="o">|</code><code class="n">response</code><code class="o">|</code><code class="w"> </code><code class="n">response</code><code class="p">.</code><code class="n">status</code><code class="p">())</code><code class="w">  </code><code class="c1">// ...but we only care about the status code</code>
+</pre>
+
+	<p>In this example, <code>reqwest::blocking::get(url)</code> returns a <code>Result&lt;Response, reqwest::Error&gt;</code>. We use <code>.map()</code> to transform that into a <code>Result&lt;StatusCode, reqwest::Error&gt;</code>.</p>
+	</dd>
+	<dt><code>result.map_err(convert_fn)</code></dt>
+	<dd>
+	<p>The <code>map_err</code> method is the mirror image of <code>map</code>. It transforms only <code>Err</code> values, and thus the result’s error type. This can be handy when working with errors of multiple types, as we’ll see in a few pages.</p>
+	</dd>
+</dl>
+
+<p>Lastly, methods for working with references in a <code>Result</code>:</p>
+
+<dl>
+	<dt><code>result.as_ref()</code></dt>
+	<dd>
+	<p>Converts<a contenteditable="false" data-primary="Result type" data-secondary="as_ref method" data-type="indexterm" id="id1076"/> a <code>Result&lt;T, E&gt;</code> to a <code>Result&lt;&amp;T, &amp;E&gt;</code>.</p>
+	</dd>
+	<dt><code>result.as_mut()</code></dt>
+	<dd>
+	<p>This<a contenteditable="false" data-primary="Result type" data-secondary="as_mut method" data-type="indexterm" id="id1077"/> is the same, but borrows a mutable reference. The return type is <code>Result&lt;&amp;mut T, &amp;mut E&gt;</code>.</p>
+	</dd>
+</dl>
+
+<p>One reason these last two methods are useful is that all of the other methods listed here, except <code>.is_ok()</code> and <code>.is_err()</code>, <em>consume</em> the <code>result</code> they operate on. That is, they take the <code>self</code> argument by value. Sometimes it’s quite handy to access data inside a <code>result</code> without destroying it, and this is what <code>.as_ref()</code> and <code>.as_mut()</code> do for us. For example, suppose you’d like to call <code>result.ok()</code>, but you need <code>result</code> to be left intact. You can write <code>result.as_ref().ok()</code>, which merely borrows <code>result</code>, returning an <code>Option&lt;&amp;T&gt;</code> rather than an <code>Option&lt;T&gt;</code>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Result Type Aliases"><div class="sect2" id="result-type-aliases">
+<h2>Result Type Aliases</h2>
+
+<p>Sometimes<a contenteditable="false" data-primary="Result type" data-secondary="type aliases" data-type="indexterm" id="id1078"/><a contenteditable="false" data-primary="type aliases" data-type="indexterm" id="id1079"/> you’ll see Rust documentation that seems to omit the error type of a <code>Result</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result4">
+<code class="k">fn</code><code class="w"> </code><code class="nf">remove_file</code><code class="p">(</code><code class="n">path</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"/>
+</pre>
+
+<p>This means that a <code>Result</code> type alias is being used.</p>
+
+<p>A type alias is a kind of shorthand for type names. Modules often define a <code>Result</code> type alias to avoid having to repeat an error type that’s used consistently by almost every function in the module. For example, the standard library’s <code>std::io</code> module includes this line of code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result5">
+<code class="k">pub</code><code class="w"> </code><code class="k">type</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">result</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">Error</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>This defines a public type <code>std::io::Result&lt;T&gt;</code>. It’s an alias for <code>Result&lt;T, E&gt;</code>, but hardcodes <code>std::io::Error</code> as the error type. If you write <code>use std::io;</code>, then Rust will understand <code>io::Result&lt;String&gt;</code> as shorthand for <code>Result&lt;String, io::Error&gt;</code>.</p>
+
+<p>When something like <code>Result&lt;()&gt;</code> appears in the online documentation, you can click on the identifier <code>Result</code> to see which type alias is being used and learn the error type. In practice, it’s usually obvious from context.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Working with Multiple Error Types"><div class="sect2" id="working-with-multiple-error-types">
+<h2>Working with Multiple Error Types</h2>
+
+<p>Often, more<a contenteditable="false" data-primary="Result type" data-secondary="with multiple error types" data-secondary-sortas="multiple error types" data-type="indexterm" id="ix_result_error_multi-types"/><a contenteditable="false" data-primary="error handling" data-secondary="with multiple error types" data-secondary-sortas="multiple error types" data-type="indexterm" id="ix_error_multi-types"/> than one thing could go wrong. <a contenteditable="false" data-primary="read_numbers function" data-type="indexterm" id="id1080"/>Suppose we are simply reading numbers from a text file:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result12">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">::{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">BufRead</code><code class="p">};</code><code class="w"/>
+
+<code class="sd">/// Reads integers from a text file.</code>
+<code class="sd">/// The file should have one number on each line.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">read_numbers</code><code class="p">(</code><code class="n">file</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="k">dyn</code><code class="w"> </code><code class="n">BufRead</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">i64</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">numbers</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[];</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">line_result</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">file</code><code class="p">.</code><code class="n">lines</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w">         </code><code class="c1">// reading lines can fail</code>
+<code class="w">        </code><code class="n">numbers</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">line</code><code class="p">.</code><code class="n">parse</code><code class="p">()</code><code class="o">?</code><code class="p">);</code><code class="w">     </code><code class="c1">// parsing integers can fail</code>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">numbers</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Rust gives us a compiler error:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: `?` couldn't convert the error to `std::io::Error`</code>
+<code class="go">   |</code>
+<code class="go"> 8 | fn read_numbers(file: &amp;mut dyn BufRead) -&gt; io::Result&lt;Vec&lt;i64&gt;&gt; {</code>
+<code class="go">   |                                            --------------------</code>
+<code class="go">   |                       expected `std::io::Error` because of this</code>
+<code class="go">...</code>
+<code class="go">12 |     numbers.push(line.parse()?);     // parsing integers can fail</code>
+<code class="go">   |                       -------^ the trait `From&lt;ParseIntError&gt;` is</code>
+<code class="go">   |                       |        not implemented for `std::io::Error`</code>
+<code class="go">   |                       |</code>
+<code class="go">   |                       this can't be annotated with `?` because</code>
+<code class="go">   |                       it has type `Result&lt;_, ParseIntError&gt;`</code>
+<code class="go">   |</code>
+<code class="go">   = note: the question mark operation (`?`) implicitly performs a</code>
+<code class="go">     conversion on the error value using the `From` trait</code>
+</pre>
+
+<p>The terms in this error message will make more sense when we reach <a data-type="xref" href="ch11.html#traits-and-generics">Chapter 11</a>, which covers traits. For now, just note that Rust is complaining that the <code>?</code> operator can’t convert a <code>std::num::ParseIntError</code> value to the type <code>std::io::Error</code>.</p>
+
+<p>The problem here is that reading a line from a file and parsing an integer produce two different potential error types. The type of <code>line_result</code> is <code>Result&lt;String, std::io::Error&gt;</code>. The type of <code>line.parse()</code> is <code>Result&lt;i64, std::num::Parse​IntError&gt;</code>. The return type of our <code>read_numbers()</code> function only accommodates <code>io::Error</code>s. Rust tries to cope with the <code>ParseIntError</code> by converting it to a <code>io::Error</code>, but there’s no such conversion, so we get a type error.</p>
+
+<p>We need a single error type. One way to achieve this is by converting all other errors to <code>std::io::Error</code> manually.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result-map-err">
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">num</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">parse</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">map_err</code><code class="p">(</code><code class="o">|</code><code class="n">err</code><code class="o">|</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="p">::</code><code class="n">other</code><code class="p">(</code><code class="n">err</code><code class="p">))</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="n">numbers</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">num</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The <code>.map_err()</code> method calls the closure only if <code>line.parse()</code> returns an error. Here are using it to convert the type of the error, from a <code>ParseIntError</code> into an <code>io::Error</code>. The method therefore returns a <code>Result&lt;i64, std::io::Error&gt;</code>. We can then dispense with the error in the usual way, using the <code>?</code> operator.</p>
+
+<p>In this case, since <code>io::Error::other</code> is already a function that takes the error as an argument, we don’t need to write a closure. We can simplify this to:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result-map-err-no-closure">
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">num</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line</code><code class="p">.</code><code class="n">parse</code><code class="p">().</code><code class="n">map_err</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="p">::</code><code class="n">other</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="n">numbers</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">num</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>But calling <code>.map_err()</code> is still awkward busywork, and bogus lines of data in the file aren’t what we normally think of as I/O errors. If we applied this technique too freely, the code would become cluttered, and our use of <code>io::Error</code> would become rather deceptive. The Rust ecosystem has settled on two other solutions to this problem. Both are implemented as open source crates.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="A Universal Error Type: anyhow"><div class="sect2" id="a-universal-error-type-anyhow">
+<h2>A Universal Error Type: anyhow</h2>
+
+<p>The <code>anyhow</code> crate<a contenteditable="false" data-primary="anyhow error handling crate" data-type="indexterm" id="id1081"/><a contenteditable="false" data-primary="error handling" data-secondary="anyhow crate" data-type="indexterm" id="id1082"/> defines a single error type, <code>anyhow::Error</code>, that supports conversions from all error types. We must add the crate as a dependency in our <em>Cargo.toml</em> file:</p>
+
+<pre class="toml" data-code-language="toml" data-type="programlisting">
+<code class="k">[dependencies]</code><code class="w"/>
+<code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.102"</code><code class="w"/>
+</pre>
+
+<p>With <code>anyhow</code>, we don’t need to call <code>.map_err()</code>. We simply change the return type to use the <code>anyhow::Result</code> type alias, as shown below. The <code>?</code> operators we already had in the code will then automatically convert either type of error to an <code>anyhow::Error</code> as needed:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-anyhow">
+<code class="k">fn</code><code class="w"> </code><code class="nf">read_numbers</code><code class="p">(</code><code class="n">file</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="k">dyn</code><code class="w"> </code><code class="n">BufRead</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">anyhow</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="kt">i64</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">line</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">line_result</code><code class="o">?</code><code class="p">;</code><code class="w">      </code><code class="c1">// converts io::Error to anyhow::Error</code>
+<code class="w">        </code><code class="n">numbers</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="n">line</code><code class="p">.</code><code class="n">parse</code><code class="p">()</code><code class="o">?</code><code class="p">);</code><code class="w">  </code><code class="c1">// same for ParseIntError</code>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Using <code>anyhow</code> is not the only way to get this functionality. A similar type is built into the Rust standard library. All types that implement the <code>std::error::Error</code> trait can be automatically converted to <code>Box&lt;dyn std::error::Error + Send + Sync + 'static&gt;</code>. This type is a bit of a mouthful, but <code>dyn std::error::Error</code> represents “any error,” and <code>+ Send + Sync + 'static</code> narrows it down to types that are safe to pass between threads. Therefore a rough approximation of <code>anyhow</code> in one line of code would look like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result13">
+<code class="k">type</code><code class="w"> </code><code class="nc">AnyError</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Sync</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>However, <code>anyhow</code> offers some features that this one-liner does not provide:</p>
+
+<ul>
+	<li>Printing an <code>anyhow::Error</code> automatically prints the <code>source</code> chain.</li>
+	<li><code>anyhow::Context</code> provides a convenient way for your program to add information about what it was trying to do when an error occurred, for better error messages.</li>
+	<li>The <code>anyhow::bail!()</code> and <code>anyhow::ensure!()</code> macros provide convenient ways to return an error without having to declare a new type. Like <code>panic!()</code> and <code>assert!()</code>, they take string formatting arguments, but instead of panicking they simply return an error result.</li>
+	<li>When an <code>anyhow::Error</code> is created, it automatically captures a backtrace if the <code>RUST_BACKTRACE</code> environment variable is set. (Note, however, that this captures the stack where the error is converted to an <code>anyhow</code> error, not where the error initially happened. For some programs, these backtraces are expensive to capture and not very helpful. They can be disabled by setting <code>RUST_LIB_BACKTRACE=0</code>.)</li>
+</ul>
+
+<p>The <code>anyhow</code> crate documentation covers these features in more detail.</p>
+
+<p>The downside of the <code>anyhow</code> approach is that the return type no longer communicates precisely what kinds of errors the caller can expect. The caller must be ready for anything.</p>
+
+<p>If you’re writing code to handle an <code>anyhow::Error</code>, and you want to handle one particular kind of error but let all others propagate out, use the generic method <code>err.downcast_ref::&lt;T&gt;()</code>. It borrows a reference to the error, <em>if</em> it happens to be the particular type of error you’re looking for:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result15">
+<code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">compile_project</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="k">return</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(()),</code><code class="w"/>
+<code class="w">        </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">mse</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">err</code><code class="p">.</code><code class="n">downcast_ref</code><code class="p">::</code><code class="o">&lt;</code><code class="n">MissingSemicolonError</code><code class="o">&gt;</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="n">insert_semicolon_in_source_code</code><code class="p">(</code><code class="n">mse</code><code class="p">.</code><code class="n">file</code><code class="p">(),</code><code class="w"> </code><code class="n">mse</code><code class="p">.</code><code class="n">line</code><code class="p">())</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">                </code><code class="k">continue</code><code class="p">;</code><code class="w">  </code><code class="c1">// try again!</code>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">            </code><code class="k">return</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p><code>anyhow</code> is ideal for code close to <code>main</code>, at the top levels of an executable. Using it in the public API of a library has some drawbacks. First, it effectively imposes an extra dependency on your users, forcing them to accommodate <code>anyhow::Error</code> in their own codebase. Second, it obscures the actual types of errors that can occur. When you return an error created by <code>anyhow::bail!</code>, or by a third-party crate you’re using that isn’t part of your public API, your users can’t downcast to that specific error: there’s no public type that pinpoints the kind of error they want. They’ll fall back on running regular expressions on the error messages, like barbarians. Nobody wants that. Lastly, if the <code>anyhow</code> crate ever made a breaking change to its API, users would have to reconcile different crates’ usage of incompatible versions of <code>anyhow</code>, a dependency nightmare. This last concern, at least, has never materialized. <code>anyhow</code> has remained at <code>1.0</code>, publishing only backward-compatible point releases, since 2019. Still, it’s generally recommended to use <code>anyhow</code> only in applications, not in libraries.<a contenteditable="false" data-startref="ix_error_multi-types" data-type="indexterm" id="id1083"/><a contenteditable="false" data-startref="ix_result_error_multi-types" data-type="indexterm" id="id1084"/></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Defining Custom Error Types"><div class="sect2" id="defining-custom-error-types">
+<h2>Defining Custom Error Types</h2>
+
+<p>Rather than use <code>anyhow::Error</code> for everything, crates usually define a custom error type for use in their public API. The <code>reqwest</code> HTTP client crate has <code>reqwest::Error</code>, the <code>sqlx</code> crate for accessing SQL databases has <code>sqlx::Error</code>, <code>regex</code> has <code>regex::Error</code>, and so on.</p>
+
+<p>We haven’t covered user-defined types yet; that’s coming up in a few chapters. But error types are handy, so we’ll include a bit of a sneak preview here.</p>
+
+<p>For our <code>read_numbers</code> function, we need an error type that can contain either an <code>io::Error</code> or a <code>ParseIntError</code>. In Rust, this can be written as an <code>enum</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-custom-error">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">num</code><code class="p">::</code><code class="n">ParseIntError</code><code class="p">;</code><code class="w"/>
+
+<code class="cp">#[derive(Debug)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">enum</code><code class="w"> </code><code class="nc">NumberFileError</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Io</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">Parse</code><code class="p">(</code><code class="n">ParseIntError</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>To make the <code>?</code> operator work, we must define how to convert each of the two types to a <code>NumberFileError</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-custom-error-from">
+<code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">NumberFileError</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">err</code><code class="p">:</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="n">Error</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">NumberFileError</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">NumberFileError</code><code class="p">::</code><code class="n">Io</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="nb">From</code><code class="o">&lt;</code><code class="n">ParseIntError</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">NumberFileError</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">from</code><code class="p">(</code><code class="n">err</code><code class="p">:</code><code class="w"> </code><code class="nc">ParseIntError</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">NumberFileError</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">NumberFileError</code><code class="p">::</code><code class="n">Parse</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is enough to go on. Changing the return type of <code>read_numbers</code> to <code>Result&lt;Vec&lt;i64&gt;, NumberFileError&gt;</code> again suffices to make the example compile. However, if you want your error type to be printable, like the standard error types, then you have a bit more work to do:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-custom-error-impls">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fmt</code><code class="p">::{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">Display</code><code class="p">,</code><code class="w"> </code><code class="n">Formatter</code><code class="p">};</code><code class="w"/>
+
+<code class="c1">// Errors should be printable.</code>
+<code class="k">impl</code><code class="w"> </code><code class="n">Display</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">NumberFileError</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">fmt</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">f</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">Formatter</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">fmt</code><code class="p">::</code><code class="nb">Result</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">msg</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="bp">self</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">NumberFileError</code><code class="p">::</code><code class="n">Io</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="s">"error reading config file"</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">NumberFileError</code><code class="p">::</code><code class="n">Parse</code><code class="p">(</code><code class="n">_</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="s">"invalid data in config file"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">};</code><code class="w"/>
+<code class="w">        </code><code class="fm">write!</code><code class="p">(</code><code class="n">f</code><code class="p">,</code><code class="w"> </code><code class="s">"{msg}"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="c1">// Errors should implement the std::error::Error trait.</code>
+<code class="k">impl</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">NumberFileError</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">source</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;&amp;</code><code class="p">(</code><code class="k">dyn</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">match</code><code class="w"> </code><code class="bp">self</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">NumberFileError</code><code class="p">::</code><code class="n">Io</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">err</code><code class="p">),</code><code class="w"/>
+<code class="w">            </code><code class="n">NumberFileError</code><code class="p">::</code><code class="n">Parse</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">err</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>It’s not important to understand every line of this. All the unfamiliar syntax will be explained in the next few chapters. We mainly want to show that error types can be written out by hand—it’s not magic—but it’s a lot of boilerplate code. The <code>thiserror</code> crate can generate most of this for you.</p>
+
+<pre class="toml" data-code-language="toml" data-type="programlisting">
+<code class="k">[dependencies]</code><code class="w"/>
+<code class="n">thiserror</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2.0.18"</code><code class="w"/>
+</pre>
+
+<p>With <code>thiserror</code>, the same error type can be implemented in a few lines:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-thiserror-example">
+<code class="cp">#[derive(Debug, thiserror::Error)]</code><code class="w"/>
+<code class="k">pub</code><code class="w"> </code><code class="k">enum</code><code class="w"> </code><code class="nc">NumberFileError</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="cp">#[error(</code><code class="s">"error reading config file"</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">Io</code><code class="p">(</code><code class="cp">#[from]</code><code class="w"> </code><code class="n">io</code><code class="p">::</code><code class="n">Error</code><code class="p">),</code><code class="w"/>
+
+<code class="w">    </code><code class="cp">#[error(</code><code class="s">"invalid data in config file"</code><code class="cp">)]</code><code class="w"/>
+<code class="w">    </code><code class="n">Parse</code><code class="p">(</code><code class="cp">#[from]</code><code class="w"> </code><code class="n">ParseIntError</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Several attributes direct <code>thiserror</code>’s implementation of the new error type:</p>
+
+<ul>
+	<li>
+	<p><code>#[derive(Debug, thiserror::Error)]</code> tells Rust that in addition to the usual <code>Debug</code> formatting for this type, we also want some code generated by the <code>thiserror::Error</code> derive macro. The Rust compiler generates the code for <code>Debug</code>, and the <code>thiserror</code> library generates the code for <code>Error</code>. (If you like, you can view the generated code using <code>cargo expand</code>, as described in <a data-type="xref" href="ch22.html#debugging-macros">“Debugging Macros”</a>. Note, however, that generated code is usually a little strange-looking, for reasons we’ll explore in that chapter.)</p>
+	</li>
+	<li>
+	<p><code>#[error(...)]</code> tells <code>thiserror</code> how we would like each variant to appear in <code>Display</code> formatting. The string argument is a kind of format string, able to access fields of the error object. For details, see the <code>thiserror</code> documentation.</p>
+	</li>
+	<li>
+	<p><code>#[from]</code> tells <code>thiserror</code> which type conversions to generate and how to implement the <code>source</code> method.</p>
+	</li>
+</ul>
+
+<p>You can use <code>thiserror</code> to define a crate’s public error types without requiring the crate’s users to know about <code>thiserror</code> or add it to their own dependencies. <code>thiserror</code> does all its work by generating code for you, and it never generates anything you couldn’t write yourself.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Dealing with Errors That “Can’t Happen”"><div class="sect2" id="dealing-with-errors-that-cant-happen">
+<h2>Dealing with Errors That “Can’t Happen”</h2>
+
+<p>Sometimes<a contenteditable="false" data-primary="error handling" data-secondary="errors that “can't happen”" data-type="indexterm" id="id1085"/><a contenteditable="false" data-primary="Result type" data-secondary="dealing with errors that “can't happen”" data-type="indexterm" id="id1086"/> we just <em>know</em> that an error can’t happen. For example, suppose we’re writing code to parse a configuration file, and at one point we find that the next thing in the file is a string of digits:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result16">
+<code class="k">if</code><code class="w"> </code><code class="n">next_char</code><code class="p">.</code><code class="n">is_ascii_digit</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">start</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">current_index</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="n">current_index</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">skip_digits</code><code class="p">(</code><code class="n">line</code><code class="p">,</code><code class="w"> </code><code class="n">current_index</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">digits</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">line</code><code class="p">[</code><code class="n">start</code><code class="o">..</code><code class="n">current_index</code><code class="p">];</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>We want to convert this string of digits to an actual number. There’s a standard method that does this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result17">
+<code class="kd">let</code><code class="w"> </code><code class="n">num</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">digits</code><code class="p">.</code><code class="n">parse</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>Now the problem: the <code>str.parse::&lt;u64&gt;()</code> method doesn’t return a <code>u64</code>. It returns a <code>Result</code>. It can fail, because some strings aren’t numeric:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result18">
+<code class="s">"bleen"</code><code class="p">.</code><code class="n">parse</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">()</code><code class="w">  </code><code class="c1">// ParseIntError: invalid digit</code>
+</pre>
+
+<p>But we happen to know that in this case, <code>digits</code> consists entirely of digits. What should we do?</p>
+
+<p>If the code we’re writing already returns a <code>anyhow::Result</code>, we can tack on a <code>?</code> and forget about it. Otherwise, we face the irritating prospect of having to write error-handling code for an error that can’t happen. The best choice then would be to use <code>.unwrap()</code>, a <code>Result</code> method that panics if the result is an <code>Err</code>, but simply returns the success value of an <code>Ok</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result19">
+<code class="kd">let</code><code class="w"> </code><code class="n">num</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">digits</code><code class="p">.</code><code class="n">parse</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">().</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>This is just like <code>?</code> except that if we’re wrong about this error, if it <em>can</em> happen, then in that case we would panic.</p>
+
+<p>In fact, we are wrong about this particular case. If the input contains a long enough string of digits, the number will be too big to fit in a <code>u64</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result20">
+<code class="s">"99999999999999999999"</code><code class="p">.</code><code class="n">parse</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">u64</code><code class="o">&gt;</code><code class="p">()</code><code class="w">    </code><code class="c1">// overflow error</code>
+</pre>
+
+<p>Using <code>.unwrap()</code> in this particular case would therefore be a bug. Bogus input shouldn’t cause a panic.</p>
+
+<p>That said, situations do come up where a <code>Result</code> value truly can’t be an error. For example, in <a data-type="xref" href="ch18.html#input-and-output">Chapter 18</a>, you’ll see that the <code>Write</code> trait defines a common set of methods (<code>.write()</code> and others) for text and binary output. All of those methods return <code>io::Result</code>s, but if you happen to be writing to a <code>Vec&lt;u8&gt;</code>, they can’t fail. In such cases, it’s acceptable to use <code>.unwrap()</code> or <code>.expect(message)</code> to dispense with the <code>Result</code>s.</p>
+
+<p>These methods are also useful when an error would indicate a condition so severe or bizarre that panic is exactly how you want to handle it:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result21">
+<code class="k">fn</code><code class="w"> </code><code class="nf">print_file_age</code><code class="p">(</code><code class="n">filename</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Path</code><code class="p">,</code><code class="w"> </code><code class="n">last_modified</code><code class="p">:</code><code class="w"> </code><code class="nc">SystemTime</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">age</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">last_modified</code><code class="p">.</code><code class="n">elapsed</code><code class="p">().</code><code class="n">expect</code><code class="p">(</code><code class="s">"system clock drift"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here, the <code>.elapsed()</code> method<a contenteditable="false" data-primary="elapsed method" data-type="indexterm" id="id1087"/> can fail only if the system time is <em>earlier</em> than when the file was created. This can happen if the file was created recently, and the system clock was adjusted backward while our program was running. Depending on how this code is used, it’s a reasonable judgment call to panic in that case, rather than handle the error or propagate it to the caller.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Ignoring Errors"><div class="sect2" id="ignoring-errors">
+<h2>Ignoring Errors</h2>
+
+<p>Occasionally we just want to ignore<a contenteditable="false" data-primary="Result type" data-secondary="ignoring errors" data-type="indexterm" id="id1088"/><a contenteditable="false" data-primary="error handling" data-secondary="ignoring errors" data-type="indexterm" id="id1089"/> an error altogether. For example, in our <code>print_error()</code> function<a contenteditable="false" data-primary="print_error function" data-type="indexterm" id="id1090"/>, we had to handle the unlikely situation where printing the error triggers another error. This could happen, for example, if <code>stderr</code> is piped to another process, and that process is killed. The original error we were trying to report is probably more important to propagate, so we just want to ignore the troubles with <code>stderr</code>, but the Rust compiler warns about unused <code>Result</code> values:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result22">
+<code class="fm">writeln!</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">stderr</code><code class="p">(),</code><code class="w"> </code><code class="s">"error: {err}"</code><code class="p">);</code><code class="w">  </code><code class="c1">// warning: unused result</code>
+</pre>
+
+<p>The idiom <code>let _ = ...</code> is used to silence this warning:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result23">
+<code class="kd">let</code><code class="w"> </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">writeln!</code><code class="p">(</code><code class="n">io</code><code class="p">::</code><code class="n">stderr</code><code class="p">(),</code><code class="w"> </code><code class="s">"error: {err}"</code><code class="p">);</code><code class="w">  </code><code class="c1">// ok, ignore result</code>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Handling Errors in main()"><div class="sect2" id="handling-errors-in-main">
+<h2>Handling Errors in main()</h2>
+
+<p>In most places<a contenteditable="false" data-primary="Result type" data-secondary="handling errors in main function" data-type="indexterm" id="id1091"/> where a <code>Result</code> is produced, letting the error bubble up to the caller is the right behavior. This is why <code>?</code> is a single character in Rust. As we’ve seen, in some programs it’s used on many lines of code in a row.</p>
+
+<p>But if you propagate an error long enough, eventually it reaches <code>main()</code>, and something has to be done with it. Normally, <code>main()</code> can’t use <code>?</code> because its return type is not <code>Result</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result24">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">calculate_tides</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w">  </code><code class="c1">// error: can't pass the buck any further</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The simplest way to handle errors<a contenteditable="false" data-primary="expect method" data-type="indexterm" id="id1092"/><a contenteditable="false" data-primary="main function" data-type="indexterm" id="id1093"/><a contenteditable="false" data-primary="error handling" data-secondary="in main function" data-secondary-sortas="main function" data-type="indexterm" id="id1094"/> in <code>main()</code> is to use <code>.expect()</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result25">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">calculate_tides</code><code class="p">().</code><code class="n">expect</code><code class="p">(</code><code class="s">"error"</code><code class="p">);</code><code class="w">  </code><code class="c1">// the buck stops here</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>If <code>calculate_tides()</code> returns<a contenteditable="false" data-primary="calculate_tides method" data-type="indexterm" id="id1095"/> an error result, the <code>.expect()</code> method panics. Panicking in the main thread prints an error message and then exits with a nonzero exit code, which is roughly the desired behavior. We use this all the time for tiny programs. It’s a start.</p>
+
+<p>The error message is a little intimidating, though:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>tidecalc<code class="w"> </code>--planet<code class="w"> </code>mercury<code class="w"/>
+<code class="go">thread 'main' panicked at src/main.rs:2:23:</code>
+<code class="go">error: "moon not found"</code>
+<code class="go">note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace</code>
+</pre>
+
+<p>The error message is lost in the noise. Also, <code>RUST_BACKTRACE=1</code> is bad advice in this particular case.</p>
+
+<p>However, you can also change the type signature of <code>main()</code> to return a <code>Result</code> type, so you can use <code>?</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result30">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(),</code><code class="w"> </code><code class="n">TideCalcError</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">tides</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">calculate_tides</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="n">print_tides</code><code class="p">(</code><code class="n">tides</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>main</code> function can return any type that implements the <code>std::process::Termination</code> trait. This trait has a single <code>report()</code> method which Rust calls just after <code>main</code> returns. For <code>()</code>, the <code>report</code> method does nothing and returns the default exit code of 0. For error <code>Result</code>s, it prints the <code>Debug</code> form of the error and returns a non-zero exit code, indicating failure.</p>
+
+<p>This prints a somewhat nicer error message, but still not exactly human-friendly:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>tidecalc<code class="w"> </code>--planet<code class="w"> </code>mercury<code class="w"/>
+<code class="go">Error: TideCalcError { error_type: NoMoon, message: "moon not found" }</code>
+</pre>
+
+<p>If you care about the finer details of how errors are presented, there’s no substitute for reporting the error yourself:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-result26">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="kd">let</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">calculate_tides</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">print_error</code><code class="p">(</code><code class="o">&amp;</code><code class="n">err</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code><code class="p">::</code><code class="n">process</code><code class="p">::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This code uses an <code>if let</code> expression to print the error message only if the call to <code>calculate_tides()</code> returns an error result. For details about <code>if let</code> expressions, see <a data-type="xref" href="ch10.html#enums-and-patterns">Chapter 10</a>. The <code>print_error</code> function is listed in <a data-type="xref" href="#printing-errors">“Printing Errors”</a>.</p>
+
+<p>Now the output is nice and tidy:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>tidecalc<code class="w"> </code>--planet<code class="w"> </code>mercury<code class="w"/>
+<code class="go">error: moon not found</code>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Why Results?"><div class="sect2" id="why-results">
+<h2>Why Results?</h2>
+
+<p>Now we know enough to understand what Rust<a contenteditable="false" data-primary="Result type" data-secondary="key points of design" data-type="indexterm" id="id1096"/> is getting at by choosing <code>Result</code>s over exceptions<a contenteditable="false" data-primary="exceptions, Result versus" data-type="indexterm" id="id1097"/>. Here are the key points of the design:</p>
+
+<ul>
+	<li>
+	<p>Rust requires the programmer to make some sort of decision, and record it in the code, at every point where an error could occur. This is good because otherwise it’s easy to get error handling wrong through neglect.</p>
+	</li>
+	<li>
+	<p>The most common decision is to allow errors to propagate, and that’s written with a single character, <code>?</code>. Thus, error plumbing does not clutter up your code the way it does in C and Go. Yet it’s still visible: you can look at a chunk of code and see at a glance all places where errors are propagated.</p>
+	</li>
+	<li>
+	<p>Since the possibility of errors is part of every function’s return type, it’s clear which functions can fail and which can’t. If you change a function to be fallible, you’re changing its return type, so the compiler will make you update that function’s downstream users.</p>
+	</li>
+	<li>
+	<p>Rust checks that <code>Result</code> values are used, so you can’t accidentally let an error pass silently (a common mistake in C).</p>
+	</li>
+	<li>
+	<p>Since <code>Result</code> is a data type like any other, it’s easy to store success and error results in the same collection. This makes it easy to model partial success. For example, if you’re writing a program that loads millions of records from a text file and you need a way to cope with the likely outcome that most will succeed, but some will fail, you can represent that situation in memory using a vector of <code>Result</code>s.</p>
+	</li>
+</ul>
+
+<p>The cost is that you’ll find yourself thinking about and engineering error handling more in Rust than you would in other languages. As in many other areas, Rust’s take on error handling is wound just a little tighter than what you’re used to. For systems programming, it’s worth<a contenteditable="false" data-startref="ix_types_error" data-type="indexterm" id="id1098"/><a contenteditable="false" data-startref="ix_error_ch7" data-type="indexterm" id="id1099"/><a contenteditable="false" data-startref="ix_errors_result_type_ch7" data-type="indexterm" id="id1100"/><a contenteditable="false" data-startref="ix_result_type_ch7" data-type="indexterm" id="id1101"/> it.</p>
+</div></section>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

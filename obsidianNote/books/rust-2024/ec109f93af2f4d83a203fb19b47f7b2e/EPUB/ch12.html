@@ -1,0 +1,925 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch12.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 12. Operator Overloading">
+        <div class="chapter" id="operator-overloading">
+<h1><span class="label">Chapter 12. </span>Operator Overloading</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id1418"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the twelfth chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<p>In the Mandelbrot<a contenteditable="false" data-primary="operator overloading" data-type="indexterm" id="ix_op_overload_ch12"/> set plotter we showed in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>, we used the <code>num</code> crate’s <code>Complex</code> type to represent a number on the complex plane:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-intro1">
+<code class="cp">#[derive(Clone, Copy, Debug)]</code><code class="w"/>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Real portion of the complex number</code>
+<code class="w">    </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Imaginary portion of the complex number</code>
+<code class="w">    </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>We were able to add and multiply <code>Complex</code> numbers just like any built-in numeric type, using Rust’s <code>+</code> and <code>*</code> operators:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-intro2">
+<code class="n">z</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">z</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">z</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">c</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>You can make your own types<a contenteditable="false" data-primary="types" data-secondary="operator overloading and" data-type="indexterm" id="id1419"/> support arithmetic and other operators, too, just by implementing a few built-in traits. This is called <em>operator overloading</em>, and the effect is much like operator overloading in C‍++, C#, Python, and Ruby.</p>
+
+<p>The traits<a contenteditable="false" data-primary="traits" data-secondary="for operator overloading" data-secondary-sortas="operator overloading" data-type="indexterm" id="id1420"/> for operator overloading fall into a few categories depending on what part of the language they support, as shown in <a data-type="xref" href="#operator-traits-table">Table 12-1</a>. In this chapter, we’ll cover each category. Our goal is not just to help you integrate your own types nicely into the language, but also to give you a better sense of how to write generic functions like the dot product function described in <a data-type="xref" href="ch11.html#reverse-engineering-bounds">“Reverse-Engineering Bounds”</a> that operate on types most naturally used via these operators. The chapter should also give some insight into how some features of the language itself are implemented.</p>
+
+<table id="operator-traits-table">
+	<caption><span class="label">Table 12-1. </span>Summary of traits for operator overloading</caption>
+	<thead>
+		<tr>
+			<th>Category</th>
+			<th>Trait</th>
+			<th>Operator</th>
+		</tr>
+	</thead>
+	<tbody class="border_bottom">
+		<tr>
+			<td rowspan="2">Unary operators</td>
+			<td><code>std::ops::Neg</code></td>
+			<td><code>-x</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>std::ops::Not</code></td>
+			<td><code>!x</code></td>
+		</tr>
+		<tr>
+			<td rowspan="5">Arithmetic operators</td>
+			<td><code>std::ops::Add</code></td>
+			<td><code>x + y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Sub</code></td>
+			<td><code>x - y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Mul</code></td>
+			<td><code>x * y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Div</code></td>
+			<td><code>x / y</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>std::ops::Rem</code></td>
+			<td><code>x % y</code></td>
+		</tr>
+		<tr>
+			<td rowspan="5">Bitwise operators</td>
+			<td><code>std::ops::BitAnd</code></td>
+			<td><code>x &amp; y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitOr</code></td>
+			<td><code>x | y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitXor</code></td>
+			<td><code>x ^ y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Shl</code></td>
+			<td><code>x &lt;&lt; y</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>std::ops::Shr</code></td>
+			<td><code>x &gt;&gt; y</code></td>
+		</tr>
+		<tr>
+			<td rowspan="10">Compound assignment<br/>
+			operators</td>
+			<td><code>std::ops::AddAssign</code></td>
+			<td><code>x += y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::SubAssign</code></td>
+			<td><code>x -= y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::MulAssign</code></td>
+			<td><code>x *= y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::DivAssign</code></td>
+			<td><code>x /= y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::RemAssign</code></td>
+			<td><code>x %= y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitAndAssign</code></td>
+			<td><code>x &amp;= y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitOrAssign</code></td>
+			<td><code>x |= y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitXorAssign</code></td>
+			<td><code>x ^= y</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::ShlAssign</code></td>
+			<td><code>x &lt;&lt;= y</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>std::ops::ShrAssign</code></td>
+			<td><code>x &gt;&gt;= y</code></td>
+		</tr>
+		<tr>
+			<td rowspan="2">Comparison operators</td>
+			<td><code>std::cmp::PartialEq</code></td>
+			<td><code>x == y</code>, <code>x != y</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>std::cmp::PartialOrd</code></td>
+			<td><code>x &lt; y</code>, <code>x &lt;= y</code>, <code>x &gt; y</code>, <code>x &gt;= y</code></td>
+		</tr>
+		<tr>
+			<td rowspan="2">Indexing</td>
+			<td><code>std::ops::Index</code></td>
+			<td><code>x[y]</code>, <code>&amp;x[y]</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::IndexMut</code></td>
+			<td><code>x[y] = z</code>, <code>&amp;mut x[y]</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<section data-type="sect1" data-pdf-bookmark="Arithmetic and Bitwise Operators"><div class="sect1" id="arithmetic-traits">
+<h1>Arithmetic and Bitwise Operators</h1>
+
+<p>In Rust<a contenteditable="false" data-primary="operators" data-secondary="arithmetic" data-type="indexterm" id="ix_operators_arith"/><a contenteditable="false" data-primary="operator overloading" data-secondary="arithmetic/bitwise operators" data-type="indexterm" id="ix_op_overload_arith-bitwise"/><a contenteditable="false" data-primary="arithmetic operators" data-type="indexterm" id="ix_arith_operators"/>, the expression <code>a + b</code> is actually shorthand for <code>std::ops::Add::add(a, b)</code>, a call to the <code>add</code> method of the standard library’s <code>Add</code> trait. If you import the trait, you can write this as an ordinary method call, <code>a.add(b)</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-arith1">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Add</code><code class="p">;</code><code class="w"/>
+
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mf">4.125</code><code class="k">f32</code><code class="p">.</code><code class="n">add</code><code class="p">(</code><code class="mf">5.75</code><code class="p">),</code><code class="w"> </code><code class="mf">9.875</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="mf">10.</code><code class="n">add</code><code class="p">(</code><code class="mi">20</code><code class="p">),</code><code class="w"> </code><code class="mi">10</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">20</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Rust’s standard numeric types all implement <code>std::ops::Add</code>. To make the expression <code>a + b</code> work for <code>Complex</code> values, the <code>num</code> crate implements this trait for <code>Complex</code> as well. Similar traits cover the other operators: <code>a * b</code> is shorthand for <code>std::ops::Mul::mul(a, b)</code>, <code>std::ops::Neg</code> covers the prefix <code>-</code> negation operator, and so on.</p>
+
+<p>Here’s the definition of <code>std::ops::Add</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-arith2">
+<code class="k">trait</code><code class="w"> </code><code class="n">Add</code><code class="o">&lt;</code><code class="n">Rhs</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">rhs</code><code class="p">:</code><code class="w"> </code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="p">::</code><code class="n">Output</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In other words, the trait <code>Add&lt;T&gt;</code> is the ability to add a <code>T</code> value to yourself. For example, if you want to be able to add <code>i32</code> and <code>u32</code> values to your type, your type must implement both <code>Add&lt;i32&gt;</code> and <code>Add&lt;u32&gt;</code>. The trait’s type parameter <code>Rhs</code> defaults to <code>Self</code>, so if you’re implementing addition between two values of the same type, you can simply write <code>Add</code> for that case. The associated type <code>Output</code> describes the result of the addition.</p>
+
+<p>For example, to be able to add <code>Complex&lt;i32&gt;</code> values together, <code>Complex&lt;i32&gt;</code> must implement <code>Add&lt;Complex&lt;i32&gt;&gt;</code>. Since we’re adding a type to itself, we just write <code>Add</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-arith3">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Add</code><code class="p">;</code><code class="w"/>
+
+<code class="k">impl</code><code class="w"> </code><code class="n">Add</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">rhs</code><code class="p">:</code><code class="w"> </code><code class="nc">Self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="nc">self</code><code class="p">.</code><code class="n">re</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">rhs</code><code class="p">.</code><code class="n">re</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="nc">self</code><code class="p">.</code><code class="n">im</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">rhs</code><code class="p">.</code><code class="n">im</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Of course, we shouldn’t have to implement <code>Add</code> separately for <code>Complex&lt;i32&gt;</code>, <code>Complex&lt;f32&gt;</code>, <code>Complex&lt;f64&gt;</code>, and so on. All the definitions would look exactly the same except for the types involved, so we should be able to write a single generic implementation that covers them all, as long as the type of the complex components themselves supports addition:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-arith4">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Add</code><code class="p">;</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Add</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nc">Add</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">Self</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">rhs</code><code class="p">:</code><code class="w"> </code><code class="nc">Self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="nc">self</code><code class="p">.</code><code class="n">re</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">rhs</code><code class="p">.</code><code class="n">re</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="nc">self</code><code class="p">.</code><code class="n">im</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">rhs</code><code class="p">.</code><code class="n">im</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>By writing <code>where T: Add&lt;Output = T&gt;</code>, we restrict <code>T</code> to types that can be added to themselves, yielding another <code>T</code> value. This is a reasonable restriction, but we could loosen things still further: the <code>Add</code> trait doesn’t require both operands of <code>+</code> to have the same type, nor does it constrain the result type. So a maximally generic implementation would let the left- and righthand operands vary independently and produce a <code>Complex</code> value of whatever component type that addition produces:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-arith5">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Add</code><code class="p">;</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">L</code><code class="p">,</code><code class="w"> </code><code class="n">R</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Add</code><code class="o">&lt;</code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">R</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">L</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">L</code><code class="p">:</code><code class="w"> </code><code class="nc">Add</code><code class="o">&lt;</code><code class="n">R</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">L</code><code class="p">::</code><code class="n">Output</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">rhs</code><code class="p">:</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="n">R</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="p">::</code><code class="n">Output</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="nc">self</code><code class="p">.</code><code class="n">re</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">rhs</code><code class="p">.</code><code class="n">re</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="nc">self</code><code class="p">.</code><code class="n">im</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">rhs</code><code class="p">.</code><code class="n">im</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In practice, however, Rust tends to avoid supporting mixed-type operations. Since our type parameter <code>L</code> must implement <code>Add&lt;R&gt;</code>, it usually follows that <code>L</code> and <code>R</code> are going to be the same type: there simply aren’t that many types available for <code>L</code> that implement anything else. So in the end, this maximally generic version may not be much more useful than the prior, simpler generic definition.</p>
+
+<p>Rust’s built-in traits for arithmetic and bitwise operators come in three groups: unary operators, binary operators, and compound assignment operators. Within each group, the traits and their methods all have the same form, so we’ll cover one example from each<a contenteditable="false" data-startref="ix_arith_operators" data-type="indexterm" id="id1421"/><a contenteditable="false" data-startref="ix_operators_arith" data-type="indexterm" id="id1422"/>.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Unary Operators"><div class="sect2" id="unary-operators">
+<h2>Unary Operators</h2>
+
+<p>Aside<a contenteditable="false" data-primary="operator overloading" data-secondary="unary operators" data-type="indexterm" id="id1423"/><a contenteditable="false" data-primary="operators" data-secondary="unary" data-type="indexterm" id="id1424"/><a contenteditable="false" data-primary="unary operators" data-type="indexterm" id="id1425"/><a contenteditable="false" data-primary="- operator" data-type="indexterm" id="id1426"/><a contenteditable="false" data-primary="! operator" data-type="indexterm" id="id1427"/> from the dereferencing operator <code>*</code>, which we’ll cover separately in <a data-type="xref" href="ch13.html#deref-and-derefmut">“Deref and DerefMut”</a>, Rust has two unary operators that you can customize, shown in <a data-type="xref" href="#built-in-traits-unary">Table 12-2</a>.</p>
+
+<table id="built-in-traits-unary">
+	<caption><span class="label">Table 12-2. </span>Built-in traits for unary operators</caption>
+	<thead>
+		<tr>
+			<th>Trait name</th>
+			<th>Expression</th>
+			<th>Equivalent method call</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td><code>std::ops::Neg</code></td>
+			<td><code>-x</code></td>
+			<td><code>Neg::neg(x)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Not</code></td>
+			<td><code>!x</code></td>
+			<td><code>Not::not(x)</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>These traits’ definitions are simple:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unary1">
+<code class="k">trait</code><code class="w"> </code><code class="n">Neg</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">neg</code><code class="p">(</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="p">::</code><code class="n">Output</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">trait</code><code class="w"> </code><code class="n">Not</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">not</code><code class="p">(</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="p">::</code><code class="n">Output</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Negating a complex number simply negates each of its components. Here’s how we might write a generic implementation of negation for <code>Complex</code> values:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-unary2">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Neg</code><code class="p">;</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Neg</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nc">Neg</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">neg</code><code class="p">(</code><code class="bp">self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="bp">self</code><code class="p">.</code><code class="n">re</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="bp">self</code><code class="p">.</code><code class="n">im</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Binary Operators"><div class="sect2" id="binary-operators">
+<h2>Binary Operators</h2>
+
+<p>Rust’s binary<a contenteditable="false" data-primary="operators" data-secondary="binary" data-type="indexterm" id="id1428"/><a contenteditable="false" data-primary="operator overloading" data-secondary="binary operators" data-type="indexterm" id="id1429"/><a contenteditable="false" data-primary="arithmetic operators" data-secondary="overloading" data-type="indexterm" id="id1430"/><a contenteditable="false" data-primary="binary operators" data-type="indexterm" id="id1431"/> arithmetic and bitwise operators and their corresponding built-in traits appear in <a data-type="xref" href="#built-in-traits-binary">Table 12-3</a>.</p>
+
+<table id="built-in-traits-binary">
+	<caption><span class="label">Table 12-3. </span>Built-in traits for binary operators</caption>
+	<thead>
+		<tr>
+			<th>Category</th>
+			<th>Trait name</th>
+			<th>Expression</th>
+			<th>Equivalent method call</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td rowspan="5">Arithmetic operators</td>
+			<td><code>std::ops::Add</code></td>
+			<td><code>x + y</code></td>
+			<td><code>Add::add(x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Sub</code></td>
+			<td><code>x - y</code></td>
+			<td><code>Sub::sub(x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Mul</code></td>
+			<td><code>x * y</code></td>
+			<td><code>Mul::mul(x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Div</code></td>
+			<td><code>x / y</code></td>
+			<td><code>Div::div(x, y)</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>std::ops::Rem</code></td>
+			<td><code>x % y</code></td>
+			<td><code>Rem::rem(x, y)</code></td>
+		</tr>
+		<tr>
+			<td rowspan="5">Bitwise operators</td>
+			<td><code>std::ops::BitAnd</code></td>
+			<td><code>x &amp; y</code></td>
+			<td><code>BitAnd::bitand(x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitOr</code></td>
+			<td><code>x | y</code></td>
+			<td><code>BitOr::bitor(x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitXor</code></td>
+			<td><code>x ^ y</code></td>
+			<td><code>BitXor::bitxor(x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Shl</code></td>
+			<td><code>x &lt;&lt; y</code></td>
+			<td><code>Shl::shl(x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::Shr</code></td>
+			<td><code>x &gt;&gt; y</code></td>
+			<td><code>Shr::shr(x, y)</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>All of the traits here have the same general form. The definition of <code>std::ops::BitXor</code>, for the <code>^</code> operator, looks like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-binary1">
+<code class="k">trait</code><code class="w"> </code><code class="n">BitXor</code><code class="o">&lt;</code><code class="n">Rhs</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">bitxor</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">rhs</code><code class="p">:</code><code class="w"> </code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="p">::</code><code class="n">Output</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>At the beginning of this chapter, we also showed <code>std::ops::Add</code>, another trait in this category, along with several sample implementations.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Compound Assignment Operators"><div class="sect2" id="compound-assignment-operators">
+<h2 class="less_space">Compound Assignment Operators</h2>
+
+<p>A compound<a contenteditable="false" data-primary="operators" data-secondary="bitwise" data-type="indexterm" id="ix_operators_bitwise2"/><a contenteditable="false" data-primary="operators" data-secondary="arithmetic" data-type="indexterm" id="ix_operators_arith2"/><a contenteditable="false" data-primary="operator overloading" data-secondary="compound assignment operators" data-type="indexterm" id="ix_op_overload_comp_assign"/><a contenteditable="false" data-primary="compound assignment operators" data-type="indexterm" id="ix_comp_assign_operators"/><a contenteditable="false" data-primary="assignment" data-secondary="compound assignment operators" data-type="indexterm" id="ix_assign_comp_assign_op"/><a contenteditable="false" data-primary="bitwise operators" data-type="indexterm" id="ix_bitwise_comp_assign_op"/><a contenteditable="false" data-primary="arithmetic operators" data-secondary="compound assignment operators" data-type="indexterm" id="ix_arith_operators_comp_assign"/> assignment expression is one like <code>x += y</code> or <code>x &amp;= y</code>: it takes two operands, performs some operation on them like addition or a bitwise AND, and stores the result back in the left operand. In Rust, the value of a compound assignment expression is always <code>()</code>, never the value stored.</p>
+
+<p>The syntax <code>x += y</code> is shorthand for the method call <code>std::ops::AddAssign::add_assign(&amp;mut x, y)</code>, using this built-in trait:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-comp1">
+<code class="k">trait</code><code class="w"> </code><code class="n">AddAssign</code><code class="o">&lt;</code><code class="n">Rhs</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add_assign</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">rhs</code><code class="p">:</code><code class="w"> </code><code class="nc">Rhs</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>If <code>x</code> doesn’t implement <code>AddAssign</code>, then <code>x += y</code> is an error; Rust does not fall back to <code>x = x + y</code>.</p>
+
+<p><a data-type="xref" href="#built-in-traits-compound">Table 12-4</a> shows all of Rust’s compound assignment operators and the built-in traits that implement them.</p>
+
+<table class="built-in-traits-table" id="built-in-traits-compound">
+	<caption><span class="label">Table 12-4. </span>Built-in traits for compound assignment operators</caption>
+	<thead>
+		<tr>
+			<th>Category</th>
+			<th>Trait name</th>
+			<th>Expression</th>
+			<th>Equivalent method call</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td rowspan="5">Arithmetic<br/>
+			operators</td>
+			<td><code>std::ops::AddAssign</code></td>
+			<td><code>x += y</code></td>
+			<td><code>AddAssign::add_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::SubAssign</code></td>
+			<td><code>x -= y</code></td>
+			<td><code>SubAssign::sub_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::MulAssign</code></td>
+			<td><code>x *= y</code></td>
+			<td><code>MulAssign::mul_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::DivAssign</code></td>
+			<td><code>x /= y</code></td>
+			<td><code>DivAssign::div_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>std::ops::RemAssign</code></td>
+			<td><code>x %= y</code></td>
+			<td><code>RemAssign::rem_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr>
+			<td rowspan="5">Bitwise<br/>
+			operators</td>
+			<td><code>std::ops::BitAndAssign</code></td>
+			<td><code>x &amp;= y</code></td>
+			<td><code>BitAndAssign::bitand_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitOrAssign</code></td>
+			<td><code>x |= y</code></td>
+			<td><code>BitOrAssign::bitor_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::BitXorAssign</code></td>
+			<td><code>x ^= y</code></td>
+			<td><code>BitXorAssign::bitxor_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::ShlAssign</code></td>
+			<td><code>x &lt;&lt;= y</code></td>
+			<td><code>ShlAssign::shl_assign(&amp;mut x, y)</code></td>
+		</tr>
+		<tr>
+			<td><code>std::ops::ShrAssign</code></td>
+			<td><code>x &gt;&gt;= y</code></td>
+			<td><code>ShrAssign::shr_assign(&amp;mut x, y)</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>A generic implementation of <code>AddAssign</code> for our <code>Complex</code> type is straightforward:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-comp2">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">AddAssign</code><code class="p">;</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="n">AddAssign</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nc">AddAssign</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">add_assign</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">rhs</code><code class="p">:</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">re</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="n">rhs</code><code class="p">.</code><code class="n">re</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">im</code><code class="w"> </code><code class="o">+=</code><code class="w"> </code><code class="n">rhs</code><code class="p">.</code><code class="n">im</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The built-in trait for a compound assignment operator is completely independent of the built-in trait for the corresponding binary operator. Implementing <code>std::ops::Add</code> does not automatically implement <code>std::ops::AddAssign</code>; if you want Rust to permit your type as the lefthand operand of a <code>+=</code> operator, you must implement <code>AddAssign</code> yourself<a contenteditable="false" data-startref="ix_operators_arith2" data-type="indexterm" id="id1432"/><a contenteditable="false" data-startref="ix_operators_bitwise2" data-type="indexterm" id="id1433"/><a contenteditable="false" data-startref="ix_op_overload_comp_assign" data-type="indexterm" id="id1434"/><a contenteditable="false" data-startref="ix_bitwise_comp_assign_op" data-type="indexterm" id="id1435"/><a contenteditable="false" data-startref="ix_comp_assign_operators" data-type="indexterm" id="id1436"/><a contenteditable="false" data-startref="ix_arith_operators_comp_assign" data-type="indexterm" id="id1437"/><a contenteditable="false" data-startref="ix_assign_comp_assign_op" data-type="indexterm" id="id1438"/><a contenteditable="false" data-startref="ix_op_overload_arith-bitwise" data-type="indexterm" id="id1439"/>.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Equivalence Comparisons"><div class="sect1" id="eq">
+<h1>Equivalence Comparisons</h1>
+
+<p>Rust’s equality<a contenteditable="false" data-primary="PartialEq trait" data-type="indexterm" id="ix_partialeq_trait"/><a contenteditable="false" data-primary="operator overloading" data-secondary="equality tests" data-type="indexterm" id="ix_op_overload_equality"/><a contenteditable="false" data-primary="operators" data-secondary="equality" data-type="indexterm" id="ix_operators_equality"/><a contenteditable="false" data-primary="!= operator" data-type="indexterm" id="id1440"/><a contenteditable="false" data-primary="== operator" data-type="indexterm" id="id1441"/><a contenteditable="false" data-primary="equality operators" data-type="indexterm" id="ix_equal_operators"/> operators, <code>==</code> and <code>!=</code>, are shorthand for calls to the <code>std::cmp::PartialEq</code> trait’s <code>eq</code> and <code>ne</code> methods:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq1">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">x</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">y</code><code class="p">,</code><code class="w"> </code><code class="n">x</code><code class="p">.</code><code class="n">eq</code><code class="p">(</code><code class="o">&amp;</code><code class="n">y</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">x</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="n">y</code><code class="p">,</code><code class="w"> </code><code class="n">x</code><code class="p">.</code><code class="n">ne</code><code class="p">(</code><code class="o">&amp;</code><code class="n">y</code><code class="p">));</code><code class="w"/>
+</pre>
+
+<p>Here’s the definition of <code>std::cmp::PartialEq</code>. The curious <code>where Rhs: ?Sized</code> bound can be ignored for now; we’ll explain it fully in <a data-type="xref" href="ch13.html#sized">“Sized”</a>.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq2">
+<code class="k">trait</code><code class="w"> </code><code class="nb">PartialEq</code><code class="o">&lt;</code><code class="n">Rhs</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">Rhs</code><code class="p">:</code><code class="w"> </code><code class="o">?</code><code class="nb">Sized</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">eq</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">ne</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">!</code><code class="bp">self</code><code class="p">.</code><code class="n">eq</code><code class="p">(</code><code class="n">other</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Note that the <code>ne</code> method comes with a default definition. It’s likely you will never encounter a good reason to implement <code>ne</code> yourself. Anyone using <code>!=</code> will assume that <code>x != y</code> means exactly that <code>x</code> is not <code>==</code> to <code>y</code>, and that’s what the default definition does. So the following is a complete implementation for <code>Complex</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq3">
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">PartialEq</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">PartialEq</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">eq</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">self</code><code class="p">.</code><code class="n">re</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">other</code><code class="p">.</code><code class="n">re</code><code class="w"> </code><code class="o">&amp;&amp;</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">im</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">other</code><code class="p">.</code><code class="n">im</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In other words, for any component type <code>T</code> that itself can be compared for equality, this implements comparison for <code>Complex&lt;T&gt;</code>. Assuming we’ve also implemented <code>std::ops::Mul</code> for <code>Complex</code> somewhere along the line, we can now write:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq4">
+<code class="kd">let</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="mi">3</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="mi">4</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">y</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="mi">1</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">x</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">y</code><code class="p">,</code><code class="w"> </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="mi">4</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="mi">3</code><code class="w"> </code><code class="p">});</code><code class="w"/>
+</pre>
+
+<p>Implementations of <code>PartialEq</code> are almost always of the form shown here: they compare each field of the left operand to the corresponding field of the right. These get tedious to write, and equality is a common operation to support, so if you ask, Rust will generate an implementation of <code>PartialEq</code> for you automatically. Simply add <code>PartialEq</code> to the type definition’s <code>derive</code> attribute like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq5">
+<code class="cp">#[derive(Clone, Copy, Debug, PartialEq)]</code><code class="w"/>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Rust’s automatically generated implementation is essentially identical to our hand-written code, comparing each field of the type in turn. Rust can derive <code>PartialEq</code> implementations for <code>enum</code> types as well. Naturally, each field of the <code>struct</code> or <code>enum</code> must itself implement <code>PartialEq</code>.</p>
+
+<p>Unlike the arithmetic and bitwise traits, which take their operands by value, <code>PartialEq</code> takes its operands by reference. This means that comparing non-<code>Copy</code> values like <code>String</code>s, <code>Vec</code>s, or <code>HashMap</code>s doesn’t cause them to be moved, which would be troublesome:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq6">
+<code class="kd">let</code><code class="w"> </code><code class="n">s</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"d</code><code class="se">\x6f</code><code class="s">v</code><code class="se">\x65</code><code class="s">t</code><code class="se">\x61</code><code class="s">i</code><code class="se">\x6c</code><code class="s">"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">t</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"</code><code class="se">\x64</code><code class="s">o</code><code class="se">\x76</code><code class="s">e</code><code class="se">\x74</code><code class="s">a</code><code class="se">\x69</code><code class="s">l"</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="n">s</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">t</code><code class="p">);</code><code class="w">  </code><code class="c1">// s and t are only borrowed...</code>
+
+<code class="c1">// ... so they still have their values here.</code>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="fm">format!</code><code class="p">(</code><code class="s">"{s} {t}"</code><code class="p">),</code><code class="w"> </code><code class="s">"dovetail dovetail"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>You may be wondering why this trait is called <code>PartialEq</code>. Explaining this requires a bit of a detour into the weird behavior of floating-point not-a-numbers<a contenteditable="false" data-startref="ix_operators_equality" data-type="indexterm" id="id1442"/><a contenteditable="false" data-startref="ix_partialeq_trait" data-type="indexterm" id="id1443"/><a contenteditable="false" data-startref="ix_equal_operators" data-type="indexterm" id="id1444"/><a contenteditable="false" data-startref="ix_op_overload_equality" data-type="indexterm" id="id1445"/>.</p>
+
+<section data-type="sect2" data-pdf-bookmark="The Eq Trait (Or: Equality vs. NaN)"><div class="sect2" id="the-eq-trait-or-equality-vs-nan">
+<h2>The Eq Trait (Or: Equality vs. NaN)</h2>
+
+<p>We<a contenteditable="false" data-primary="Eq trait" data-type="indexterm" id="ix_eq_trait"/> have already mentioned one rule about the <code>PartialEq</code> trait that all implementations ought to follow:</p>
+
+<ul>
+	<li><code>x != y</code> should return exactly the same result as <code>!(x == y)</code>.</li>
+</ul>
+
+<p>Rust doesn’t enforce this rule. You can implement both <code>eq</code> and <code>ne</code> by hand to do whatever you want. Breaking the rule won’t lead to undefined behavior, but it’s bound to be confusing for your users, and programmer confusion leads to bugs.</p>
+
+<p>So the <code>PartialEq</code> trait is more than just a collection of methods. It consists of two methods plus the above rule—a promise of good behavior that <code>PartialEq</code> implementations make to their users.</p>
+
+<p>The traditional mathematical definition of an <em>equivalence relation</em>, of which equality is one instance, consists of three further rules. For any values <code>x</code> and <code>y</code>:</p>
+
+<ul>
+	<li>
+	<p>If <code>x == y</code> is true, then <code>y == x</code> must be true as well. In other words, swapping the two sides of an equality comparison doesn’t affect the result.</p>
+	</li>
+	<li>
+	<p>If <code>x == y</code> and <code>y == z</code>, then it must be the case that <code>x == z</code>. Given any chain of values, each equal to the next, each value in the chain is directly equal to every other. Equality is contagious.</p>
+	</li>
+	<li>
+	<p>It must always be true that <code>x == x</code>.</p>
+	</li>
+</ul>
+
+<p>That last requirement might seem too obvious to be worth stating, but this is exactly where things go awry. Rust’s <code>f32</code> and <code>f64</code> are IEEE standard floating-point values. According to that standard, expressions like <code>0.0/0.0</code> and others with no appropriate value must produce special <em>not-a-number<a contenteditable="false" data-primary="NaN (not-a-number) values" data-type="indexterm" id="id1446"/><a contenteditable="false" data-primary="not-a-number (NaN) values" data-type="indexterm" id="id1447"/></em> values, usually referred to as NaN values. The standard further requires that a NaN value be treated as unequal to every other value—including itself. For example, the standard requires all the following <span class="keep-together">behaviors:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq12">
+<code class="kd">let</code><code class="w"> </code><code class="n">nan</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mf">0.0</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="mf">0.0</code><code class="p">;</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="n">nan</code><code class="p">.</code><code class="n">is_nan</code><code class="p">());</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">nan</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">nan</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">nan</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="n">nan</code><code class="p">,</code><code class="w"> </code><code class="kc">true</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Furthermore, any ordered comparison with a NaN value must return false:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq13">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">nan</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="n">nan</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">nan</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="n">nan</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">nan</code><code class="w"> </code><code class="o">&lt;=</code><code class="w"> </code><code class="n">nan</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">nan</code><code class="w"> </code><code class="o">&gt;=</code><code class="w"> </code><code class="n">nan</code><code class="p">,</code><code class="w"> </code><code class="kc">false</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>So while Rust’s <code>==</code> operator meets the first two requirements for equivalence relations, it clearly doesn’t meet the third when used on IEEE floating-point values. This is called a <em>partial equivalence relation</em>, so Rust uses the name <code>PartialEq</code> for the <code>==</code> operator’s built-in trait. If you write generic code with type parameters known only to be <code>PartialEq</code>, you may assume the first two requirements hold, but you can’t assume that values always equal themselves.</p>
+
+<p>This can be more than a little inconvenient. Suppose you’re writing a generic lookup table. You might write something like <code>table_entry.key == search_key</code> to check whether an entry matches. This is the only reasonable thing to do, and it works correctly, except when the keys are floating-point numbers and we go searching for a NaN value. That exact NaN key might be present in the table, but it won’t match, because NaN isn’t <code>==</code> itself. The consequences might get quite silly. If the user decides to add a new entry whenever a match isn’t found, a single lookup table could accumulate many entries with the same NaN key.</p>
+
+<p>The only way to avoid this kind of nonsense in your generic code is to rule out types with such misbehaving values. Rust provides the <code>std::cmp::Eq</code> trait for this purpose. <code>Eq</code> represents a full equivalence relation: if a type implements <code>Eq</code>, then <code>x == x</code> must be <code>true</code> for every value <code>x</code> of that type. In practice, almost every type that implements <code>PartialEq</code> should implement <code>Eq</code> as well; <code>f32</code> and <code>f64</code> are the only types in the standard library that are <code>PartialEq</code> but not <code>Eq</code>.</p>
+
+<p>The standard library defines <code>Eq</code> as an extension of <code>PartialEq</code>, adding no new <span class="keep-together">methods:</span></p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq9">
+<code class="k">trait</code><code class="w"> </code><code class="nb">Eq</code><code class="p">:</code><code class="w"> </code><code class="nb">PartialEq</code><code class="o">&lt;</code><code class="bp">Self</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+</pre>
+
+<p>The trait has no features of its own, only those implied by the supertrait <code>PartialEq&lt;Self&gt;</code>. <code>Eq</code> is, indeed, nothing more than <code>PartialEq</code> plus one additional rule. Implementing it is therefore trivial:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq10">
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">Eq</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">Eq</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{}</code><code class="w"/>
+</pre>
+
+<p>Even this one line of code can be derived:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-eq11">
+<code class="cp">#[derive(Clone, Copy, Debug, Eq, PartialEq)]</code><code class="w"/>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Derived implementations on a generic type may depend on the type parameters. With the <code>derive</code> attribute, <code>Complex&lt;i32&gt;</code> would implement <code>Eq</code>, because <code>i32</code> does, but <code>Complex&lt;f32&gt;</code> would only implement <code>PartialEq</code>, since <code>f32</code> doesn’t implement <code>Eq</code>.</p>
+
+<p>If you insincerely implement <code>Eq</code> for a type where values aren’t equal to themselves, it won’t lead to undefined behavior, but other code that relies on the <code>Eq</code> promise, including standard library features like <code>HashMap</code>, may behave strangely and produce silly results.<a contenteditable="false" data-startref="ix_eq_trait" data-type="indexterm" id="id1448"/></p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Ordered Comparisons"><div class="sect1" id="ord">
+<h1>Ordered Comparisons</h1>
+
+<p>Rust specifies the behavior of the ordered<a contenteditable="false" data-primary="ordered comparison operators" data-type="indexterm" id="ix_ord_comp_operators"/><a contenteditable="false" data-primary="operator overloading" data-secondary="ordered comparisons" data-type="indexterm" id="ix_op_overload_ord_comp"/><a contenteditable="false" data-primary="&lt; operator" data-type="indexterm" id="id1449"/><a contenteditable="false" data-primary="&gt; operator" data-type="indexterm" id="id1450"/><a contenteditable="false" data-primary="&lt;= operator" data-type="indexterm" id="id1451"/><a contenteditable="false" data-primary="&gt;= operator" data-type="indexterm" id="id1452"/><a contenteditable="false" data-primary="comparison operators" data-secondary="overloading" data-type="indexterm" id="id1453"/> comparison operators <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, and <code>&gt;=</code> all in terms of a single trait<a contenteditable="false" data-primary="PartialOrd trait" data-type="indexterm" id="ix_partialord_trait"/>, <code>std::cmp::PartialOrd</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ord1">
+<code class="k">trait</code><code class="w"> </code><code class="nb">PartialOrd</code><code class="o">&lt;</code><code class="n">Rhs</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="bp">Self</code><code class="o">&gt;</code><code class="p">:</code><code class="w"> </code><code class="nb">PartialEq</code><code class="o">&lt;</code><code class="n">Rhs</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">Rhs</code><code class="p">:</code><code class="w"> </code><code class="o">?</code><code class="nb">Sized</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">partial_cmp</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">Ordering</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">lt</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">le</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">gt</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">ge</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Rhs</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">bool</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Note that <code>PartialOrd&lt;Rhs&gt;</code> extends <code>PartialEq&lt;Rhs&gt;</code>: you can do ordered comparisons only on types that you can also compare for equality.</p>
+
+<p>The only method of <code>PartialOrd</code> you must implement yourself is <code>partial_cmp</code>. When <code>partial_cmp</code> returns <code>Some(o)</code>, then <code>o</code> indicates <code>self</code>’s relationship to <code>other</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ord2">
+<code class="k">enum</code><code class="w"> </code><code class="nc">Ordering</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">Less</code><code class="p">,</code><code class="w">       </code><code class="c1">// self &lt; other</code>
+<code class="w">    </code><code class="n">Equal</code><code class="p">,</code><code class="w">      </code><code class="c1">// self == other</code>
+<code class="w">    </code><code class="n">Greater</code><code class="p">,</code><code class="w">    </code><code class="c1">// self &gt; other</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>But if <code>partial_cmp</code> returns <code>None</code>, that means <code>self</code> and <code>other</code> are unordered with respect to each other: neither is greater than the other, nor are they equal. Among all of Rust’s primitive types, only comparisons between floating-point values ever return <code>None</code>: specifically, comparing a NaN (not-a-number) value with anything else returns <code>None</code>.</p>
+
+<p>Like the other binary operators, to compare values of two types <code>Left</code> and <code>Right</code>, <code>Left</code> must implement <code>PartialOrd&lt;Right&gt;</code>. Expressions like <code>x &lt; y</code> or <code>x &gt;= y</code> are shorthand for calls to <code>PartialOrd</code> methods, as shown in <a data-type="xref" href="#built-in-traits-ord">Table 12-5</a>.</p>
+
+<table class="tallrow" id="built-in-traits-ord">
+	<caption><span class="label">Table 12-5. </span>Ordered comparison operators and <code>PartialOrd</code> methods</caption>
+	<thead>
+		<tr>
+			<th>Expression</th>
+			<th>Equivalent method call</th>
+			<th>Default definition</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<td><code>x &lt; y</code></td>
+			<td><code>PartialOrd::lt(&amp;x, &amp;y)</code></td>
+			<td><code>x.partial_cmp(&amp;y) == Some(Less)</code></td>
+		</tr>
+		<tr>
+			<td><code>x &gt; y</code></td>
+			<td><code>PartialOrd::gt(&amp;x, &amp;y)</code></td>
+			<td><code>x.partial_cmp(&amp;y) == Some(Greater)</code></td>
+		</tr>
+		<tr>
+			<td><code>x &lt;= y</code></td>
+			<td><code>PartialOrd::le(&amp;x, &amp;y)</code></td>
+			<td><code>matches!(x.partial_cmp(&amp;y), Some(Less | Equal))</code></td>
+		</tr>
+		<tr>
+			<td><code>x &gt;= y</code></td>
+			<td><code>PartialOrd::ge(&amp;x, &amp;y)</code></td>
+			<td><code>matches!(x.partial_cmp(&amp;y), Some(Greater | Equal))</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>As in prior examples, the code in the table assumes that <code>std::cmp::PartialOrd</code> and <code>std::cmp::Ordering::*</code> are in scope.</p>
+
+<p>If a type is totally ordered, so that <code>partial_cmp</code> never returns <code>None</code>, then the type can implement the stricter <code>std::cmp::Ord</code> trait:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ord3">
+<code class="k">trait</code><code class="w"> </code><code class="nb">Ord</code><code class="p">:</code><code class="w"> </code><code class="nb">Eq</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">PartialOrd</code><code class="o">&lt;</code><code class="bp">Self</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">cmp</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Ordering</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">max</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="nc">Self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">min</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="nc">Self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">clamp</code><code class="p">(</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">lo</code><code class="p">:</code><code class="w"> </code><code class="nc">Self</code><code class="p">,</code><code class="w"> </code><code class="n">hi</code><code class="p">:</code><code class="w"> </code><code class="nc">Self</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>cmp</code> method here simply returns an <code>Ordering</code>, instead of an <code>Option&lt;Ordering&gt;</code> like <code>partial_cmp</code>: <code>cmp</code> always declares its arguments equal or indicates their relative order. Almost all types that implement <code>PartialOrd</code> should also implement <code>Ord</code>. In the standard library, <code>f32</code> and <code>f64</code> are the only exceptions to this rule. Again, as with <code>Eq</code>, this is due to NaN values.</p>
+
+<p><code>Ord</code> provides three additional methods, all with straightforward default implementations:</p>
+
+<ul>
+	<li><strong><code>a.max(b)</code></strong> returns the greater of the two values <code>a</code> and <code>b</code>.</li>
+	<li><strong><code>a.min(b)</code></strong> returns the lesser of the two values.</li>
+	<li><strong><code>a.clamp(lo, hi)</code></strong> applies upper and lower bounds to the value <code>a</code>. That is, it returns the value in the inclusive range from <code>lo</code> to <code>hi</code> that is closest to <code>a</code>. It panics if <code>hi &lt; lo</code>.</li>
+</ul>
+
+<p>Types that implement <code>Ord</code> are also sortable. As we’ll see in <a data-type="xref" href="ch16.html#collections">Chapter 16</a>, the standard library has several sorting-related features: the <code>.sort()</code> method on slices, binary searching, B-trees, and binary heaps. All of these work only on types that implement <code>Ord</code>.</p>
+
+<p>However, there are real-world cases, even setting aside NaNs, where it makes sense to implement <code>PartialOrd</code> for a type that does not qualify as <code>Ord</code>. Suppose you’re working with the following type, representing the set of numbers falling within a given half-open interval:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ord4">
+<code class="cp">#[derive(Debug, PartialEq)]</code><code class="w"/>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Interval</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w">  </code><code class="c1">// inclusive</code>
+<code class="w">    </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w">  </code><code class="c1">// exclusive</code>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>You’d like to make values of this type partially ordered: one interval is less than another if it falls entirely before the other, with no overlap. If two unequal intervals overlap, they’re unordered: some element of each side is less than some element of the other. And two equal intervals are simply equal. The following implementation of <code>PartialOrd</code> implements those rules:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ord5">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">cmp</code><code class="p">::{</code><code class="n">Ordering</code><code class="p">,</code><code class="w"> </code><code class="nb">PartialOrd</code><code class="p">};</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">PartialOrd</code><code class="o">&gt;</code><code class="w"> </code><code class="nb">PartialOrd</code><code class="o">&lt;</code><code class="n">Interval</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Interval</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">partial_cmp</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">other</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Interval</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">Ordering</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">other</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="nb">Some</code><code class="p">(</code><code class="n">Ordering</code><code class="p">::</code><code class="n">Equal</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">lower</code><code class="w"> </code><code class="o">&gt;=</code><code class="w"> </code><code class="n">other</code><code class="p">.</code><code class="n">upper</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="nb">Some</code><code class="p">(</code><code class="n">Ordering</code><code class="p">::</code><code class="n">Greater</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="k">if</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">upper</code><code class="w"> </code><code class="o">&lt;=</code><code class="w"> </code><code class="n">other</code><code class="p">.</code><code class="n">lower</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="nb">Some</code><code class="p">(</code><code class="n">Ordering</code><code class="p">::</code><code class="n">Less</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="nb">None</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>With that implementation in place, you can write the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ord6">
+<code class="fm">assert!</code><code class="p">(</code><code class="n">Interval</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="mi">10</code><code class="p">,</code><code class="w"> </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="mi">20</code><code class="w"> </code><code class="p">}</code><code class="w"> </code><code class="o">&lt;</code><code class="w">  </code><code class="n">Interval</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="mi">20</code><code class="p">,</code><code class="w"> </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="mi">40</code><code class="w"> </code><code class="p">});</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="n">Interval</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="mi">7</code><code class="p">,</code><code class="w">  </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="mi">8</code><code class="w">  </code><code class="p">}</code><code class="w"> </code><code class="o">&gt;=</code><code class="w"> </code><code class="n">Interval</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w">  </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="mi">1</code><code class="w">  </code><code class="p">});</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="n">Interval</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="mi">7</code><code class="p">,</code><code class="w">  </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="mi">8</code><code class="w">  </code><code class="p">}</code><code class="w"> </code><code class="o">&lt;=</code><code class="w"> </code><code class="n">Interval</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="mi">7</code><code class="p">,</code><code class="w">  </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="mi">8</code><code class="w">  </code><code class="p">});</code><code class="w"/>
+
+<code class="c1">// Overlapping intervals aren't ordered with respect to each other.</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">left</code><code class="w">  </code><code class="o">=</code><code class="w"> </code><code class="n">Interval</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="mi">10</code><code class="p">,</code><code class="w"> </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="mi">30</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">right</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Interval</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">lower</code><code class="p">:</code><code class="w"> </code><code class="mi">20</code><code class="p">,</code><code class="w"> </code><code class="n">upper</code><code class="p">:</code><code class="w"> </code><code class="mi">40</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="o">!</code><code class="p">(</code><code class="n">left</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="n">right</code><code class="p">));</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="o">!</code><code class="p">(</code><code class="n">left</code><code class="w"> </code><code class="o">&gt;=</code><code class="w"> </code><code class="n">right</code><code class="p">));</code><code class="w"/>
+</pre>
+
+<p>Since this is not a total order, we’ve implemented only <code>PartialOrd</code>, not <code>Ord</code>. Therefore, if we want to sort a vector of intervals, simply calling <code>.sort()</code> won’t work. We must explicitly specify a sort order. Sorting by upper bound, for instance, can be done with <code>sort_by_key</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-ord7">
+<code class="n">intervals</code><code class="p">.</code><code class="n">sort_by_key</code><code class="p">(</code><code class="o">|</code><code class="n">i</code><code class="o">|</code><code class="w"> </code><code class="n">i</code><code class="p">.</code><code class="n">upper</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p><code>Interval&lt;i32&gt;</code> doesn’t implement <code>Ord</code>, but our sort key (<code>i.upper</code>, which is an <code>i32</code>) does. For more about sorting, see <a data-type="xref" href="ch16.html#sorting-and-searching">“Sorting and Searching”</a>.<a contenteditable="false" data-startref="ix_ord_comp_operators" data-type="indexterm" id="id1454"/><a contenteditable="false" data-startref="ix_op_overload_ord_comp" data-type="indexterm" id="id1455"/><a contenteditable="false" data-startref="ix_partialord_trait" data-type="indexterm" id="id1456"/></p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Index and IndexMut"><div class="sect1" id="index-and-indexmut">
+<h1>Index and IndexMut</h1>
+
+<p>Lastly, you can specify how an indexing<a contenteditable="false" data-primary="Index trait" data-type="indexterm" id="ix_index_trait"/><a contenteditable="false" data-primary="operator overloading" data-secondary="Index and IndexMut" data-type="indexterm" id="ix_op_overload_index"/><a contenteditable="false" data-primary="IndexMut trait" data-type="indexterm" id="ix_indexmut_trait"/> expression like <code>a[i]</code> works on your type by implementing the <code>std::ops::Index</code> and <code>std::ops::IndexMut</code> traits. <code>a[i]</code> is normally shorthand for <code>*std::ops::Index::index(&amp;a, i)</code>. When it’s assigned to or borrowed mutably, <code>a[i]</code> is instead shorthand for <code>*std::ops::IndexMut::index_mut(&amp;mut a, i)</code>.</p>
+
+<p>Here are the traits’ definitions:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index1">
+<code class="k">trait</code><code class="w"> </code><code class="n">Index</code><code class="o">&lt;</code><code class="n">Idx</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="p">:</code><code class="w"> </code><code class="o">?</code><code class="nb">Sized</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">index</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">index</code><code class="p">:</code><code class="w"> </code><code class="nc">Idx</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Self</code><code class="p">::</code><code class="n">Output</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">trait</code><code class="w"> </code><code class="n">IndexMut</code><code class="o">&lt;</code><code class="n">Idx</code><code class="o">&gt;</code><code class="p">:</code><code class="w"> </code><code class="nc">Index</code><code class="o">&lt;</code><code class="n">Idx</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">index_mut</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">index</code><code class="p">:</code><code class="w"> </code><code class="nc">Idx</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="bp">Self</code><code class="p">::</code><code class="n">Output</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Note that these traits take the type of the index expression as a parameter. You can index a slice with a single <code>usize</code>, referring to a single element, because slices implement <code>Index&lt;usize&gt;</code>. But you can refer to a subslice with an expression like <code>a[i..j]</code> because they also implement <code>Index&lt;Range&lt;usize&gt;&gt;</code>. That expression is shorthand for:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index2">
+<code class="o">*</code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Index</code><code class="p">::</code><code class="n">index</code><code class="p">(</code><code class="o">&amp;</code><code class="n">a</code><code class="p">,</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Range</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">start</code><code class="p">:</code><code class="w"> </code><code class="nc">i</code><code class="p">,</code><code class="w"> </code><code class="n">end</code><code class="p">:</code><code class="w"> </code><code class="nc">j</code><code class="w"> </code><code class="p">})</code><code class="w"/>
+</pre>
+
+<p>Rust’s <code>HashMap</code> and <code>BTreeMap</code> collections can be indexed by key. The last line of the following example works because <code>HashMap&lt;&amp;str, i32&gt;</code> implements <code>Index&lt;&amp;str&gt;</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index3">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">collections</code><code class="p">::</code><code class="n">HashMap</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">m</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">HashMap</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="n">m</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="s">"十"</code><code class="p">,</code><code class="w"> </code><code class="mi">10</code><code class="p">);</code><code class="w"/>
+<code class="n">m</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="s">"百"</code><code class="p">,</code><code class="w"> </code><code class="mi">100</code><code class="p">);</code><code class="w"/>
+<code class="n">m</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="s">"千"</code><code class="p">,</code><code class="w"> </code><code class="mi">1000</code><code class="p">);</code><code class="w"/>
+<code class="n">m</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="s">"万"</code><code class="p">,</code><code class="w"> </code><code class="mi">1_0000</code><code class="p">);</code><code class="w"/>
+<code class="n">m</code><code class="p">.</code><code class="n">insert</code><code class="p">(</code><code class="s">"億"</code><code class="p">,</code><code class="w"> </code><code class="mi">1_0000_0000</code><code class="p">);</code><code class="w"/>
+
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="n">m</code><code class="p">[</code><code class="s">"十"</code><code class="p">],</code><code class="w"> </code><code class="mi">10</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The assertion is equivalent to:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index4">
+<code class="fm">assert_eq!</code><code class="p">(</code><code class="o">*</code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Index</code><code class="p">::</code><code class="n">index</code><code class="p">(</code><code class="o">&amp;</code><code class="n">m</code><code class="p">,</code><code class="w"> </code><code class="s">"十"</code><code class="p">),</code><code class="w"> </code><code class="mi">10</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>The <code>Index</code> trait’s associated type <code>Output</code> specifies what type an indexing expression produces: for our <code>HashMap</code>, the <code>Index</code> implementation’s <code>Output</code> type is <code>i32</code>.</p>
+
+<p>The <code>IndexMut</code> trait extends <code>Index</code> with an <code>index_mut</code> method that takes a mutable reference to <code>self</code>, and returns a mutable reference to an <code>Output</code> value. Rust automatically selects <code>index_mut</code> when the indexing expression occurs in a context where it’s necessary. For example, suppose we write the following:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index5">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">desserts</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"Howalon"</code><code class="p">.</code><code class="n">to_string</code><code class="p">(),</code><code class="w"> </code><code class="s">"Soan papdi"</code><code class="p">.</code><code class="n">to_string</code><code class="p">()];</code><code class="w"/>
+<code class="n">desserts</code><code class="p">[</code><code class="mi">0</code><code class="p">].</code><code class="n">push_str</code><code class="p">(</code><code class="s">" (fictional)"</code><code class="p">);</code><code class="w"/>
+<code class="n">desserts</code><code class="p">[</code><code class="mi">1</code><code class="p">].</code><code class="n">push_str</code><code class="p">(</code><code class="s">" (real)"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Because the <code>push_str</code> method operates on <code>&amp;mut self</code>, those last two lines are equivalent to:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index6">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">IndexMut</code><code class="p">;</code><code class="w"/>
+<code class="p">(</code><code class="o">*</code><code class="n">IndexMut</code><code class="p">::</code><code class="n">index_mut</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">desserts</code><code class="p">,</code><code class="w"> </code><code class="mi">0</code><code class="p">)).</code><code class="n">push_str</code><code class="p">(</code><code class="s">" (fictional)"</code><code class="p">);</code><code class="w"/>
+<code class="p">(</code><code class="o">*</code><code class="n">IndexMut</code><code class="p">::</code><code class="n">index_mut</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">desserts</code><code class="p">,</code><code class="w"> </code><code class="mi">1</code><code class="p">)).</code><code class="n">push_str</code><code class="p">(</code><code class="s">" (real)"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>One limitation of <code>IndexMut</code> is that, by design, it must return a mutable reference to some value. This is why you can’t use an expression like <code>m["十"] = 10;</code> to insert a value into the <code>HashMap</code> <code>m</code>: the table would need to create an entry for <code>"十"</code> first, with some default value, and return a mutable reference to that. But not all types have cheap default values, and some may be expensive to drop; it would be a waste to create such a value only to be immediately dropped by the assignment.</p>
+
+<p>The most common use of indexing is for collections. For example, suppose we are working with bitmapped images, like the ones we created in the Mandelbrot set plotter in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>. Recall that our program contained code like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index7">
+<code class="n">pixels</code><code class="p">[</code><code class="n">row</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">column</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">..</code><code class="p">.;</code><code class="w"/>
+</pre>
+
+<p>It would be nicer to have an <code>Image&lt;u8&gt;</code> type that acts like a two-dimensional array, allowing us to access pixels without having to write out all the arithmetic:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index8">
+<code class="n">image</code><code class="p">[</code><code class="n">row</code><code class="p">][</code><code class="n">column</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">..</code><code class="p">.;</code><code class="w"/>
+</pre>
+
+<p>To do this, we’ll need to declare a struct:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index9">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Image</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">width</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">P</code><code class="p">:</code><code class="w"> </code><code class="nb">Default</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Copy</code><code class="o">&gt;</code><code class="w"> </code><code class="n">Image</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Creates a new image of the given size.</code>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">(</code><code class="n">width</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="n">height</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Image</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">Image</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">width</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="nc">vec</code><code class="o">!</code><code class="p">[</code><code class="n">P</code><code class="p">::</code><code class="n">default</code><code class="p">();</code><code class="w"> </code><code class="n">width</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">height</code><code class="p">],</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>And here are implementations of <code>Index</code> and <code>IndexMut</code> that would fit the bill:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-index10">
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">Index</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Image</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">type</code><code class="w"> </code><code class="nc">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">[</code><code class="n">P</code><code class="p">];</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">index</code><code class="p">(</code><code class="o">&amp;</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">row</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kp">&amp;</code><code class="p">[</code><code class="n">P</code><code class="p">]</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">start</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">row</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">width</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="o">&amp;</code><code class="bp">self</code><code class="p">.</code><code class="n">pixels</code><code class="p">[</code><code class="n">start</code><code class="o">..</code><code class="n">start</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">width</code><code class="p">]</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">impl</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">ops</code><code class="p">::</code><code class="n">IndexMut</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="k">for</code><code class="w"> </code><code class="n">Image</code><code class="o">&lt;</code><code class="n">P</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">index_mut</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">row</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="p">[</code><code class="n">P</code><code class="p">]</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">start</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">row</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">width</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">pixels</code><code class="p">[</code><code class="n">start</code><code class="o">..</code><code class="n">start</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="bp">self</code><code class="p">.</code><code class="n">width</code><code class="p">]</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>When you index into an <code>Image</code>, you get back a slice of pixels; indexing the slice gives you an individual pixel.</p>
+
+<p>Note that when we write <code>image[row][column]</code>, if <code>row</code> is out of bounds, our <code>index</code> method will try to index <code>self.pixels</code> out of range, triggering a panic. This is how <code>Index</code> and <code>IndexMut</code> implementations are supposed to behave: out-of-bounds access is detected and causes a panic, the same as when you index an array, slice, or vector out of bounds<a contenteditable="false" data-startref="ix_op_overload_index" data-type="indexterm" id="id1457"/><a contenteditable="false" data-startref="ix_indexmut_trait" data-type="indexterm" id="id1458"/><a contenteditable="false" data-startref="ix_index_trait" data-type="indexterm" id="id1459"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Other Operators"><div class="sect1" id="other-operators">
+<h1>Other Operators</h1>
+
+<p>Not all <a contenteditable="false" data-primary="operator overloading" data-secondary="limitations on" data-type="indexterm" id="id1460"/>operators can be overloaded in Rust. So far, the error-checking  <code>?</code> operator works only with <code>Result</code> and a few other standard library types, but work is in progress to expand this to user-defined types as well. Similarly, the logical operators <code>&amp;&amp;</code> and <code>||</code> are limited to Boolean values only. The <code>..</code> and <code>..=</code> operators always create a struct representing the range’s bounds, the <code>&amp;</code> operator always borrows references, and the <code>=</code> operator always moves or copies values. None of them can be overloaded.</p>
+
+<p>The dereferencing operator, <code>*val</code>, and the dot operator for accessing fields and calling methods, as in <code>val.field</code> and <code>val.method()</code>, can be overloaded using <a href="ch13.html#deref-and-derefmut">the <code>Deref</code> and <code>DerefMut</code> traits</a>, which are covered in the next chapter. (We did not include them here because these traits do more than just overload a few operators.)</p>
+
+<p>Rust does not support overloading the function call operator, <code>f(x)</code>. Instead, when you need a callable value, you’ll typically just write a closure<a contenteditable="false" data-startref="ix_op_overload_ch12" data-type="indexterm" id="id1461"/>. We’ll explain how this works and cover the <code>Fn</code>, <code>FnMut</code>, and <code>FnOnce</code> special traits in <a data-type="xref" href="ch14.html#closures">Chapter 14</a>.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

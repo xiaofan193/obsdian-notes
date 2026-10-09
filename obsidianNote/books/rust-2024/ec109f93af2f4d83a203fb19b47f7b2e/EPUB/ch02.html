@@ -1,0 +1,1296 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch02.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 2. A Tour of Rust">
+        <div class="chapter" id="a-tour-of-rust">
+<h1><span class="label">Chapter 2. </span>A Tour of Rust</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id606"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the second chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<p>Rust<a contenteditable="false" data-primary="Rust" data-type="indexterm" id="ix_rust_ch2"/> presents the authors of a book like this one with a challenge: what gives the language its character is not some specific, amazing feature that we can show off on the first page, but rather, the way all its parts are designed to work together smoothly in service of the goals we laid out in the last chapter: safe, performant systems programming. Each part of the language is best justified in the context of all the rest.</p>
+
+<p>So rather than tackle one language feature at a time, we’ve prepared a tour of a few small but complete programs, each of which introduces some more features of the language, in context:</p>
+
+<ul>
+	<li>
+	<p>As a warm-up, we have a program that does a simple calculation on its command-line arguments, with unit tests. This shows Rust’s core types and basic syntax.</p>
+	</li>
+	<li>
+	<p>Next, we build a web server. We’ll use a third-party library to handle the details of HTTP and introduce string handling, closures, and error handling.</p>
+	</li>
+	<li>
+	<p>Our last program plots a beautiful fractal, distributing the computation across multiple threads for speed. This includes an example of a generic function, illustrates how to handle something like a buffer of pixels, and shows off Rust’s support for concurrency.</p>
+	</li>
+</ul>
+
+<p>Rust’s promise to prevent undefined behavior with minimal impact on performance influences the design of every part of the system, from the standard data structures like vectors and strings to the way Rust programs use third-party libraries. The details of how this is managed are covered throughout the book. But for now, we want to show you that Rust is a capable and pleasant language to use.</p>
+
+<p>First, of course, you need to install Rust on your computer.</p>
+
+<section data-type="sect1" data-pdf-bookmark="rustup and Cargo"><div class="sect1" id="rustup-and-cargo">
+<h1>rustup and Cargo</h1>
+
+<p>The best<a contenteditable="false" data-primary="rustup" data-type="indexterm" id="ix_rustup"/><a contenteditable="false" data-primary="installation, Rust" data-type="indexterm" id="ix_install_rust"/><a contenteditable="false" data-primary="Rust" data-secondary="installation" data-type="indexterm" id="ix_rust_install"/><a contenteditable="false" data-primary="Cargo" data-secondary="rustup and" data-type="indexterm" id="ix_cargo_rustup"/> way to install Rust is to use <code>rustup</code>. Go to <a class="uri" href="https://rustup.rs"><em>https://rustup.rs</em></a> and follow the instructions there.</p>
+
+<p>You can, alternatively, go to the <a class="uri" href="https://oreil.ly/4Q2FB">Rust website</a> to get pre-built packages<a contenteditable="false" data-primary="Rust" data-secondary="website" data-type="indexterm" id="id607"/> for Linux<a contenteditable="false" data-primary="Linux" data-secondary="Rust package for" data-type="indexterm" id="id608"/>, macOS<a contenteditable="false" data-primary="macOS" data-secondary="Rust package for" data-type="indexterm" id="id609"/>, and Windows<a contenteditable="false" data-primary="Windows" data-secondary="Rust package for" data-type="indexterm" id="id610"/>. Rust is also included in some operating system distributions. We prefer <code>rustup</code> because it’s a tool for managing Rust installations, like RVM for Ruby or NVM for Node. For example, when a new version of Rust is released, you’ll be able to upgrade with zero clicks by typing <code>rustup update</code>.</p>
+
+<p>In any case, once you’ve completed the installation, you should have a few new commands available at your command line:</p>
+
+<pre class="console less_space" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>--version<code class="w"/>
+<code class="go">cargo 1.95.0 (f2d3ce0bd 2026-03-21)</code>
+<code class="gp">$ </code>rustc<code class="w"> </code>--version<code class="w"/>
+<code class="go">rustc 1.95.0 (59807616e 2026-04-14)</code>
+<code class="gp">$ </code>rustdoc<code class="w"> </code>--version<code class="w"/>
+<code class="go">rustdoc 1.95.0 (59807616e 2026-04-14)</code>
+</pre>
+
+<p>Here<a contenteditable="false" data-primary="command prompt ($)" data-type="indexterm" id="id611"/><a contenteditable="false" data-primary="$ (command prompt)" data-type="indexterm" id="id612"/>, the <code>$</code> is the command prompt; on Windows, this would be <code>PS C:\&gt;</code> or something similar. In this transcript we run the three commands we installed, asking each to report which version it is. Taking each command in turn:</p>
+
+<ul>
+	<li>
+	<p><code>cargo</code> is Rust’s compilation<a contenteditable="false" data-primary="cargo command" data-type="indexterm" id="id613"/> manager, package manager, and general-purpose tool. You can use Cargo to start a new project, build and run your program, and manage any external libraries your code depends on.</p>
+	</li>
+	<li>
+	<p><code>rustc</code> is the Rust compiler<a contenteditable="false" data-primary="rustc command" data-type="indexterm" id="id614"/>. Usually we let Cargo invoke the compiler for us, but sometimes it’s useful to run it directly.</p>
+	</li>
+	<li>
+	<p><code>rustdoc</code> is the Rust documentation<a contenteditable="false" data-primary="rustdoc command" data-type="indexterm" id="id615"/> tool. If you write documentation in comments of the appropriate form in your program’s source code, <code>rustdoc</code> can build nicely formatted HTML from them. Like <code>rustc</code>, we usually let Cargo run <code>rustdoc</code> for us.</p>
+	</li>
+</ul>
+
+<p>As a convenience, Cargo can create a new Rust package for us, with some standard metadata arranged appropriately:</p>
+
+<pre class="console less_space" data-code-language="console" data-new-project="bin hello" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>new<code class="w"> </code>hello<code class="w"/>
+<code class="go">    Creating binary (application) `hello` package</code>
+</pre>
+
+<p>This command creates a new package directory named <em>hello</em>, ready to build a command-line executable.</p>
+
+<p>Looking inside the package’s top-level directory:</p>
+
+<pre class="console less_space" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>hello<code class="w"/>
+<code class="gp">$ </code>ls<code class="w"> </code>-la<code class="w"/>
+<code class="go">total 24</code>
+<code class="go">drwxrwxr-x.  4 jimb jimb 4096 Sep 22 21:09 .</code>
+<code class="go">drwx------. 62 jimb jimb 4096 Sep 22 21:09 ..</code>
+<code class="go">drwxrwxr-x.  6 jimb jimb 4096 Sep 22 21:09 .git</code>
+<code class="go">-rw-rw-r--.  1 jimb jimb    7 Sep 22 21:09 .gitignore</code>
+<code class="go">-rw-rw-r--.  1 jimb jimb   88 Sep 22 21:09 Cargo.toml</code>
+<code class="go">drwxrwxr-x.  2 jimb jimb 4096 Sep 22 21:09 src</code>
+</pre>
+
+<p>We can see that Cargo has created a file <em>Cargo.toml</em> to hold metadata for the package. At the moment this file doesn’t contain much:</p>
+
+<pre class="toml less_space" data-code-language="toml" data-testing="match-whole-file Cargo.toml" data-type="programlisting">
+<code class="k">[package]</code><code class="w"/>
+<code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"hello"</code><code class="w"/>
+<code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.1.0"</code><code class="w"/>
+<code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2024"</code><code class="w"/>
+
+<code class="k">[dependencies]</code><code class="w"/>
+</pre>
+
+<p>If our program ever acquires dependencies on other libraries, we can record them in this file, and Cargo will take care of downloading, building, and updating those libraries for us. We’ll cover the <em>Cargo.toml</em> file in detail in <a data-type="xref" href="ch08.html#crates-and-modules">Chapter 8</a>.</p>
+
+<p>Cargo has set up our package for use with the <code>git</code> version control system, creating a <em>.git</em> metadata subdirectory and a <em>.gitignore</em> file. You can tell Cargo to skip this step by passing <code>--vcs none</code> to <code>cargo new</code> on the command line.</p>
+
+<p>The <em>src</em> subdirectory contains the actual Rust code:</p>
+
+<pre class="console less_space" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>src<code class="w"/>
+<code class="gp">$ </code>ls<code class="w"> </code>-l<code class="w"/>
+<code class="go">total 4</code>
+<code class="go">-rw-rw-r--. 1 jimb jimb 45 Sep 22 21:09 main.rs</code>
+</pre>
+
+<p>It seems that Cargo has begun writing the program on our behalf. The <em>main.rs</em> file contains the text:</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-whole-file src/main.rs" data-type="programlisting">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Hello, world!"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In Rust, you don’t even need to write your own “Hello, World!” program. And this is the extent of the boilerplate for a new Rust program: two files, totaling nine lines.</p>
+
+<p>We can invoke the <code>cargo run</code> command from any directory in the package to build and run our program:</p>
+
+<pre class="console less_space" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"/>
+<code class="go">   Compiling hello v0.1.0 (/home/jimb/rust/hello)</code>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s</code>
+<code class="go">     Running `/home/jimb/rust/hello/target/debug/hello`</code>
+<code class="go">Hello, world!</code>
+</pre>
+
+<p>Here, Cargo has invoked the Rust compiler, <code>rustc</code>, and then run the executable it produced. Cargo places the executable in the <em>target</em> subdirectory at the top of the package:</p>
+
+<pre class="console less_space" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>ls<code class="w"> </code>-l<code class="w"> </code>../target/debug<code class="w"/>
+<code class="go">total 580</code>
+<code class="go">drwxrwxr-x. 2 jimb jimb   4096 Sep 22 21:37 build</code>
+<code class="go">drwxrwxr-x. 2 jimb jimb   4096 Sep 22 21:37 deps</code>
+<code class="go">drwxrwxr-x. 2 jimb jimb   4096 Sep 22 21:37 examples</code>
+<code class="go">-rwxrwxr-x. 1 jimb jimb 576632 Sep 22 21:37 hello</code>
+<code class="go">-rw-rw-r--. 1 jimb jimb    198 Sep 22 21:37 hello.d</code>
+<code class="go">drwxrwxr-x. 2 jimb jimb     68 Sep 22 21:37 incremental</code>
+<code class="gp">$ </code>../target/debug/hello<code class="w"/>
+<code class="go">Hello, world!</code>
+</pre>
+
+<p>When we’re through, Cargo can clean up the generated files for us<a contenteditable="false" data-startref="ix_rustup" data-type="indexterm" id="id616"/><a contenteditable="false" data-startref="ix_rust_install" data-type="indexterm" id="id617"/><a contenteditable="false" data-startref="ix_cargo_rustup" data-type="indexterm" id="id618"/><a contenteditable="false" data-startref="ix_install_rust" data-type="indexterm" id="id619"/>:</p>
+
+<pre class="console less_space" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>clean<code class="w"/>
+<code class="go">     Removed 21 files, 8.4MiB total</code>
+<code class="gp">$ </code>../target/debug/hello<code class="w"/>
+<code class="go">bash: ../target/debug/hello: No such file or directory</code>
+</pre>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Rust Functions"><div class="sect1" id="rust-functions">
+<h1>Rust Functions</h1>
+
+<p>Rust’s syntax<a contenteditable="false" data-primary="Rust" data-secondary="functions in" data-type="indexterm" id="ix_rust_function"/><a contenteditable="false" data-primary="functions" data-secondary="syntax for" data-type="indexterm" id="ix_function_syntax"/> is deliberately unoriginal. If you are familiar with C, C‍++, Java, or JavaScript, you can probably find your way through the general structure of a Rust program. Here is a function that computes the greatest common divisor of two integers, using <a href="https://oreil.ly/DFpyb">Euclid’s algorithm</a>. You can add this code to the end of <em>src/main.rs</em>:</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="copy-code" data-type="programlisting">
+<code class="k">fn</code><code class="w"> </code><code class="nf">gcd</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">n</code><code class="p">:</code><code class="w"> </code><code class="kt">u64</code><code class="p">,</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">m</code><code class="p">:</code><code class="w"> </code><code class="kt">u64</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="kt">u64</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">while</code><code class="w"> </code><code class="n">m</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">m</code><code class="w"> </code><code class="o">&lt;</code><code class="w"> </code><code class="n">n</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">t</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">m</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="n">m</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">n</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="n">n</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">t</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="n">m</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">m</code><code class="w"> </code><code class="o">%</code><code class="w"> </code><code class="n">n</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">n</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>fn</code> keyword<a contenteditable="false" data-primary="fn keyword" data-type="indexterm" id="id620"/> (pronounced “fun”) introduces a function. Here, we’re defining a function named <code>gcd</code>, which<a contenteditable="false" data-primary="gcd function" data-type="indexterm" id="id621"/> takes two parameters <code>n</code> and <code>m</code>, each of which is of type <code>u64</code>, an unsigned 64-bit integer. The <code>-&gt;</code> token precedes the return type: our function returns a <code>u64</code> value. Four-space indentation is standard Rust style.</p>
+
+<p>Rust’s machine integer<a contenteditable="false" data-primary="integers" data-type="indexterm" id="id622"/> type names reflect their size and signedness: <code>i32</code> is a signed 32-bit integer; <code>u8</code> is an unsigned 8-bit integer (used for “byte” values), and so on. The <code>isize</code> and <code>usize</code> types hold pointer-sized signed and unsigned integers, 32 bits long on 32-bit platforms, and 64 bits long on 64-bit platforms. Rust also has two floating-point types, <code>f32</code> and <code>f64</code>, which are the IEEE single- and double-precision floating-point types, like <code>float</code> and <code>double</code> in C and C‍++.</p>
+
+<p>By default, once a variable is initialized, its value can’t be changed, but placing the <code>mut</code> keyword (pronounced “mute,” short for <em>mutable</em>) before the parameters <code>n</code> and <code>m</code> allows our function body to assign to them. In practice, most variables don’t get reassigned; the <code>mut</code> keyword<a contenteditable="false" data-primary="mut (mutable) keyword" data-type="indexterm" id="id623"/> on those that do can be a helpful hint when reading code.</p>
+
+<p>The heart of our function is a <code>while</code> loop<a contenteditable="false" data-primary="while loop" data-type="indexterm" id="id624"/> containing an <code>if</code> statement<a contenteditable="false" data-primary="if expression" data-type="indexterm" id="id625"/> and an assignment. Unlike C and C‍++, Rust does not require parentheses around the conditional expressions, but it does require curly braces around the statements they control.</p>
+
+<p>A <code>let</code> statement<a contenteditable="false" data-primary="let statement" data-type="indexterm" id="id626"/> declares a local variable, like <code>t</code> in our function. We don’t need to write out <code>t</code>’s type, as long as Rust can infer it from how the variable is used. In our function, the only type that works for <code>t</code> is <code>u64</code>, matching <code>m</code> and <code>n</code>. Rust only infers types within function bodies: you must write out the types of function parameters and return values, as we did before. If we wanted to spell out <code>t</code>’s type, we could write:</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="ignore" data-type="programlisting" id="test-gcd2">
+<code class="kd">let</code><code class="w"> </code><code class="n">t</code><code class="p">:</code><code class="w"> </code><code class="kt">u64</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">m</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>Rust has a <code>return</code> statement<a contenteditable="false" data-primary="return expressions" data-type="indexterm" id="id627"/>, but the <code>gcd</code> function doesn’t need one. If a function body ends with an expression that is <em>not</em> followed by a semicolon, that’s the function’s return value. In fact, any block surrounded by curly braces can function as an expression. For example, this is an expression that prints a message and then yields <code>x.cos()</code> as its value:</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="ignore" data-type="programlisting" id="test-gcd3">
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"evaluating cos x"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">x</code><code class="p">.</code><code class="n">cos</code><code class="p">()</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>It’s typical in Rust to use this form to establish the function’s value when control “falls off the end” of the function, and use <code>return</code> statements<a contenteditable="false" data-primary="return expressions" data-type="indexterm" id="id628"/> only for explicit early returns from the midst of a function<a contenteditable="false" data-startref="ix_function_syntax" data-type="indexterm" id="id629"/><a contenteditable="false" data-startref="ix_rust_function" data-type="indexterm" id="id630"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Writing and Running Unit Tests"><div class="sect1" id="writing-and-running-unit-tests">
+<h1>Writing and Running Unit Tests</h1>
+
+<p>Rust<a contenteditable="false" data-primary="Rust" data-secondary="unit testing in" data-type="indexterm" id="id631"/><a contenteditable="false" data-primary="unit testing" data-type="indexterm" id="id632"/> has simple support for testing built into the language. To test our <code>gcd</code> function, we can add this code at the end of <em>src/main.rs</em>:</p>
+
+<pre class="less_space" data-code-language="rust" data-type="programlisting">
+<code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">test_gcd</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">gcd</code><code class="p">(</code><code class="mi">14</code><code class="p">,</code><code class="w"> </code><code class="mi">15</code><code class="p">),</code><code class="w"> </code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">gcd</code><code class="p">(</code><code class="mi">2</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">3</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">54321</code><code class="p">,</code><code class="w"> </code><code class="mi">5</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">7</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="mi">54321</code><code class="p">),</code><code class="w"> </code><code class="mi">54321</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">gcd</code><code class="p">(</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="mi">0</code><code class="p">),</code><code class="w"> </code><code class="mi">0</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here we define a function named <code>test_gcd</code>, which calls <code>gcd</code> and checks that it returns correct values. The <code>#[test]</code> atop the definition marks <code>test_gcd</code> as a test function, to be skipped in normal compilations, but included and called automatically if we run our program with the <code>cargo test</code> command. We can have test functions scattered throughout our source tree, placed next to the code they exercise, and <code>cargo test</code> will automatically gather them up and run <span class="keep-together">them all.</span></p>
+
+<p>The <code>#[test]</code> marker is an example of an <em>attribute</em>. Attributes<a contenteditable="false" data-primary="attributes" data-type="indexterm" id="id633"/> are an open-ended system for marking functions and other declarations with extra information, like attributes in C‍++ and C#, or annotations in Java. They’re used to control compiler warnings and code style checks, include code conditionally (like <code>#ifdef</code> in C and <span class="keep-together">C‍++</span>), tell Rust how to interact with code written in other languages, and so on. We’ll see more examples of attributes as we go.</p>
+
+<p>The body of our test consists of several calls to the <code>assert_eq!</code> macro<a contenteditable="false" data-primary="assert_eq! macro" data-type="indexterm" id="id634"/>, testing the results of a few <code>gcd</code> test cases. The <code>!</code> character marks these as a macro calls, not function calls. During compilation, macro calls are “expanded” to Rust code. Our first use of <code>assert_eq!</code> expands to a bit of code that checks whether <code>gcd(14, 15)</code> is equal to <code>1</code>. If not, it prints a helpful error message including the two values and the source location of the failing check. Then it terminates the program, or in this case, the test. This kind of abrupt termination is called a <em>panic<a contenteditable="false" data-primary="panic" data-type="indexterm" id="id635"/></em>.</p>
+
+<p>There’s also an <code>assert!(condition);</code> macro<a contenteditable="false" data-primary="assert! macro" data-type="indexterm" id="id636"/> that checks a boolean condition. Like the <code>assert</code> macro in C and C‍++, Rust’s <code>assert!</code> and <code>assert_eq!</code> macros are commonly used to check invariants in regular code, not only in tests. Unlike C and C‍++, in which assertions can be skipped, Rust always checks assertions regardless of how the program was compiled. There are also <code>debug_assert!</code> and <code>debug_assert_eq!</code> macros<a contenteditable="false" data-primary="debug_assert! macro" data-type="indexterm" id="id637"/><a contenteditable="false" data-primary="debug_assert_eq! macro" data-type="indexterm" id="id638"/>, whose assertions are skipped when the program is compiled for speed.</p>
+
+<p>With our <code>gcd</code> and <code>test_gcd</code> definitions added to the <em>hello</em> package we created at the beginning of the chapter, and our current directory somewhere within the package’s subtree, we can run the tests as follows:</p>
+
+<pre class="console less_space" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code><code class="nb">test</code><code class="w"/>
+<code class="go">   Compiling hello v0.1.0 (/home/jimb/rust/hello)</code>
+<code class="go">    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.35s</code>
+<code class="go">     Running unittests src/main.rs (.../hello/target/debug/deps/hello-2375...)</code>
+
+<code class="go">running 1 test</code>
+<code class="go">test test_gcd ... ok</code>
+
+<code class="go">test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;</code>
+<code class="go">    finished in 0.00s</code>
+</pre>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Handling Command-Line Arguments"><div class="sect1" id="handling-command-line-arguments">
+<h1>Handling Command-Line Arguments</h1>
+
+<p>In order for our program to take a series of numbers as command-line arguments<a contenteditable="false" data-primary="Rust" data-secondary="command-line arguments" data-type="indexterm" id="ix_rust_command_arg"/><a contenteditable="false" data-primary="command-line arguments" data-type="indexterm" id="ix_command_arg"/> and print their greatest common divisor, we can replace the <code>main</code> function in <em>src/main.rs</em> with the following:</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="replace-fn-in-current-file main" data-type="programlisting">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="kt">str</code><code class="p">::</code><code class="n">FromStr</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">numbers</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">arg</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">().</code><code class="n">skip</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">numbers</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="kt">u64</code><code class="p">::</code><code class="n">from_str</code><code class="p">(</code><code class="o">&amp;</code><code class="n">arg</code><code class="p">).</code><code class="n">expect</code><code class="p">(</code><code class="s">"error parsing argument"</code><code class="p">));</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">numbers</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"Usage: gcd NUMBER ..."</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code><code class="p">::</code><code class="n">process</code><code class="p">::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">d</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">numbers</code><code class="p">[</code><code class="mi">0</code><code class="p">];</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">m</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">numbers</code><code class="p">[</code><code class="mi">1</code><code class="o">..</code><code class="p">]</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">d</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">gcd</code><code class="p">(</code><code class="n">d</code><code class="p">,</code><code class="w"> </code><code class="o">*</code><code class="n">m</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"The greatest common divisor of {numbers:?} is {d}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is a large block of code, so let’s take it piece by piece:</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="kt">str</code><code class="p">::</code><code class="n">FromStr</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The first <code>use</code> declaration brings the standard library<a contenteditable="false" data-primary="traits" data-type="indexterm" id="id639"/> <em>trait</em> <code>FromStr</code> into scope. A trait is a collection of function signatures that types can implement, like an interface in Java or C#. Any type that implements the <code>FromStr</code> trait has a <code>from_str</code> method<a contenteditable="false" data-primary="from_str method" data-type="indexterm" id="id640"/> that tries to parse a value of that type from a string. The <code>u64</code> type implements <code>FromStr</code>, and we’ll call <code>u64::from_str</code> to parse our command-line arguments. Although we never use the name <code>FromStr</code> elsewhere in the program, a trait must be in scope in order to use its methods. We’ll cover traits in detail in <a data-type="xref" href="ch11.html#traits-and-generics">Chapter 11</a>.</p>
+
+<p>The second <code>use</code> declaration brings in the <code>std::env</code> module, which provides several useful functions and types for interacting with the execution environment, including the <code>args</code> function<a contenteditable="false" data-primary="args function" data-type="indexterm" id="id641"/>, which gives us access to the program’s command-line arguments.</p>
+
+<p>Moving on to the program’s <code>main</code> function<a contenteditable="false" data-primary="main function" data-type="indexterm" id="id642"/>:</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+</pre>
+
+<p>Our <code>main</code> function doesn’t return a value, so we can simply omit the <code>-&gt;</code> and return type that would normally follow the parameter list.</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">numbers</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>We declare a mutable local variable <code>numbers</code> and initialize it to an empty vector. <code>Vec</code> is Rust’s growable vector<a contenteditable="false" data-primary="Vec type" data-type="indexterm" id="id643"/> type, analogous to C‍++’s <code>std::vector</code>, a Python list, or a JavaScript array. Even though vectors are designed to be grown and shrunk dynamically, we must still mark the variable <code>mut</code> for Rust to let us push numbers onto the end of it.</p>
+
+<p>The type of <code>numbers</code> is <code>Vec&lt;u64&gt;</code>, a vector of <code>u64</code> values, but as before, we don’t need to write that out. Rust will infer it for us, in part because what we push onto the vector are <code>u64</code> values, but also because we pass the vector’s elements to <code>gcd</code>, which accepts only <code>u64</code> values.</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">for</code><code class="w"> </code><code class="n">arg</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">().</code><code class="n">skip</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+</pre>
+
+<p>Here we use a <code>for</code> loop<a contenteditable="false" data-primary="for loop" data-type="indexterm" id="id644"/> to process our command-line arguments, setting the variable <code>arg</code> to each argument in turn and evaluating the loop body.</p>
+
+<p>The <code>std::env</code> module’s<a contenteditable="false" data-primary="env module" data-type="indexterm" id="id645"/> <code>args</code> function returns an <em>iterator</em><a contenteditable="false" data-primary="iterators" data-type="indexterm" id="id646"/> over the command-line arguments. That is, its return type implements the <code>Iterator</code> trait, which provides methods for looping over a sequence of values. Iterators are ubiquitous in Rust; the standard library includes other iterators that produce the elements of a vector, the lines of a file, messages received on a communications channel, and almost anything else that makes sense to loop over. Rust’s iterators are very efficient: the compiler is usually able to translate them into the same code as a handwritten loop. We’ll show how this works and give examples in <a data-type="xref" href="ch15.html#iterators">Chapter 15</a>.</p>
+
+<p>Beyond their use with <code>for</code> loops, iterators include a broad selection of methods you can use directly. For example, the first value produced by the iterator returned by <code>args</code> is always the name of the program being run. We want to skip that, so we call the iterator’s <code>skip</code> method to produce a new iterator that omits that first value.</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">numbers</code><code class="p">.</code><code class="n">push</code><code class="p">(</code><code class="kt">u64</code><code class="p">::</code><code class="n">from_str</code><code class="p">(</code><code class="o">&amp;</code><code class="n">arg</code><code class="p">).</code><code class="n">expect</code><code class="p">(</code><code class="s">"error parsing argument"</code><code class="p">));</code><code class="w"/>
+</pre>
+
+<p>Here we call <code>u64::from_str</code> to attempt to parse our command-line argument <code>arg</code> as an unsigned 64-bit integer. Rather than a method we’re invoking on a particular <code>u64</code> value, <code>u64::from_str</code> is a function associated with the <code>u64</code> type, akin to a static method in C‍++ or Java.</p>
+
+<p>The <code>from_str</code> function doesn’t return a <code>u64</code> directly, but rather a <code>Result</code> value that indicates whether the parse succeeded or failed. A <code>Result</code> value is one of two variants:</p>
+
+<ul>
+	<li>
+	<p>A value written <code>Ok(v)</code>, indicating that the parse succeeded and <code>v</code> is the value <span class="keep-together">produced</span></p>
+	</li>
+	<li>
+	<p>A value written <code>Err(e)</code>, indicating that the parse failed and <code>e</code> is an error value explaining why</p>
+	</li>
+</ul>
+
+<p>Functions that do anything that might fail, such as doing input or output or otherwise interacting with the operating system, can return <code>Result</code> types<a contenteditable="false" data-primary="Result type" data-type="indexterm" id="id647"/> whose <code>Ok</code> variants carry successful results—the count of bytes transferred, the file opened, and so on—and whose <code>Err</code> variants carry an error code indicating what went wrong. Unlike most modern languages, Rust does not have exceptions: all errors are handled using either <code>Result</code> or panic, as outlined in <a data-type="xref" href="ch07.html#error-handling">Chapter 7</a>.</p>
+
+<p>We use <code>Result</code>’s <code>expect</code> method<a contenteditable="false" data-primary="expect method" data-type="indexterm" id="id648"/> to check the success of our parse. If the result is an <code>Err(e)</code>, <code>expect</code> prints a message that includes a description of <code>e</code> and exits the program immediately. However, if the result is <code>Ok(v)</code>, <code>expect</code> simply returns <code>v</code> itself, which we are finally able to push onto the end of our vector of numbers.</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">if</code><code class="w"> </code><code class="n">numbers</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"Usage: gcd NUMBER ..."</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">std</code><code class="p">::</code><code class="n">process</code><code class="p">::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>There’s no greatest common divisor of an empty set of numbers, so we check that our vector has at least one element and exit the program with an error if it doesn’t. We use the <code>eprintln!</code> macro<a contenteditable="false" data-primary="eprintln! macro" data-type="indexterm" id="id649"/> to write our error message to the standard error output stream.</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">d</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">numbers</code><code class="p">[</code><code class="mi">0</code><code class="p">];</code><code class="w"/>
+<code class="k">for</code><code class="w"> </code><code class="n">m</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">numbers</code><code class="p">[</code><code class="mi">1</code><code class="o">..</code><code class="p">]</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">d</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">gcd</code><code class="p">(</code><code class="n">d</code><code class="p">,</code><code class="w"> </code><code class="o">*</code><code class="n">m</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This loop uses <code>d</code> as its running value, updating it to stay the greatest common divisor of all the numbers we’ve processed so far. As before, we must mark <code>d</code> as mutable so that we can assign to it in the loop.</p>
+
+<p>The <code>for</code> loop has two surprising bits to it. First, we wrote <code>for m in &amp;numbers[1..]</code>; what is the <code>&amp;</code> operator for? Second, we wrote <code>gcd(d, *m)</code>; what is the <code>*</code> in <code>*m</code> for? These two details are complementary to each other.</p>
+
+<p>Up to this point, our code has operated only on simple values like integers that fit in fixed-size blocks of memory. But now we’re about to iterate over a vector, which could be of any size whatsoever—possibly very large. Rust is cautious when handling such values: it wants to leave the programmer in control over memory consumption, making it clear how long each value lives, while still ensuring memory is freed promptly when no longer needed.</p>
+
+<p>So when we iterate, we want to tell Rust that <em>ownership<a contenteditable="false" data-primary="variables" data-secondary="ownership" data-type="indexterm" id="id650"/><a contenteditable="false" data-primary="ownership" data-secondary="iteration and" data-type="indexterm" id="id651"/></em> of the vector should remain with <code>numbers</code>; we are merely <em>borrowing<a contenteditable="false" data-primary="borrowing" data-secondary="iteration and" data-type="indexterm" id="id652"/></em> its elements for the loop. The <code>&amp;</code> operator<a contenteditable="false" data-primary="&amp; operator" data-type="indexterm" id="id653"/> in <code>&amp;numbers[1..]</code> borrows a <em>reference<a contenteditable="false" data-primary="references (pointer type)" data-secondary="iteration and" data-type="indexterm" id="id654"/></em> to the vector’s elements from the second onward. The <code>for</code> loop iterates over the referenced elements, letting <code>m</code> borrow each element in succession. The <code>*</code> operator<a contenteditable="false" data-primary="dereferencing" data-secondary="* operator" data-type="indexterm" id="id655"/><a contenteditable="false" data-primary="* operator" data-secondary="dereferencing" data-type="indexterm" id="id656"/> in <code>*m</code> <em>dereferences</em> <code>m</code>, yielding the value it refers to; this is the next <code>u64</code> we want to pass to <code>gcd</code>. Finally, since <code>numbers</code> owns the vector, Rust automatically frees it when <code>numbers</code> goes out of scope at the end of <code>main</code>.</p>
+
+<p>Rust’s rules for ownership and references are key to Rust’s memory management and safe concurrency; we discuss them in detail in Chapters <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch04.html#ownership">4</a> and <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch05.html#references">5</a>. You’ll need to be comfortable with those rules to be comfortable in Rust, but for this introductory tour, all you need to know is that <code>&amp;x</code> borrows a reference to <code>x</code>, and that <code>*r</code> is the value that the reference <code>r</code> refers to.</p>
+
+<p>Continuing our walk through the program:</p>
+
+<pre class="less_space" data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="fm">println!</code><code class="p">(</code><code class="s">"The greatest common divisor of {numbers:?} is {d}"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Having iterated over the elements of <code>numbers</code>, the program prints the results. The <code>println!</code> macro takes a format string, replaces the parts in braces <code>{...}</code> with the specified values, and writes the result to the standard output stream.</p>
+
+<p>When we reach the end of our <code>main</code> function and return normally, the process exits with an exit status of 0, indicating success. Alternatively, we could have our <code>main</code> function return a <code>std::process::ExitCode</code> or a <code>Result</code>, in which case the return value would determine the exit status. In the case of an error <code>Result</code>, Rust would also print the debug form of the error to <code>stderr</code>.</p>
+
+<p>The <code>cargo run</code> command allows us to pass arguments to our program, so we can try out our command-line handling:</p>
+
+<pre class="console less_space" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"> </code><code class="m">42</code><code class="w"> </code><code class="m">56</code><code class="w"/>
+<code class="go">   Compiling hello v0.1.0 (/home/jimb/rust/hello)</code>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.22s</code>
+<code class="go">     Running `/home/jimb/rust/hello/target/debug/hello 42 56`</code>
+<code class="go">The greatest common divisor of [42, 56] is 14</code>
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"> </code><code class="m">799459</code><code class="w"> </code><code class="m">28823</code><code class="w"> </code><code class="m">27347</code><code class="w"/>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s</code>
+<code class="go">     Running `/home/jimb/rust/hello/target/debug/hello 799459 28823 27347`</code>
+<code class="go">The greatest common divisor of [799459, 28823, 27347] is 41</code>
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"> </code><code class="m">83</code><code class="w"/>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s</code>
+<code class="go">     Running `/home/jimb/rust/hello/target/debug/hello 83`</code>
+<code class="go">The greatest common divisor of [83] is 83</code>
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"/>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s</code>
+<code class="go">     Running `/home/jimb/rust/hello/target/debug/hello`</code>
+<code class="go">Usage: gcd NUMBER ...</code>
+</pre>
+
+<p>We’ve used a few features from Rust’s standard library in this section. If you’re curious about what else is available, we strongly encourage you to try out Rust’s online documentation. It has a live search feature that makes exploration easy and even includes links to the source code. The <code>rustup</code> command automatically installs a copy on your computer when you install Rust itself. You can view the standard library documentation on the Rust <a href="https://oreil.ly/CGsB5">website</a>, or in your browser with the <span class="keep-together">command</span><a contenteditable="false" data-startref="ix_command_arg" data-type="indexterm" id="id657"/><a contenteditable="false" data-startref="ix_rust_command_arg" data-type="indexterm" id="id658"/>:</p>
+
+<pre class="console less_space" data-code-language="console" data-testing="ignore" data-type="programlisting">
+<code class="gp">$ </code>rustup<code class="w"> </code>doc<code class="w"> </code>--std<code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Serving Pages to the Web"><div class="sect1" id="serving-pages-to-the-web">
+<h1>Serving Pages to the Web</h1>
+
+<p>One<a contenteditable="false" data-primary="Rust" data-secondary="simple web server" data-type="indexterm" id="ix_rust_web_server"/><a contenteditable="false" data-primary="web server, creating with Rust" data-type="indexterm" id="ix_web_server_rust"/> of Rust’s strengths is the collection of freely available library packages published on the website <a class="orm:hideurl" href="https://crates.io">crates.io</a>. The <code>cargo</code> command makes it easy for your code to use a crates.io package: it will download the right version of the package, build it, and update it as requested. A Rust package, whether a library or an executable, is called a <em>crate</em>; Cargo and crates.io both derive their names from this term.</p>
+
+<p>To show how this works, we’ll put together a simple web server using the <code>actix-web</code> web framework<a contenteditable="false" data-primary="actix-web framework" data-type="indexterm" id="ix_actix-web_framework"/> crate, the <code>serde</code> serialization crate, and various other crates on which they depend. As shown in <a data-type="xref" href="#fig0201">Figure 2-1</a>, our website will prompt the user for two numbers and compute their greatest common divisor.</p>
+
+<figure><div id="fig0201" class="figure"><img alt="Web page offering to compute GCD" src="assets/pru3_0201.png" title="Web page offering to compute GCD" width="600" height="155"/>
+<h6><span class="label">Figure 2-1. </span>Web page offering to compute GCD</h6>
+</div></figure>
+
+<p>First, we’ll have Cargo create a new package for us, named <code>actix-gcd</code>:</p>
+
+<pre class="console less_space" data-code-language="console" data-new-project="bin actix-gcd" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>new<code class="w"> </code>actix-gcd<code class="w"/>
+<code class="go">    Creating binary (application) `actix-gcd` package</code>
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>actix-gcd<code class="w"/>
+</pre>
+
+<p>Then, we’ll tell Cargo which packages we want to use:</p>
+
+<pre class="console" data-code-language="console" data-testing="ignore-nonmatching-lines" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>add<code class="w"> </code>actix-web@4.13.0<code class="w"/>
+<code class="go">    Updating crates.io index</code>
+<code class="go">      Adding actix-web v4.13.0 to dependencies</code>
+<code class="go">    ...</code>
+<code class="gp">$ </code>cargo<code class="w"> </code>add<code class="w"> </code>serde@1.0.228<code class="w"> </code>--features<code class="w"> </code>derive<code class="w"/>
+<code class="go">    Updating crates.io index</code>
+<code class="go">      Adding serde v1.0.228 to dependencies</code>
+<code class="go">    ...</code>
+</pre>
+
+<p>We’ve included version numbers in these commands to ensure that the crates you get are compatible with the ones we used during testing. In practice, you’ll usually omit the version numbers, and <code>cargo add</code> will use the latest version.</p>
+
+<p>These commands add entries to our new project’s <em>Cargo.toml</em> file, which now looks like this:</p>
+
+<pre class="toml less_space" data-code-language="toml" data-testing="match-whole-file Cargo.toml" data-type="programlisting">
+<code class="k">[package]</code><code class="w"/>
+<code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"actix-gcd"</code><code class="w"/>
+<code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.1.0"</code><code class="w"/>
+<code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2024"</code><code class="w"/>
+
+<code class="k">[dependencies]</code><code class="w"/>
+<code class="n">actix-web</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"4.13.0"</code><code class="w"/>
+<code class="n">serde</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"1.0.228"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"derive"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Instead of using <code>cargo add</code>, you could simply open <em>Cargo.toml</em> in your editor and add the last two lines yourself. From now on, we’ll show <em>Cargo.toml</em> snippets instead of <code>cargo add</code> commands, as that is a bit easier to copy and paste and includes the version numbers for each package we’re using.</p>
+
+<p>Each line in the <code>[dependencies]</code> section of <em>Cargo.toml</em> gives the name of a crate on crates.io, and the version of that crate we would like to use. New versions of these crates are published frequently. By default, whenever we build this project from scratch on a new machine or run <code>cargo update</code>, Cargo will download the latest compatible version of these packages, perhaps Actix 4.15.1 and Serde 1.0.253. We’ll discuss version management in more detail in <a data-type="xref" href="ch08.html#crates-and-modules">Chapter 8</a>.</p>
+
+<p>Crates can have optional <em>features</em>:<a contenteditable="false" data-primary="features" data-secondary="crates and" data-type="indexterm" id="id659"/> parts of the interface or implementation that not all users need, and which are therefore excluded from the build by default. The <code>serde</code> crate offers a wonderfully terse way to handle data from web forms, but according to <code>serde</code>’s documentation, it is only available if we select the crate’s <code>derive</code> feature, so we’ve requested it in our <em>Cargo.toml</em> file as shown.</p>
+
+<p>Note that we need only name those crates we’ll use directly; <code>cargo</code> takes care of bringing in whatever other crates those need in turn.</p>
+
+<p>For our first iteration, we’ll keep the web server simple: it will serve only the page that prompts the user for numbers to compute with. We’ll replace the contents of <em>actix-gcd/src/main.rs</em> with the following:</p>
+
+<pre data-code-language="rust" data-testing="replace-whole-file src/main.rs" data-type="programlisting">
+<code class="k">use</code><code class="w"> </code><code class="n">actix_web</code><code class="p">::{</code><code class="n">App</code><code class="p">,</code><code class="w"> </code><code class="n">HttpResponse</code><code class="p">,</code><code class="w"> </code><code class="n">HttpServer</code><code class="p">,</code><code class="w"> </code><code class="n">web</code><code class="p">};</code><code class="w"/>
+
+<code class="cp">#[actix_web::main]</code><code class="w"/>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">server</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">HttpServer</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">App</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">route</code><code class="p">(</code><code class="s">"/"</code><code class="p">,</code><code class="w"> </code><code class="n">web</code><code class="p">::</code><code class="n">get</code><code class="p">().</code><code class="n">to</code><code class="p">(</code><code class="n">get_index</code><code class="p">))</code><code class="w"/>
+<code class="w">    </code><code class="p">});</code><code class="w"/>
+
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Serving on http://localhost:3000..."</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">server</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">bind</code><code class="p">(</code><code class="s">"127.0.0.1:3000"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error binding server to address"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">run</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="k">await</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error running server"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">get_index</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">HttpResponse</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">HttpResponse</code><code class="p">::</code><code class="nb">Ok</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">content_type</code><code class="p">(</code><code class="s">"text/html"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">body</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="s">r#"</code>
+<code class="s">                &lt;title&gt;GCD Calculator&lt;/title&gt;</code>
+<code class="s">                &lt;form action="/gcd" method="post"&gt;</code>
+<code class="s">                &lt;input type="text" name="n"/&gt;</code>
+<code class="s">                &lt;input type="text" name="m"/&gt;</code>
+<code class="s">                &lt;button type="submit"&gt;Compute GCD&lt;/button&gt;</code>
+<code class="s">                &lt;/form&gt;</code>
+<code class="s">            "#</code><code class="w"/>
+<code class="w">        </code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>We start with a <code>use</code> declaration to make some of the <code>actix-web</code> crate’s definitions easier to get at. When we write <code>use actix_web::{...}</code>, each of the names listed inside the curly brackets becomes directly usable in our code; instead of having to spell out the full name <code>actix_web::HttpResponse</code> each time we use it, we can simply refer to it as <code>HttpResponse</code>. (We’ll get to the <code>serde</code> crate in a bit.)</p>
+
+<p>This time our <code>main</code> function is an <code>async fn</code>, marked with the attribute <code>#[actix_web::main]</code>. <a contenteditable="false" data-primary="asynchronous code" data-secondary="in web server example" data-secondary-sortas="web server example" data-type="indexterm" id="id660"/>Actix is written using <em>asynchronous code</em> to support serving thousands of connections at a time without spawning thousands of system threads. Rust’s <code>async</code> and <code>await</code> features are in the same general family as <code>async/await</code> in C# and JavaScript, or the lightweight processes in Erlang. They’re a way to deal with tasks that don’t need the CPU all the time—perhaps because, as in our case, they will spend a lot of time waiting for the network. A single CPU core can keep many concurrent <code>async</code> tasks running responsively without the overhead of system threads. We’ll explain in <a data-type="xref" href="ch20.html#asynchronous-programming">Chapter 20</a>.</p>
+
+<p>The body of our <code>main</code> function<a contenteditable="false" data-primary="main function" data-type="indexterm" id="id661"/> is simple: it calls <code>HttpServer::new</code> to create a server that responds to requests for a single path, <code>"/"</code>; prints a message reminding us how to connect to it; and then sets it listening on TCP port 3000 on the local machine.</p>
+
+<p>The argument we pass to <code>HttpServer::new</code> is the Rust <em>closure</em> expression<a contenteditable="false" data-primary="closures" data-secondary="in web server example" data-secondary-sortas="web server example" data-type="indexterm" id="id662"/> <span class="keep-together"><code>|| { App::new() ... }</code></span>. A closure is a value that can be called as if it were a function. This closure takes no arguments, but if it did, their names would appear between the <code>||</code> vertical bars. The <code>{ ... }</code> is the body of the closure. When we start our server, Actix starts a pool of threads to handle incoming requests. Each thread calls our closure to get a fresh copy of the <code>App</code> value that tells it how to route and handle requests.</p>
+
+<p>The closure calls <code>App::new</code> to create a new, empty <code>App</code> and then calls its <code>route</code> method<a contenteditable="false" data-primary="route method" data-type="indexterm" id="id663"/> to add a single route for the path <code>"/"</code>. The handler provided for that route, <code>web::get().to(get_index)</code>, treats HTTP <code>GET</code> requests by calling the function <code>get_index</code>. The <code>route</code> method returns the same <code>App</code> it was invoked on, now enhanced with the new route. Since there’s no semicolon at the end of the closure’s body, the <code>App</code> is the closure’s return value, ready for the <code>HttpServer</code> thread to use.</p>
+
+<p>The <code>get_index</code> function<a contenteditable="false" data-primary="get_index function" data-type="indexterm" id="id664"/> builds an <code>HttpResponse</code> value representing the response to an HTTP <code>GET /</code> request. <code>HttpResponse::Ok()</code> represents an HTTP <code>200 OK</code> status, indicating that the request succeeded. We call its <code>content_type</code> and <code>body</code> methods to fill in the details of the response; each call returns the <code>HttpResponse</code> it was applied to, with the modifications made. Finally, the return value from <code>body</code> serves as the return value of <code>get_index</code>.</p>
+
+<p>Since the response text contains a lot of double quotes<a contenteditable="false" data-primary="double quotes" data-type="indexterm" id="id665"/>, we write it using the Rust “raw string” syntax: the letter <code>r</code>, zero or more hash marks (that is, the <code>#</code> character), a double quote, and then the contents of the string, terminated by another double quote followed by the same number of hash marks. Any character may occur within a raw string without being escaped, including double quotes; in fact, no escape sequences like <code>\"</code> are recognized. We can always ensure the string ends where we intend by using more hash marks around the quotes than ever appear in the text.</p>
+
+<p>Having written <em>main.rs</em>, we can use the <code>cargo run</code> command to do everything needed to set it running: fetching the needed crates, compiling them, building our own program, linking everything together, and starting it up:</p>
+
+<pre class="console" data-code-language="console" data-testing="cargo-build-instead" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"/>
+<code class="go">    Updating crates.io index</code>
+<code class="go"> Downloading crates ...</code>
+<code class="go">  Downloaded serde v1.0.100</code>
+<code class="go">  Downloaded actix-web v1.0.8</code>
+<code class="go">  Downloaded serde_derive v1.0.100</code>
+<code class="go">...</code>
+<code class="go">   Compiling serde_json v1.0.40</code>
+<code class="go">   Compiling actix-router v0.1.5</code>
+<code class="go">   Compiling actix-http v0.2.10</code>
+<code class="go">   Compiling awc v0.2.7</code>
+<code class="go">   Compiling actix-web v1.0.8</code>
+<code class="go">   Compiling gcd v0.1.0 (/home/jimb/rust/actix-gcd)</code>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1m 24s</code>
+<code class="go">     Running `/home/jimb/rust/actix-gcd/target/debug/actix-gcd`</code>
+<code class="go">Serving on http://localhost:3000...</code>
+</pre>
+
+<p>At this point, we can visit the given URL in our browser and see the page shown earlier in <a data-type="xref" href="#fig0201">Figure 2-1</a>.</p>
+
+<p>Unfortunately, clicking Compute GCD doesn’t do anything, other than navigate our browser to a blank page. Let’s fix that next, by adding another route to our <code>App</code> to handle the <code>POST</code> request from our form.</p>
+
+<p>It’s finally time to use the <code>serde</code> crate we listed in our <em>Cargo.toml</em> file: it provides a handy tool that will help us process the form data. First, we’ll need to add the following <code>use</code> declaration to the top of <em>src/main.rs</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting">
+<code class="k">use</code><code class="w"> </code><code class="n">serde</code><code class="p">::</code><code class="n">Deserialize</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>Rust programmers typically gather all their <code>use</code> declarations together toward the top of the file, but this isn’t strictly necessary: Rust allows declarations to occur in any order, as long as they appear at the appropriate level of nesting.</p>
+
+<p>Next, let’s define a Rust structure type that represents the values we expect from our form:</p>
+
+<pre data-code-language="rust" data-type="programlisting">
+<code class="cp">#[derive(Deserialize)]</code><code class="w"/>
+<code class="k">struct</code><code class="w"> </code><code class="nc">GcdParameters</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">n</code><code class="p">:</code><code class="w"> </code><code class="kt">u64</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">m</code><code class="p">:</code><code class="w"> </code><code class="kt">u64</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This defines a new type named <code>GcdParameters</code> that has two fields, <code>n</code> and <code>m</code>, each of which is a <code>u64</code>—the argument type our <code>gcd</code> function expects.</p>
+
+<p>The annotation above the <code>struct</code> definition is an attribute, like the <code>#[test]</code> attribute we used earlier to mark test functions. <a contenteditable="false" data-primary="#[derive] attribute" data-type="indexterm" id="id666"/><a contenteditable="false" data-primary="#[derive] attribute" data-primary-sortas="derive attribute" data-type="indexterm" id="id667"/>Placing a <code>#[derive(Deserialize)]</code> attribute above a type definition tells the <code>serde</code> crate to examine the type when the program is compiled and automatically generate code to parse a value of this type from data in the format that HTML forms use for <code>POST</code> requests. In fact, that attribute is sufficient to let you parse a <code>GcdParameters</code> value from almost any sort of structured data: JSON, YAML, TOML, or any one of a number of other textual and binary formats. The <code>serde</code> crate also provides a <code>Serialize</code> attribute that generates code to do the reverse, taking Rust values and writing them out in a structured format.</p>
+
+<p>The comma after <code>m: u64</code><a contenteditable="false" data-primary="comma, optional trailing" data-type="indexterm" id="id668"/> is optional, since it’s the last field. Rust consistently permits an extra trailing comma everywhere commas are used, and it is the standard style to include it whenever a list spans multiple lines. This includes array elements and function arguments. Using the same syntax on every line means less fiddling with punctuation when things change, and it makes for cleaner diffs.</p>
+
+<p>With this definition in place, we can write our handler function quite easily:</p>
+
+<pre data-code-language="rust" data-type="programlisting">
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">post_gcd</code><code class="p">(</code><code class="n">form</code><code class="p">:</code><code class="w"> </code><code class="nc">web</code><code class="p">::</code><code class="n">Form</code><code class="o">&lt;</code><code class="n">GcdParameters</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">HttpResponse</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">form</code><code class="p">.</code><code class="n">n</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="n">form</code><code class="p">.</code><code class="n">m</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="w"> </code><code class="n">HttpResponse</code><code class="p">::</code><code class="n">BadRequest</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">content_type</code><code class="p">(</code><code class="s">"text/html"</code><code class="p">)</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">body</code><code class="p">(</code><code class="s">"Computing the GCD with zero is boring."</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">response</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">format!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="s">"The greatest common divisor of the numbers {} and {} \</code>
+<code class="s">            is &lt;b&gt;{}&lt;/b&gt;</code><code class="se">\n</code><code class="s">"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">form</code><code class="p">.</code><code class="n">n</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">form</code><code class="p">.</code><code class="n">m</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">gcd</code><code class="p">(</code><code class="n">form</code><code class="p">.</code><code class="n">n</code><code class="p">,</code><code class="w"> </code><code class="n">form</code><code class="p">.</code><code class="n">m</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="n">HttpResponse</code><code class="p">::</code><code class="nb">Ok</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">content_type</code><code class="p">(</code><code class="s">"text/html"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">body</code><code class="p">(</code><code class="n">response</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>For a function to serve as an Actix request handler, its arguments must all have types Actix knows how to extract from an HTTP request. Our <code>post_gcd</code> function<a contenteditable="false" data-primary="post_gcd function" data-type="indexterm" id="id669"/> takes <span class="keep-together">one argument,</span> <code>form</code>, whose type is <code>web::Form&lt;GcdParameters&gt;</code>. Actix knows how <span class="keep-together">to extract</span> a value of any type <code>web::Form&lt;T&gt;</code> from an HTTP request if, and only if, <span class="keep-together"><code>T</code> can be</span> deserialized from HTML form <code>POST</code> data. Since we’ve placed the <code>#[derive(Deserialize)]</code> attribute on our <code>GcdParameters</code> type definition, Actix <span class="keep-together">can deserialize</span> it from form data, so request handlers can expect a <code>web::Form&lt;GcdParameters&gt;</code> value as a parameter. These relationships between types and functions are all worked out at compile time; if you write a handler function with an argument type that Actix doesn’t know how to handle, the Rust compiler lets you know of your mistake immediately.</p>
+
+<p>Looking inside <code>post_gcd</code>, the function first returns an HTTP 400 Bad Request error if either parameter is zero, since our <code>gcd</code> function will panic if they are. Then, it constructs a response to the request using the <code>format!</code> macro. The <code>format!</code> macro is just like the <code>println!</code> macro<a contenteditable="false" data-primary="println! macro" data-type="indexterm" id="id670"/>, except that instead of writing the text to the standard output, it returns it as a string. In this example, since the values we want to print are not simple variable names, we must use empty braces <code>{}</code> to mark the place where we want to insert them, then pass the values as extra arguments. Once it has obtained the text of the response, <code>post_gcd</code> wraps it up in an HTTP <code>200 OK</code> response, sets its content type, and returns it to be delivered to the sender.</p>
+
+<p>We also have to register <code>post_gcd</code> as the handler for the form. We’ll replace our <code>main</code> function with this version:</p>
+
+<pre data-code-language="rust" data-testing="replace-fn-in-current-file main" data-type="programlisting">
+<code class="cp">#[actix_web::main]</code><code class="w"/>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">server</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">HttpServer</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">App</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">route</code><code class="p">(</code><code class="s">"/"</code><code class="p">,</code><code class="w"> </code><code class="n">web</code><code class="p">::</code><code class="n">get</code><code class="p">().</code><code class="n">to</code><code class="p">(</code><code class="n">get_index</code><code class="p">))</code><code class="w"/>
+<code class="w">            </code><code class="p">.</code><code class="n">route</code><code class="p">(</code><code class="s">"/gcd"</code><code class="p">,</code><code class="w"> </code><code class="n">web</code><code class="p">::</code><code class="n">post</code><code class="p">().</code><code class="n">to</code><code class="p">(</code><code class="n">post_gcd</code><code class="p">))</code><code class="w"/>
+<code class="w">    </code><code class="p">});</code><code class="w"/>
+
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Serving on http://localhost:3000..."</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">server</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">bind</code><code class="p">(</code><code class="s">"127.0.0.1:3000"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error binding server to address"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">run</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="k">await</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error running server"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The only change here is that we’ve added another call to <code>route</code>, establishing <code>web::post().to(post_gcd)</code> as the handler for the path <code>"/gcd"</code>.</p>
+
+<p>The last remaining piece is the <code>gcd</code> function<a contenteditable="false" data-primary="gcd function" data-type="indexterm" id="id671"/> we wrote earlier, in <a data-type="xref" href="#rust-functions">“Rust Functions”</a>. Add that code to the <em>actix-gcd/src/main.rs</em> file. With that in place, you can interrupt any servers you might have left running and rebuild and restart the program:</p>
+
+<pre class="console" data-code-language="console" data-testing="paste-code cargo-build-instead" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"/>
+<code class="go">   Compiling actix-gcd v0.1.0 (/home/jimb/rust/actix-gcd)</code>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.0 secs</code>
+<code class="go">     Running `target/debug/actix-gcd`</code>
+<code class="go">Serving on http://localhost:3000...</code>
+</pre>
+
+<p>This time, by visiting <em>http://localhost:3000</em>, entering some numbers, and clicking the Compute GCD button, you should actually see some results<a contenteditable="false" data-startref="ix_web_server_rust" data-type="indexterm" id="id672"/><a contenteditable="false" data-startref="ix_actix-web_framework" data-type="indexterm" id="id673"/><a contenteditable="false" data-startref="ix_rust_web_server" data-type="indexterm" id="id674"/> (<a data-type="xref" href="#fig0202">Figure 2-2</a>).</p>
+
+<figure><div id="fig0202" class="figure"><img alt="Web page showing results of computing GCD" src="assets/pru3_0202.png" title="Web page showing results of computing GCD" width="600" height="155"/>
+<h6><span class="label">Figure 2-2. </span>Web page showing results of computing GCD</h6>
+</div></figure>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Concurrency"><div class="sect1" id="tour-concurrency">
+<h1 class="less_space">Concurrency</h1>
+
+<p>One<a contenteditable="false" data-primary="Rust" data-secondary="concurrency" data-type="indexterm" id="ix_rust_concurr_ch2"/><a contenteditable="false" data-primary="concurrency" data-secondary="Rust's support for" data-type="indexterm" id="ix_concurr_rust"/> of Rust’s great strengths is its support for concurrent programming. The same rules that ensure Rust programs are free of memory errors also ensure threads can share memory only in ways that avoid data races<a contenteditable="false" data-primary="data races" data-type="indexterm" id="id675"/>. For example:</p>
+
+<ul>
+	<li>
+	<p>If you use a mutex to coordinate threads making changes to a shared data structure, Rust ensures that you can’t access the data except when you’re holding the lock, and releases the lock automatically when you’re done. In C and C‍++, the relationship between a mutex and the data it protects is left to the comments.</p>
+	</li>
+	<li>
+	<p>If you want to share read-only data among several threads, Rust ensures that you cannot modify the data accidentally. In C and C‍++, the type system can help with this, but it’s easy to get it wrong.</p>
+	</li>
+	<li>
+	<p>If you transfer ownership of a data structure from one thread to another, Rust makes sure you have indeed relinquished all access to it. In C and C‍++, it’s up to you to check that nothing on the sending thread will ever touch the data again. If you don’t get it right, the effects can depend on what happens to be in the processor’s cache and how many writes to memory you’ve done recently. Not that we’re bitter.</p>
+	</li>
+</ul>
+
+<p>In this section, we’ll walk you through the process of writing your second multi-threaded program.</p>
+
+<p>You’ve already written your first: the Actix web framework you used to implement the Greatest Common Divisor server uses a pool of threads to run request handler functions. If the server receives simultaneous requests, it may run the <code>get_index</code> and <code>post_gcd</code> functions<a contenteditable="false" data-primary="get_index function" data-type="indexterm" id="id676"/><a contenteditable="false" data-primary="post_gcd function" data-type="indexterm" id="id677"/> in several threads at once. That may come as a bit of a shock, since we certainly didn’t have concurrency in mind when we wrote those functions. But Rust guarantees this is safe to do, no matter how elaborate your server gets: if your program compiles, it is free of data races. All Rust functions are thread-safe.</p>
+
+<p>This section’s program plots the Mandelbrot<a contenteditable="false" data-primary="Mandelbrot set" data-type="indexterm" id="ix_mandelbrot2_ch2"/><a contenteditable="false" data-primary="Mandelbrot set" data-secondary="concurrent implementation" data-type="indexterm" id="ix_mandelbrot_ch2"/> set, a fractal produced by iterating a simple function on complex numbers. Plotting the Mandelbrot set is often called an <em>embarrassingly parallel</em> algorithm<a contenteditable="false" data-primary="embarrassingly parallel algorithm" data-type="indexterm" id="id678"/>, because the pattern of communication between the threads is so simple; we’ll cover more complex patterns in <a data-type="xref" href="ch19.html#threads">Chapter 19</a>, but this task demonstrates some of the essentials.</p>
+
+<p>To get started, we’ll create a fresh Rust project:</p>
+
+<pre class="console" data-code-language="console" data-new-project="bin mandelbrot" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>new<code class="w"> </code>mandelbrot<code class="w"/>
+<code class="go">    Creating binary (application) `mandelbrot` package</code>
+<code class="gp">$ </code><code class="nb">cd</code><code class="w"> </code>mandelbrot<code class="w"/>
+</pre>
+
+<p>All the code will go in <em>mandelbrot/src/main.rs</em>, and we’ll add some dependencies to <em>mandelbrot/Cargo.toml</em>.</p>
+
+<p>Before we get into the concurrent Mandelbrot implementation, we need to describe the computation we’re going to perform.</p>
+
+<section data-type="sect2" data-pdf-bookmark="What the Mandelbrot Set Actually Is"><div class="sect2" id="what-the-mandelbrot-set-actually-is">
+<h2>What the Mandelbrot Set Actually Is</h2>
+
+<p>When reading code, it’s helpful to have a concrete idea of what it’s trying to do, so let’s take a short excursion into some pure mathematics. We’ll start with a simple case and then add complicating details until we arrive at the calculation at the heart of the Mandelbrot set.</p>
+
+<p>Here’s an infinite loop, written using Rust’s dedicated syntax for that, a <code>loop</code> <span class="keep-together">statement:</span></p>
+
+<pre data-code-language="rust" data-testing="ignore" data-type="programlisting" id="test-mand1">
+<code class="k">fn</code><code class="w"> </code><code class="nf">square_loop</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">x</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">x</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>In real life, Rust can see that <code>x</code> is never used for anything and so might not bother computing its value. But for the time being, assume the code runs as written. What happens to the value of <code>x</code>? Squaring any number between 0 and 1 makes it smaller, so it approaches zero; squaring 1 yields 1; squaring a number larger than 1 makes it larger, so it approaches infinity; and squaring a negative number makes it positive, after which it behaves like one of the prior cases (<a data-type="xref" href="#fig0203">Figure 2-3</a>).</p>
+
+<figure><div id="fig0203" class="figure"><img alt="real number line, showing effect of repeated squaring on various numbers" src="assets/pru3_0203.png" width="600" height="116"/>
+<h6><span class="label">Figure 2-3. </span>Effects of repeatedly squaring a number</h6>
+</div></figure>
+
+<p>So depending on the value you pass to <code>square_loop</code>, <code>x</code> stays at either zero or one, approaches zero, or approaches infinity.</p>
+
+<p>Now consider a slightly different loop:</p>
+
+<pre data-code-language="rust" data-testing="ignore" data-type="programlisting" id="test-mand2">
+<code class="k">fn</code><code class="w"> </code><code class="nf">square_add_loop</code><code class="p">(</code><code class="n">c</code><code class="p">:</code><code class="w"> </code><code class="kt">f64</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="mf">0.0</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">x</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">x</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">c</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This time, <code>x</code> starts at zero, and we tweak its progress in each iteration by adding in <code>c</code> after squaring it. This makes it harder to see how <code>x</code> fares, but some experimentation shows that if <code>c</code> is greater than 0.25 or less than −2.0, then <code>x</code> eventually becomes infinitely large; otherwise, it stays somewhere in the neighborhood of zero.</p>
+
+<p>The next wrinkle: instead of using <code>f64</code> values, consider the same loop using complex numbers. The <code>num</code> crate on crates.io provides a complex number type we can use, so we must add a line for <code>num</code> to the <code>[dependencies]</code> section in our program’s <em>Cargo.toml</em> file. While we’re here, we can also add the <code>image</code> crate, which we’ll use later.</p>
+
+<pre class="toml" data-code-language="toml" data-testing="replace-whole-file Cargo.toml" data-type="programlisting">
+<code class="k">[package]</code><code class="w"/>
+<code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"mandelbrot"</code><code class="w"/>
+<code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.1.0"</code><code class="w"/>
+<code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2024"</code><code class="w"/>
+
+<code class="k">[dependencies]</code><code class="w"/>
+<code class="n">num</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.4.3"</code><code class="w"/>
+<code class="n">image</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.25.10"</code><code class="w"/>
+</pre>
+
+<p>Now we can write the penultimate version of our loop:</p>
+
+<pre data-code-language="rust" data-testing="ignore" data-type="programlisting" id="test-mand3">
+<code class="k">use</code><code class="w"> </code><code class="n">num</code><code class="p">::</code><code class="n">Complex</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">complex_square_add_loop</code><code class="p">(</code><code class="n">c</code><code class="p">:</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">z</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="mf">0.0</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="mf">0.0</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">z</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">z</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">z</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">c</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>It’s traditional to use <code>z</code> for complex numbers, so we’ve renamed our looping variable. The expression <code>Complex { re: 0.0, im: 0.0 }</code> is the way we write complex zero using the <code>num</code> crate’s <code>Complex</code> type. <code>Complex</code> is a Rust structure<a contenteditable="false" data-primary="generic structs" data-type="indexterm" id="id679"/> type (or <em>struct</em>), defined like this:</p>
+
+<pre data-code-language="rust" data-testing="ignore" data-type="programlisting" id="test-mand4">
+<code class="k">struct</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// Real portion of the complex number</code>
+<code class="w">    </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Imaginary portion of the complex number</code>
+<code class="w">    </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="nc">T</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The preceding code defines a struct named <code>Complex</code>, with two fields, <code>re</code> and <code>im</code>. <code>Complex</code> is a <em>generic</em> structure: you can read the <code>&lt;T&gt;</code> after the type name as “for any type <code>T</code>.” For example, <code>Complex&lt;f64&gt;</code> is a complex number whose <code>re</code> and <code>im</code> fields are <code>f64</code> values, <code>Complex&lt;f32&gt;</code> would use 32-bit floats, and so on. Given this definition, an expression like <code>Complex { re: 0.24, im: 0.3 }</code> produces a <code>Complex</code> value with its <code>re</code> field initialized to 0.24, and its <code>im</code> field initialized to 0.3.</p>
+
+<p>The <code>num</code> crate arranges for <code>*</code>, <code>+</code>, and other arithmetic operators to work on <code>Complex</code> values, so the rest of the function works just like the prior version, except that it operates on points on the complex plane, not just points along the real number line. We’ll explain how you can make Rust’s operators work with your own types in <a data-type="xref" href="ch12.html#operator-overloading">Chapter 12</a>.</p>
+
+<p>Finally, we’ve reached the destination of our pure math excursion. The Mandelbrot set is defined as the set of complex numbers <code>c</code> for which <code>z</code> does not fly out to infinity. Our original simple squaring loop was predictable enough: any number greater than 1 or less than −1 flies away. Throwing a <code>+ c</code> into each iteration makes the behavior a little harder to anticipate: as we said earlier, values of <code>c</code> greater than 0.25 or less than <span class="keep-together">−2</span> cause <code>z</code> to fly away. But expanding the game to complex numbers produces truly bizarre and beautiful patterns, which are what we want to plot.</p>
+
+<p>Since a complex number <code>c</code> has both real and imaginary components <code>c.re</code> and <code>c.im</code>, we’ll treat these as the <code>x</code> and <code>y</code> coordinates of a point on the Cartesian plane, and color the point black if <code>c</code> is in the Mandelbrot set, or a lighter color otherwise. So for each pixel in our image, we must run the preceding loop on the corresponding point on the complex plane, see whether it escapes to infinity or orbits around the origin forever, and color it accordingly.</p>
+
+<p>The infinite loop takes a while to run, but there are two tricks for the impatient. First, if we give up on running the loop forever and just try some limited number of iterations, it turns out that we still get a decent approximation of the set. How many iterations we need depends on how precisely we want to plot the boundary. Second, it’s been shown that, if <code>z</code> ever once leaves the circle of radius 2 centered at the origin, it will definitely fly infinitely far away from the origin eventually. So here’s the final version of our loop, and the heart of our program:</p>
+
+<pre data-code-language="rust" data-testing="replace-whole-file src/main.rs" data-type="programlisting">
+<code class="k">use</code><code class="w"> </code><code class="n">num</code><code class="p">::</code><code class="n">Complex</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// Tries to determine if `c` is in the Mandelbrot set, using at most `limit`</code>
+<code class="sd">/// iterations to decide.</code>
+<code class="sd">///</code>
+<code class="sd">/// If `c` is not a member, this returns `Some(i)`, where `i` is the number of</code>
+<code class="sd">/// iterations it took for `c` to leave the circle of radius 2 centered on the</code>
+<code class="sd">/// origin. If `c` seems to be a member (more precisely, if we reached the</code>
+<code class="sd">/// iteration limit without being able to prove that `c` is not a member),</code>
+<code class="sd">/// this returns `None`.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">escape_time</code><code class="p">(</code><code class="n">c</code><code class="p">:</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="n">limit</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="kt">usize</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">z</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="mf">0.0</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="mf">0.0</code><code class="w"> </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="n">limit</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">if</code><code class="w"> </code><code class="n">z</code><code class="p">.</code><code class="n">norm_sqr</code><code class="p">()</code><code class="w"> </code><code class="o">&gt;</code><code class="w"> </code><code class="mf">4.0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">return</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">i</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="n">z</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">z</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">z</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">c</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">None</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This function takes the complex number <code>c</code> that we want to test for membership in the Mandelbrot set and a limit on the number of iterations to try before giving up and declaring <code>c</code> to probably be a member.</p>
+
+<p>The function’s return value is an <code>Option&lt;usize&gt;</code>. Rust’s standard library defines the <code>Option</code> type as follows:</p>
+
+<pre data-code-language="rust" data-testing="ignore" data-type="programlisting" id="test-mand5">
+<code class="k">enum</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">T</code><code class="p">),</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p><code>Option</code> is an <em>enumerated type<a contenteditable="false" data-primary="enumerated type (enum)" data-type="indexterm" id="id680"/></em>, often called an <em>enum</em>, because its definition enumerates several variants that a value of this type could be: for any type <code>T</code>, a value of type <code>Option&lt;T&gt;</code> is either <code>Some(v)</code>, where <code>v</code> is a value of type <code>T</code>, or <code>None</code>, indicating no <code>T</code> value is available. Like the <code>Complex</code> type we discussed earlier, <code>Option</code> is a generic type: you can use <code>Option&lt;T&gt;</code> to represent an optional value of any type <code>T</code> you like.</p>
+
+<p>In our case, <code>escape_time</code> returns an <code>Option&lt;usize&gt;</code> to indicate whether <code>c</code> is in the Mandelbrot set—and if it’s not, how long we had to iterate to find that out. If <code>c</code> is not in the set, <code>escape_time</code> returns <code>Some(i)</code>, where <code>i</code> is the number of the iteration at which <code>z</code> left the circle of radius 2. Otherwise, <code>c</code> is apparently in the set, and <code>escape_time</code> returns <code>None</code>.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">for</code><code class="w"> </code><code class="n">i</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="n">limit</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+</pre>
+
+<p>The earlier examples showed <code>for</code> loops iterating over command-line arguments and vector elements; this <code>for</code> loop simply iterates over the range of integers starting with <code>0</code> and up to (but not including) <code>limit</code>.</p>
+
+<p>The <code>z.norm_sqr()</code> method call returns the square of <code>z</code>’s distance from the origin. To decide whether <code>z</code> has left the circle of radius 2, instead of computing a square root, we just compare the squared distance with 4.0, which is faster.</p>
+
+<p>You may have noticed that we use <code>///</code> to mark the comment lines above the function definition; the comments above the members of the <code>Complex</code> structure start with <code>///</code> as well<a contenteditable="false" data-primary="/// (documentation comments)" data-type="indexterm" id="id681"/><a contenteditable="false" data-primary="documentation comments (///)" data-type="indexterm" id="id682"/>. These are <em>documentation comments</em>; the <code>rustdoc</code> utility knows how to parse them, together with the code they describe, and produce online documentation. The documentation for Rust’s standard library is written in this form. We describe documentation comments in detail in <a data-type="xref" href="ch08.html#crates-and-modules">Chapter 8</a>.</p>
+
+<p>The rest of the program is concerned with deciding which portion of the set to plot at what resolution and distributing the work across several threads to speed up the <span class="keep-together">calculation<a contenteditable="false" data-startref="ix_mandelbrot2_ch2" data-type="indexterm" id="id683"/>.</span></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Parsing Pair Command-Line Arguments"><div class="sect2" id="parsing-pair-command-line-arguments">
+<h2 class="less_space">Parsing Pair Command-Line Arguments</h2>
+
+<p>The program takes several command-line arguments<a contenteditable="false" data-primary="Mandelbrot set" data-secondary="parsing pair command-line arguments" data-type="indexterm" id="ix_mandelbrot_comm-line_args2"/><a contenteditable="false" data-primary="command-line arguments" data-type="indexterm" id="ix_command-line_args2"/> controlling the resolution of the image we’ll write and the portion of the Mandelbrot set the image shows. Since these command-line arguments all follow a common form, here’s a function to parse them:</p>
+
+<pre data-code-language="rust" data-type="programlisting">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="kt">str</code><code class="p">::</code><code class="n">FromStr</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// Parses the string `s` as a coordinate pair, like `"400x600"` or `"1.0,0.5"`.</code>
+<code class="sd">///</code>
+<code class="sd">/// Specifically, `s` should have the form &lt;left&gt;&lt;sep&gt;&lt;right&gt;, where &lt;sep&gt; is</code>
+<code class="sd">/// the character given by the `separator` argument, and &lt;left&gt; and &lt;right&gt; are</code>
+<code class="sd">/// both strings that can be parsed by `T::from_str`. `separator` must be an</code>
+<code class="sd">/// ASCII character.</code>
+<code class="sd">///</code>
+<code class="sd">/// If `s` has the proper form, this returns `Some&lt;(x, y)&gt;`. If it doesn't parse</code>
+<code class="sd">/// correctly, this returns `None`.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">parse_pair</code><code class="o">&lt;</code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nc">FromStr</code><code class="o">&gt;</code><code class="p">(</code><code class="n">s</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">separator</code><code class="p">:</code><code class="w"> </code><code class="kt">char</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="p">(</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">s</code><code class="p">.</code><code class="n">find</code><code class="p">(</code><code class="n">separator</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">index</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="k">match</code><code class="w"> </code><code class="p">(</code><code class="n">T</code><code class="p">::</code><code class="n">from_str</code><code class="p">(</code><code class="o">&amp;</code><code class="n">s</code><code class="p">[</code><code class="o">..</code><code class="n">index</code><code class="p">]),</code><code class="w"> </code><code class="n">T</code><code class="p">::</code><code class="n">from_str</code><code class="p">(</code><code class="o">&amp;</code><code class="n">s</code><code class="p">[</code><code class="n">index</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="o">..</code><code class="p">]))</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="p">(</code><code class="nb">Ok</code><code class="p">(</code><code class="n">l</code><code class="p">),</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">r</code><code class="p">))</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">((</code><code class="n">l</code><code class="p">,</code><code class="w"> </code><code class="n">r</code><code class="p">)),</code><code class="w"/>
+<code class="w">                </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">test_parse_pair</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">parse_pair</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">(</code><code class="s">""</code><code class="p">,</code><code class="w">        </code><code class="sc">','</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">parse_pair</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">(</code><code class="s">"10,"</code><code class="p">,</code><code class="w">     </code><code class="sc">','</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">parse_pair</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">(</code><code class="s">",10"</code><code class="p">,</code><code class="w">     </code><code class="sc">','</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">parse_pair</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">(</code><code class="s">"10,20"</code><code class="p">,</code><code class="w">   </code><code class="sc">','</code><code class="p">),</code><code class="w"> </code><code class="nb">Some</code><code class="p">((</code><code class="mi">10</code><code class="p">,</code><code class="w"> </code><code class="mi">20</code><code class="p">)));</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">parse_pair</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">i32</code><code class="o">&gt;</code><code class="p">(</code><code class="s">"10,20xy"</code><code class="p">,</code><code class="w"> </code><code class="sc">','</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">parse_pair</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="p">(</code><code class="s">"0.5x"</code><code class="p">,</code><code class="w">    </code><code class="sc">'x'</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">parse_pair</code><code class="p">::</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="p">(</code><code class="s">"0.5x1.5"</code><code class="p">,</code><code class="w"> </code><code class="sc">'x'</code><code class="p">),</code><code class="w"> </code><code class="nb">Some</code><code class="p">((</code><code class="mf">0.5</code><code class="p">,</code><code class="w"> </code><code class="mf">1.5</code><code class="p">)));</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The definition of <code>parse_pair</code> is a <em>generic function<a contenteditable="false" data-primary="functions" data-secondary="generic" data-type="indexterm" id="id684"/><a contenteditable="false" data-primary="generic code" data-secondary="generic functions" data-type="indexterm" id="id685"/></em>:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">fn</code><code class="w"> </code><code class="nf">parse_pair</code><code class="o">&lt;</code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nc">FromStr</code><code class="o">&gt;</code><code class="p">(</code><code class="n">s</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"> </code><code class="n">separator</code><code class="p">:</code><code class="w"> </code><code class="kt">char</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="p">(</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="p">)</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+</pre>
+
+<p>You can read the clause <code>&lt;T: FromStr&gt;</code> aloud as, “For any type <code>T</code> that implements the <code>FromStr</code> trait...” This effectively lets us define an entire family of functions at once: <code>parse_pair::&lt;i32&gt;</code> is a function<a contenteditable="false" data-primary="parse_pair function" data-type="indexterm" id="id686"/> that parses pairs of <code>i32</code> values, <code>parse_pair::&lt;f64&gt;</code> parses pairs of floating-point values, and so on. This is very much like a function template in C‍++. A Rust programmer would call <code>T</code> a <em>type parameter<a contenteditable="false" data-primary="parameters" data-secondary="type" data-type="indexterm" id="id687"/><a contenteditable="false" data-primary="type parameters" data-type="indexterm" id="id688"/></em> of <code>parse_pair</code>. When you use a generic function, Rust will often be able to infer type parameters for you, and you won’t need to write them out as we did in the test code.</p>
+
+<p>Our return type is <code>Option&lt;(T, T)&gt;</code>: either <code>None</code> or a value <code>Some((v1, v2))</code>, where <code>(v1, v2)</code> is a tuple of two values, both of type <code>T</code>. The <code>parse_pair</code> function doesn’t use an explicit return statement, so its return value is the value of the last (and the only) expression in its body:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">match</code><code class="w"> </code><code class="n">s</code><code class="p">.</code><code class="n">find</code><code class="p">(</code><code class="n">separator</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="nb">Some</code><code class="p">(</code><code class="n">index</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>String</code> type’s<a contenteditable="false" data-primary="String and str types" data-type="indexterm" id="id689"/> <code>find</code> method<a contenteditable="false" data-primary="find method" data-type="indexterm" id="id690"/> searches the string for a character that matches <code>separator</code>. If <code>find</code> returns <code>None</code>, meaning that the separator character doesn’t occur in the string, the entire <code>match</code> expression<a contenteditable="false" data-primary="match expression" data-type="indexterm" id="id691"/> evaluates to <code>None</code>, indicating that the parse failed. Otherwise, we take <code>index</code> to be the separator’s position in the string.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">match</code><code class="w"> </code><code class="p">(</code><code class="n">T</code><code class="p">::</code><code class="n">from_str</code><code class="p">(</code><code class="o">&amp;</code><code class="n">s</code><code class="p">[</code><code class="o">..</code><code class="n">index</code><code class="p">]),</code><code class="w"> </code><code class="n">T</code><code class="p">::</code><code class="n">from_str</code><code class="p">(</code><code class="o">&amp;</code><code class="n">s</code><code class="p">[</code><code class="n">index</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="o">..</code><code class="p">]))</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="p">(</code><code class="nb">Ok</code><code class="p">(</code><code class="n">l</code><code class="p">),</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">r</code><code class="p">))</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">((</code><code class="n">l</code><code class="p">,</code><code class="w"> </code><code class="n">r</code><code class="p">)),</code><code class="w"/>
+<code class="w">    </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This begins to show off the power of the <code>match</code> expression. The argument to the match is this tuple expression:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="p">(</code><code class="n">T</code><code class="p">::</code><code class="n">from_str</code><code class="p">(</code><code class="o">&amp;</code><code class="n">s</code><code class="p">[</code><code class="o">..</code><code class="n">index</code><code class="p">]),</code><code class="w"> </code><code class="n">T</code><code class="p">::</code><code class="n">from_str</code><code class="p">(</code><code class="o">&amp;</code><code class="n">s</code><code class="p">[</code><code class="n">index</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="mi">1</code><code class="o">..</code><code class="p">]))</code><code class="w"/>
+</pre>
+
+<p>The expressions <code>&amp;s[..index]</code> and <code>&amp;s[index + 1..]</code> are slices of the string, preceding and following the separator. The type parameter <code>T</code>’s associated <code>from_str</code> function takes each of these and tries to parse them as a value of type <code>T</code>, producing a tuple of results. This is what we match against:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="p">(</code><code class="nb">Ok</code><code class="p">(</code><code class="n">l</code><code class="p">),</code><code class="w"> </code><code class="nb">Ok</code><code class="p">(</code><code class="n">r</code><code class="p">))</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">((</code><code class="n">l</code><code class="p">,</code><code class="w"> </code><code class="n">r</code><code class="p">)),</code><code class="w"/>
+</pre>
+
+<p>This pattern matches only if both <code>Result</code>s are <code>Ok</code> variants, indicating that both parses succeeded. If so, <code>Some((l, r))</code> is the value of the match expression and hence the return value of the function.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="w"/>
+</pre>
+
+<p>The wildcard pattern <code>_</code> matches anything and ignores its value. If we reach this point, then <code>parse_pair</code> has failed, so we evaluate to <code>None</code>, again providing the return value of the function.</p>
+
+<p>Now that we have <code>parse_pair</code>, it’s easy to write a function to parse a pair of floating-point coordinates and return them as a <code>Complex&lt;f64&gt;</code> value<a contenteditable="false" data-primary="complex numbers" data-type="indexterm" id="id692"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting">
+<code class="sd">/// Parses a pair of floating-point numbers separated by a comma as a</code>
+<code class="sd">/// complex number.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">parse_complex</code><code class="p">(</code><code class="n">s</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">Complex</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">parse_pair</code><code class="p">(</code><code class="n">s</code><code class="p">,</code><code class="w"> </code><code class="sc">','</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">((</code><code class="n">re</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">))</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="w"> </code><code class="p">}),</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">test_parse_complex</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">parse_complex</code><code class="p">(</code><code class="s">"1.25,-0.0625"</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="mf">1.25</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="mf">0.0625</code><code class="w"> </code><code class="p">}),</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="n">parse_complex</code><code class="p">(</code><code class="s">",-0.0625"</code><code class="p">),</code><code class="w"> </code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The <code>parse_complex</code> function<a contenteditable="false" data-primary="parse_complex function" data-type="indexterm" id="id693"/> calls <code>parse_pair</code>, builds a <code>Complex</code> value if the coordinates were parsed successfully, and passes failures along to its caller.</p>
+
+<p>If you were reading closely, you may have noticed that we used a shorthand notation to build the <code>Complex</code> value<a contenteditable="false" data-primary="numbers, complex" data-type="indexterm" id="id694"/>. It’s common to initialize a struct’s fields with variables of the same name, so rather than forcing you to write <code>Complex { re: re, im: im }</code>, Rust lets you simply write <code>Complex { re, im }</code>. This is modeled on similar notations in JavaScript and Haskell<a contenteditable="false" data-startref="ix_command-line_args2" data-type="indexterm" id="id695"/><a contenteditable="false" data-startref="ix_mandelbrot_comm-line_args2" data-type="indexterm" id="id696"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Mapping from Pixels to Complex Numbers"><div class="sect2" id="mapping-from-pixels-to-complex-numbers">
+<h2>Mapping from Pixels to Complex Numbers</h2>
+
+<p>The program<a contenteditable="false" data-primary="map and mapping" data-type="indexterm" id="id697"/> needs to work in two related coordinate spaces: each pixel in the output image corresponds to a point on the complex plane. The relationship between these two spaces depends on which portion of the Mandelbrot<a contenteditable="false" data-primary="Mandelbrot set" data-secondary="mapping from pixels to complex numbers" data-type="indexterm" id="id698"/> set we’re going to plot, and the resolution of the image requested, as determined by command-line arguments. The following function converts from <em>image space<a contenteditable="false" data-primary="image space, mapping to complex number plane" data-type="indexterm" id="id699"/></em> to <em>complex number space</em>:</p>
+
+<pre data-code-language="rust" data-type="programlisting">
+<code class="sd">/// Computes the point on the complex plane that corresponds to a given</code>
+<code class="sd">/// pixel in the output image.</code>
+<code class="sd">///</code>
+<code class="sd">/// `bounds` is a pair giving the width and height of the image in pixels.</code>
+<code class="sd">/// `pixel` is a (column, row) pair indicating a particular pixel in that image.</code>
+<code class="sd">/// The `upper_left` and `lower_right` parameters are points on the complex</code>
+<code class="sd">/// plane designating the area our image covers.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">pixel_to_point</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">bounds</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">pixel</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">upper_left</code><code class="p">:</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">lower_right</code><code class="p">:</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">width</code><code class="p">,</code><code class="w"> </code><code class="n">height</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">lower_right</code><code class="p">.</code><code class="n">re</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">upper_left</code><code class="p">.</code><code class="n">re</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">upper_left</code><code class="p">.</code><code class="n">im</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">lower_right</code><code class="p">.</code><code class="n">im</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="nc">upper_left</code><code class="p">.</code><code class="n">re</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">pixel</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">f64</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">width</code><code class="w">  </code><code class="o">/</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">f64</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="nc">upper_left</code><code class="p">.</code><code class="n">im</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">pixel</code><code class="p">.</code><code class="mi">1</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">f64</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">height</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">1</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">f64</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="c1">// Why subtraction here? pixel.1 increases as we go down,</code>
+<code class="w">        </code><code class="c1">// but the imaginary component increases as we go up.</code>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[test]</code><code class="w"/>
+<code class="k">fn</code><code class="w"> </code><code class="nf">test_pixel_to_point</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert_eq!</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">pixel_to_point</code><code class="p">(</code><code class="w"/>
+<code class="w">            </code><code class="p">(</code><code class="mi">100</code><code class="p">,</code><code class="w"> </code><code class="mi">200</code><code class="p">),</code><code class="w"/>
+<code class="w">            </code><code class="p">(</code><code class="mi">25</code><code class="p">,</code><code class="w"> </code><code class="mi">175</code><code class="p">),</code><code class="w"/>
+<code class="w">            </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="mf">1.0</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="mf">1.0</code><code class="w"> </code><code class="p">},</code><code class="w"/>
+<code class="w">            </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="mf">1.0</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="mf">1.0</code><code class="w"> </code><code class="p">},</code><code class="w"/>
+<code class="w">        </code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="n">Complex</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">re</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="mf">0.5</code><code class="p">,</code><code class="w"> </code><code class="n">im</code><code class="p">:</code><code class="w"> </code><code class="o">-</code><code class="mf">0.75</code><code class="w"> </code><code class="p">},</code><code class="w"/>
+<code class="w">    </code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p><a data-type="xref" href="#tour-pixel-to-point">Figure 2-4</a> illustrates the calculation <code>pixel_to_point</code> performs.</p>
+
+<p>The code of <code>pixel_to_point</code> is simply calculation, so we won’t explain it in detail. However, there are a few things to point out. Expressions with this form refer to tuple fields:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">pixel</code><code class="p">.</code><code class="mi">0</code><code class="w"/>
+</pre>
+
+<p>This refers to the first field of the tuple <code>pixel</code>.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">pixel</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">f64</code><code class="w"/>
+</pre>
+
+<p>This is Rust’s syntax for a type conversion: this converts <code>pixel.0</code> to an <code>f64</code> value. Unlike C and C‍++, Rust generally refuses to convert between numeric types implicitly; you must write out the conversions you need. This can be tedious, but being explicit about which conversions occur and when is surprisingly helpful. Implicit integer conversions seem innocent enough, but historically they have been a frequent source of bugs and security holes in real-world C and C‍++ code.</p>
+
+<figure><div id="tour-pixel-to-point" class="figure"><img alt="(The complex points `upper_left` and `lower_right` mark two opposite corners of a rectangle. The rectangle is divided into `bounds.0` columns and `bounds.1` rows of pixels. The upper left pixel is row 0, column 0, and the lower right pixel is row `bounds.0 - 1`, column `bounds.1 - 1`.)" src="assets/pru3_0204.png" width="600" height="319"/>
+<h6><span class="label">Figure 2-4. </span>The relationship between the complex plane and the image’s pixels</h6>
+</div></figure>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Plotting the Set"><div class="sect2" id="plotting-the-set">
+<h2>Plotting the Set</h2>
+
+<p>To plot<a contenteditable="false" data-primary="Mandelbrot set" data-secondary="plotting" data-type="indexterm" id="id700"/><a contenteditable="false" data-primary="plotting, Mandelbrot set" data-type="indexterm" id="id701"/> the Mandelbrot set, for every pixel in the image, we simply apply <code>escape_time</code> to the corresponding point on the complex plane, and color the pixel depending on the result:</p>
+
+<pre class="small" data-code-language="rust" data-type="programlisting">
+<code class="sd">/// Renders a rectangle of the Mandelbrot set into a buffer of pixels.</code>
+<code class="sd">///</code>
+<code class="sd">/// The `bounds` argument gives the width and height of the buffer `pixels`,</code>
+<code class="sd">/// which holds one grayscale pixel per byte. The `upper_left` and `lower_right`</code>
+<code class="sd">/// arguments specify points on the complex plane corresponding to the upper-</code>
+<code class="sd">/// left and lower-right corners of the pixel buffer.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">render</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="p">[</code><code class="kt">u8</code><code class="p">],</code><code class="w"/>
+<code class="w">    </code><code class="n">bounds</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">upper_left</code><code class="p">:</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">lower_right</code><code class="p">:</code><code class="w"> </code><code class="nc">Complex</code><code class="o">&lt;</code><code class="kt">f64</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">assert!</code><code class="p">(</code><code class="n">pixels</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">row</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="n">bounds</code><code class="p">.</code><code class="mi">1</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">for</code><code class="w"> </code><code class="n">column</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="mi">0</code><code class="o">..</code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">point</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">                </code><code class="n">pixel_to_point</code><code class="p">(</code><code class="n">bounds</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="n">column</code><code class="p">,</code><code class="w"> </code><code class="n">row</code><code class="p">),</code><code class="w"> </code><code class="n">upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">lower_right</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="n">pixels</code><code class="p">[</code><code class="n">row</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">column</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">                </code><code class="k">match</code><code class="w"> </code><code class="n">escape_time</code><code class="p">(</code><code class="n">point</code><code class="p">,</code><code class="w"> </code><code class="mi">255</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                    </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w"/>
+<code class="w">                    </code><code class="nb">Some</code><code class="p">(</code><code class="n">count</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">255</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u8</code><code class="p">,</code><code class="w"/>
+<code class="w">                </code><code class="p">};</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The type of the first argument, <code>pixels</code>, is <code>&amp;mut [u8]</code>. In English, that’s a mutable reference, <code>&amp;mut</code>, to a slice of unsigned 8-bit integers, <code>[u8]</code>. Think of a <em>slice</em> as an array or vector; <code>pixels</code> will refer to a slab of contiguous memory, typically millions of <code>u8</code> bytes. We need a <em>mutable reference</em> in order to write to the buffer, since Rust references are read-only by default.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">pixels</code><code class="p">[</code><code class="n">row</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">column</code><code class="p">]</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="k">match</code><code class="w"> </code><code class="n">escape_time</code><code class="p">(</code><code class="n">point</code><code class="p">,</code><code class="w"> </code><code class="mi">255</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">None</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">0</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="nb">Some</code><code class="p">(</code><code class="n">count</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="mi">255</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="n">count</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u8</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+</pre>
+
+<p>If <code>escape_time</code> says that <code>point</code> belongs to the set, <code>render</code> colors the corresponding pixel black (<code>0</code>). Otherwise, <code>render</code> assigns darker colors to the numbers that took longer to escape the circle.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Writing Image Files"><div class="sect2" id="writing-image-files">
+<h2>Writing Image Files</h2>
+
+<p>The <code>image</code> crate<a contenteditable="false" data-primary="Mandelbrot set" data-secondary="writing image files" data-type="indexterm" id="ix_mandelbrot_image"/><a contenteditable="false" data-primary="image files, for Mandelbrot set" data-type="indexterm" id="ix_image_mandelbrot"/> provides functions for reading and writing a wide variety of image formats, along with some basic image manipulation functions. In particular, it includes an encoder for the PNG image file format, which this program uses to save the final results of the calculation:</p>
+
+<pre data-code-language="rust" data-type="programlisting">
+<code class="k">use</code><code class="w"> </code><code class="n">image</code><code class="p">::{</code><code class="n">ExtendedColorType</code><code class="p">,</code><code class="w"> </code><code class="n">ImageEncoder</code><code class="p">,</code><code class="w"> </code><code class="n">ImageError</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">image</code><code class="p">::</code><code class="n">codecs</code><code class="p">::</code><code class="n">png</code><code class="p">::</code><code class="n">PngEncoder</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">fs</code><code class="p">::</code><code class="n">File</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// Writes the buffer `pixels`, whose dimensions are given by `bounds`, to the</code>
+<code class="sd">/// file named `filename`.</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">write_image</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">filename</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">pixels</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="p">[</code><code class="kt">u8</code><code class="p">],</code><code class="w"/>
+<code class="w">    </code><code class="n">bounds</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">),</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">(),</code><code class="w"> </code><code class="n">ImageError</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">File</code><code class="p">::</code><code class="n">create</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">encoder</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">PngEncoder</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">output</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">encoder</code><code class="p">.</code><code class="n">write_image</code><code class="p">(</code><code class="w"/>
+<code class="w">        </code><code class="n">pixels</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">bounds</code><code class="p">.</code><code class="mi">1</code><code class="w"> </code><code class="k">as</code><code class="w"> </code><code class="kt">u32</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">ExtendedColorType</code><code class="p">::</code><code class="n">L8</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The operation of this function is pretty straightforward: it opens a file and tries to write the image to it. The <code>write_image</code> method is provided by the <code>image::ImageEncoder</code> trait, which we import on the first line of the example. We pass the encoder the actual pixel data from <code>pixels</code>, and its width and height from <code>bounds</code>, and then a final argument that says how to interpret the bytes in <code>pixels</code>: the value <code>ExtendedColorType::L8</code> indicates that each byte is an eight-bit grayscale value.</p>
+
+<p>That’s all simple enough. What’s interesting about this function is how it copes when something goes wrong. If we encounter an error, we need to report that back to our caller. As we’ve mentioned before, fallible functions in Rust should return a <code>Result</code> value, which is either <code>Ok(s)</code> on success, where <code>s</code> is the successful value, or <code>Err(e)</code> on failure, where <code>e</code> is an error code. So what are <code>write_image</code>’s success and error types?</p>
+
+<p>When all goes well, our <code>write_image</code> function<a contenteditable="false" data-primary="write_image function" data-type="indexterm" id="id702"/> has no useful value to return; it wrote everything interesting to the file. So its success type is the <em>unit</em> type <code>()</code>, so called because it has only one value, also written <code>()</code>. The unit type is akin to <code>void</code> in C and <span class="keep-together">C‍++.</span></p>
+
+<p>When an error occurs, it’s because either <code>File::create</code> wasn’t able to create the file or <code>encoder.encode</code> wasn’t able to write the image to it; the I/O operation returned an error code. The return type of <code>File::create</code> is <code>Result&lt;std::fs::File, std::io::Error&gt;</code>, while that of <code>encoder.encode</code> is <code>Result&lt;(), std::io::Error&gt;</code>, so both share the same error type, <code>std::io::Error</code>. It makes sense for our <code>write_image</code> function to do the same. In either case, failure should result in an immediate return, passing along the <code>std::io::Error</code> value describing what went wrong.</p>
+
+<p>One way to handle <code>File::create</code>’s result would be to <code>match</code> on its return value, like this:</p>
+
+<pre data-code-language="rust" data-testing="ignore" data-type="programlisting" id="test-mand6">
+<code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">File</code><code class="p">::</code><code class="n">create</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">f</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">f</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="w"> </code><code class="nb">Err</code><code class="p">(</code><code class="n">e</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>On success, let <code>output</code> be the <code>File</code> carried in the <code>Ok</code> value. On failure, pass the error along to our own caller.</p>
+
+<p>This kind of <code>match</code> statement is such a common pattern in Rust that the language provides the <code>?</code> operator as shorthand for the whole thing. So, rather than writing out this logic explicitly in <code>write_image</code>, we used the following equivalent and much more legible statement:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="n">output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">File</code><code class="p">::</code><code class="n">create</code><code class="p">(</code><code class="n">filename</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>If <code>File::create</code> fails, the <code>?</code> operator returns from <code>write_image</code>, passing along the error. Otherwise, <code>output</code> holds the successfully opened <code>File</code>.<a contenteditable="false" data-startref="ix_image_mandelbrot" data-type="indexterm" id="id703"/><a contenteditable="false" data-startref="ix_mandelbrot_image" data-type="indexterm" id="id704"/></p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="A Concurrent Mandelbrot Program"><div class="sect2" id="a-concurrent-mandelbrot-program">
+<h2>A Concurrent Mandelbrot Program</h2>
+
+<p>All the pieces<a contenteditable="false" data-primary="concurrency" data-secondary="Mandelbrot set" data-type="indexterm" id="ix_concurr_mandelbrot"/> are in place, and we can show you the <code>main</code> function, where we can put concurrency to work for us. First, a nonconcurrent version for simplicity:</p>
+
+<pre data-code-language="rust" data-type="programlisting">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">;</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">args</code><code class="p">:</code><code class="w"> </code><code class="nb">Vec</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">().</code><code class="n">collect</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">args</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">!=</code><code class="w"> </code><code class="mi">5</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">program</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="n">args</code><code class="p">[</code><code class="mi">0</code><code class="p">];</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"Usage: {program} FILE PIXELS LEFT,TOP RIGHT,BOTTOM"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"Example: {program} mandel.png 1000x750 -1.20,0.35 -1,0.20"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">std</code><code class="p">::</code><code class="n">process</code><code class="p">::</code><code class="n">exit</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">bounds</code><code class="p">:</code><code class="w"> </code><code class="p">(</code><code class="kt">usize</code><code class="p">,</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_pair</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">[</code><code class="mi">2</code><code class="p">],</code><code class="w"> </code><code class="sc">'x'</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error parsing image dimensions"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">upper_left</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_complex</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">[</code><code class="mi">3</code><code class="p">])</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error parsing upper left corner point"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">lower_right</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">parse_complex</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">[</code><code class="mi">4</code><code class="p">])</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error parsing lower right corner point"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">pixels</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">1</code><code class="p">];</code><code class="w"/>
+
+<code class="w">    </code><code class="n">render</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">pixels</code><code class="p">,</code><code class="w"> </code><code class="n">bounds</code><code class="p">,</code><code class="w"> </code><code class="n">upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">lower_right</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="n">write_image</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">[</code><code class="mi">1</code><code class="p">],</code><code class="w"> </code><code class="o">&amp;</code><code class="n">pixels</code><code class="p">,</code><code class="w"> </code><code class="n">bounds</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error writing PNG file"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>After collecting the command-line arguments into a vector of <code>String</code>s, we parse each one and then begin calculations.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">pixels</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="mi">0</code><code class="p">;</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">1</code><code class="p">];</code><code class="w"/>
+</pre>
+
+<p>A macro call <code>vec![v; n]</code> creates a vector <code>n</code> elements long whose elements are initialized to <code>v</code>, so the preceding code creates a vector of zeros whose length is <code>bounds.0 * bounds.1</code>, where <code>bounds</code> is the image resolution parsed from the command line. We’ll use this vector as a rectangular array of one-byte grayscale pixel values, as shown in <a data-type="xref" href="#tour-pixels-figure">Figure 2-5</a>.</p>
+
+<p>The next line of interest is this:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">render</code><code class="p">(</code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">pixels</code><code class="p">,</code><code class="w"> </code><code class="n">bounds</code><code class="p">,</code><code class="w"> </code><code class="n">upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">lower_right</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This calls the <code>render</code> function to actually compute the image. The expression <code>&amp;mut pixels</code> borrows a mutable reference to our pixel buffer, allowing <code>render</code> to fill it with computed grayscale values, even while <code>pixels</code> remains the vector’s owner. The remaining arguments pass the image’s dimensions and the rectangle of the complex plane we’ve chosen to plot.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">write_image</code><code class="p">(</code><code class="o">&amp;</code><code class="n">args</code><code class="p">[</code><code class="mi">1</code><code class="p">],</code><code class="w"> </code><code class="o">&amp;</code><code class="n">pixels</code><code class="p">,</code><code class="w"> </code><code class="n">bounds</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error writing PNG file"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<figure><div id="tour-pixels-figure" class="figure"><img alt="(Using a vector as a rectangular array of pixels. The width is bounds.0, the height bounds.1. Elements 0 through bounds.0-1 are the top row of pixels. Element bounds.0*bounds.1-1 is the bottom right pixel.)" src="assets/pru3_0205.png" width="600" height="300"/>
+<h6><span class="label">Figure 2-5. </span>Using a vector as a rectangular array of pixels</h6>
+</div></figure>
+
+<p>Finally, we write the pixel buffer out to disk as a PNG file. In this case, we pass a shared (nonmutable) reference to the buffer, since <code>write_image</code> should have no need to modify the buffer’s contents.</p>
+
+<p>At this point, we can build and run the program in release mode, which enables many powerful compiler optimizations, and after several seconds, it will write a beautiful image to the file <em>mandel.png</em>:</p>
+
+<pre class="console" data-code-language="console" data-testing="ignore-nonmatching-lines" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>build<code class="w"> </code>--release<code class="w"/>
+<code class="go">    Updating crates.io index</code>
+<code class="go">   ...</code>
+<code class="go">   Compiling image v0.25.5</code>
+<code class="go">   Compiling mandelbrot v0.1.0 ($RUSTBOOK/mandelbrot)</code>
+<code class="go">    Finished `release` profile [optimized] target(s) in 25.36s</code>
+<code class="gp">$ </code><code class="nb">time</code><code class="w"> </code>target/release/mandelbrot<code class="w"> </code>mandel.png<code class="w"> </code>4000x3000<code class="w"> </code>-1.20,0.35<code class="w"> </code>-1,0.20<code class="w"/>
+<code class="go">real    0m4.678s</code>
+<code class="go">user    0m4.661s</code>
+<code class="go">sys     0m0.008s</code>
+</pre>
+
+<p>On Windows, instead run this command in PowerShell: <code>measure-command { <span class="keep-together">.\target\release\mandelbrot</span> mandel.png 4000x3000 <span class="keep-together">-1.20,0.35</span> <span class="keep-together">-1,0.20</span> }</code>.</p>
+
+<p>This command should create a file called <em>mandel.png</em>, which you can view with your system’s image viewing program or in a web browser. If all has gone well, it should look like <a data-type="xref" href="#fig0206">Figure 2-6</a>.</p>
+
+<figure><div id="fig0206" class="figure"><img alt="Results from parallel Mandelbrot program" src="assets/pru3_0206.png" title="Results from parallel Mandelbrot program" width="600" height="450"/>
+<h6><span class="label">Figure 2-6. </span>Results from the Mandelbrot program</h6>
+</div></figure>
+
+<p>In the previous transcript, we used the Unix <code>time</code> program to analyze the running time of the program: it took about five seconds total to run the Mandelbrot computation on each pixel of the image. But almost all modern machines have multiple processor cores, and this program used only one. If we could distribute the work across all the computing resources the machine has to offer, we should be able to complete the image much more quickly.</p>
+
+<p>To this end, we’ll divide the image into sections, one per processor, and let each processor color the pixels assigned to it. For simplicity, we’ll break it into horizontal bands, as shown in <a data-type="xref" href="#tour-banded-figure">Figure 2-7</a>. When all processors have finished, we can write out the pixels to disk.</p>
+
+<figure><div id="tour-banded-figure" class="figure"><img alt="(Dividing the pixel buffer into horizontal bands. The first thread renders the top band, the second thread the band below that, and so on.)" src="assets/pru3_0207.png" width="600" height="220"/>
+<h6><span class="label">Figure 2-7. </span>Dividing the pixel buffer into bands for parallel rendering</h6>
+</div></figure>
+
+<p>Rust offers a <em>scoped thread</em> facility<a contenteditable="false" data-primary="scoped threads" data-type="indexterm" id="id705"/><a contenteditable="false" data-primary="threads" data-secondary="scoped" data-type="indexterm" id="id706"/> that does exactly what we need here. To use it, we need to take out the single line calling <code>render</code> and replace it with the following:</p>
+
+<pre data-code-language="rust" data-testing="replace-line render\(.*\);" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="n">threads</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">::</code><code class="n">available_parallelism</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error querying CPU count"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">get</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">rows_per_band</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mf">1.</code><code class="n">div_ceil</code><code class="p">(</code><code class="n">threads</code><code class="p">);</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">bands</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pixels</code><code class="p">.</code><code class="n">chunks_mut</code><code class="p">(</code><code class="n">rows_per_band</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="p">);</code><code class="w"/>
+<code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">::</code><code class="n">scope</code><code class="p">(</code><code class="o">|</code><code class="n">spawner</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">i</code><code class="p">,</code><code class="w"> </code><code class="n">band</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">bands</code><code class="p">.</code><code class="n">enumerate</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">top</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">rows_per_band</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">i</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">height</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">band</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">band_bounds</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">height</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">band_upper_left</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">            </code><code class="n">pixel_to_point</code><code class="p">(</code><code class="n">bounds</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">top</code><code class="p">),</code><code class="w"> </code><code class="n">upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">lower_right</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">band_lower_right</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">            </code><code class="n">pixel_to_point</code><code class="p">(</code><code class="n">bounds</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">top</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">height</code><code class="p">),</code><code class="w"/>
+<code class="w">                           </code><code class="n">upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">lower_right</code><code class="p">);</code><code class="w"/>
+
+<code class="w">        </code><code class="n">spawner</code><code class="p">.</code><code class="n">spawn</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">render</code><code class="p">(</code><code class="n">band</code><code class="p">,</code><code class="w"> </code><code class="n">band_bounds</code><code class="p">,</code><code class="w"> </code><code class="n">band_upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">band_lower_right</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="p">});</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">});</code><code class="w"/>
+</pre>
+
+<p>Breaking this down in the usual way:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="n">threads</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">::</code><code class="n">available_parallelism</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error querying CPU count"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">get</code><code class="p">();</code><code class="w"/>
+</pre>
+
+<p>We start by asking the system how many threads we should create, using <code>std::thread::available_parallelism()</code>. This function returns a <code>Result&lt;NonZero&lt;usize&gt;&gt;</code>: either an error, or an <code>Ok</code> value containing a <code>usize</code> that is guaranteed to be nonzero. We use <code>.expect()</code> to dispense with the error case and the <code>get</code> method of the <code>NonZero</code> type to convert it to a plain <code>usize</code>.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="n">rows_per_band</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mf">1.</code><code class="n">div_ceil</code><code class="p">(</code><code class="n">threads</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Next we compute how many rows of pixels each band should have. We divide the number of rows by the number of threads, rounding upward so that the bands will cover the entire image even if the height isn’t a multiple of <code>threads</code>. Rust’s numeric types provide dozens of methods, including <code>div_ceil</code> for integer division rounding up. In another language, we might write <code>(bounds.1 + threads - 1) / threads</code>, but calling <code>div_ceil</code> is shorter, more expressive, and just as fast. (The method is also correct in corner cases where the addition would overflow, although that’s unlikely here!)</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="n">bands</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">pixels</code><code class="p">.</code><code class="n">chunks_mut</code><code class="p">(</code><code class="n">rows_per_band</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Here we divide the pixel buffer into bands. The buffer’s <code>chunks_mut</code> method returns an iterator producing mutable, nonoverlapping slices of the buffer, each of which encloses <code>rows_per_band * bounds.0</code> pixels—in other words, <code>rows_per_band</code> <span class="keep-together">complete</span> rows of pixels. The last slice that <code>chunks_mut</code> produces may contain fewer rows, but each row will contain the same number of pixels.</p>
+
+<p>Now we can put some threads to work:</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">::</code><code class="n">scope</code><code class="p">(</code><code class="o">|</code><code class="n">spawner</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="p">});</code><code class="w"/>
+</pre>
+
+<p>The argument <code>|spawner| { ... }</code> is a Rust closure<a contenteditable="false" data-primary="closures" data-type="indexterm" id="id707"/> that expects a single argument, <code>spawner</code>. Note that, unlike functions declared with <code>fn</code>, we don’t need to declare the types of a closure’s arguments; Rust will infer them, along with its return type. In this case, <code>std::thread::scope</code> calls the closure, passing as the <code>spawner</code> argument a value the closure can use to create new threads. The <code>std::thread::scope</code> function waits for all such threads to finish execution before returning itself. This behavior allows Rust to be sure that such threads will not access their portions of <code>pixels</code> after it has gone out of scope, and allows us to be sure that when <code>std::thread::scope</code> returns, the computation of the image is complete.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="k">for</code><code class="w"> </code><code class="p">(</code><code class="n">i</code><code class="p">,</code><code class="w"> </code><code class="n">band</code><code class="p">)</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">bands</code><code class="p">.</code><code class="n">enumerate</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+</pre>
+
+<p><a contenteditable="false" data-primary="adapter methods" data-secondary="enumerate" data-type="indexterm" id="id708"/><a contenteditable="false" data-primary="enumerate adapter" data-type="indexterm" id="id709"/>Here we iterate over the pixel buffer’s bands. Each band is a mutable slice of the image, providing exclusive access to one band, ensuring that only one thread can write to it at a time. We explain how this works in detail in <a data-type="xref" href="ch05.html#references">Chapter 5</a>. The <code>enumerate</code> adapter produces tuples pairing each vector element with its index.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="kd">let</code><code class="w"> </code><code class="n">top</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">rows_per_band</code><code class="w"> </code><code class="o">*</code><code class="w"> </code><code class="n">i</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">height</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">band</code><code class="p">.</code><code class="n">len</code><code class="p">()</code><code class="w"> </code><code class="o">/</code><code class="w"> </code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="p">;</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">band_bounds</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">(</code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">height</code><code class="p">);</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">band_upper_left</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="n">pixel_to_point</code><code class="p">(</code><code class="n">bounds</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">top</code><code class="p">),</code><code class="w"> </code><code class="n">upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">lower_right</code><code class="p">);</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">band_lower_right</code><code class="w"> </code><code class="o">=</code><code class="w"/>
+<code class="w">    </code><code class="n">pixel_to_point</code><code class="p">(</code><code class="n">bounds</code><code class="p">,</code><code class="w"> </code><code class="p">(</code><code class="n">bounds</code><code class="p">.</code><code class="mi">0</code><code class="p">,</code><code class="w"> </code><code class="n">top</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="n">height</code><code class="p">),</code><code class="w"/>
+<code class="w">                   </code><code class="n">upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">lower_right</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>Given the index and the actual size of the band (recall that the last one might be shorter than the others), we can produce a bounding box of the sort <code>render</code> requires, but one that refers only to this band of the buffer, not the entire image. Similarly, we repurpose the renderer’s <code>pixel_to_point</code> function<a contenteditable="false" data-primary="pixel_to_point function" data-type="indexterm" id="id710"/> to find where the band’s upper-left and lower-right corners fall on the complex plane.</p>
+
+<pre data-code-language="rust" data-testing="match-in-current-file" data-type="programlisting">
+<code class="n">spawner</code><code class="p">.</code><code class="n">spawn</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">render</code><code class="p">(</code><code class="n">band</code><code class="p">,</code><code class="w"> </code><code class="n">band_bounds</code><code class="p">,</code><code class="w"> </code><code class="n">band_upper_left</code><code class="p">,</code><code class="w"> </code><code class="n">band_lower_right</code><code class="p">);</code><code class="w"/>
+<code class="p">});</code><code class="w"/>
+</pre>
+
+<p>Finally, we create a thread, running the closure <code>move || { ... }</code>. The <code>move</code> keyword at the front indicates that this closure takes ownership of the variables it uses; in particular, only the closure may use the mutable slice <code>band</code>.</p>
+
+<p>As we mentioned earlier, the <code>std::thread::scope</code> call ensures that all threads have completed before it returns, meaning that it is safe to save the image to a file, which is our next action<a contenteditable="false" data-startref="ix_concurr_mandelbrot" data-type="indexterm" id="id711"/>.</p>
+
+<p>With all that in place, we can build and run the multithreaded program:</p>
+
+<pre class="console" data-code-language="console" data-testing="ignore-nonmatching-lines" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>build<code class="w"> </code>--release<code class="w"/>
+<code class="go">   Compiling mandelbrot v0.1.0 ($RUSTBOOK/mandelbrot)</code>
+<code class="go">    Finished `release` profile [optimized] target(s) in #.## secs</code>
+<code class="gp">$ </code><code class="nb">time</code><code class="w"> </code>target/release/mandelbrot<code class="w"> </code>mandel.png<code class="w"> </code>4000x3000<code class="w"> </code>-1.20,0.35<code class="w"> </code>-1,0.20<code class="w"/>
+<code class="go">real    0m1.436s</code>
+<code class="go">user    0m4.922s</code>
+<code class="go">sys     0m0.011s</code>
+</pre>
+
+<p>Here, we’ve used <code>time</code> again to see how long the program took to run; note that even though we still spent almost five seconds of processor time, the elapsed real time was only about 1.5 seconds. You can verify that a portion of that time is spent writing the image file by commenting out the code that does so and measuring again. On the laptop where this code was tested, the concurrent version reduces the Mandelbrot calculation time proper by a factor of almost four. We’ll show how to substantially improve on this in <a data-type="xref" href="ch19.html#threads">Chapter 19</a>.</p>
+
+<p>As before, this program will have created a file called <em>mandel.png</em>. With this faster version, you can more easily explore the Mandelbrot set by changing the command-line arguments to your liking.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Safety Is Invisible"><div class="sect2" id="safety-is-invisible">
+<h2>Safety Is Invisible</h2>
+
+<p>In the end, the parallel program<a contenteditable="false" data-primary="safety" data-secondary="invisibility of" data-type="indexterm" id="id712"/> we ended up with is not substantially different from what we might write in any other language: we apportion pieces of the pixel buffer out among the processors, let each one work on its piece separately, and when they’ve all finished, present the result. So what is so special about Rust’s concurrency <span class="keep-together">support?</span></p>
+
+<p>What we haven’t shown here is all the Rust programs we <em>cannot</em> write. The code we looked at in this chapter partitions the buffer among the threads correctly, but there are many small variations on that code that do not (and thus introduce data races<a contenteditable="false" data-primary="data races" data-type="indexterm" id="id713"/>); not one of those variations will pass the Rust compiler’s static checks. A C or C‍++ compiler will cheerfully help you explore the vast space of programs with subtle data races; Rust tells you, up front, when something could go wrong.</p>
+
+<p>In Chapters <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch04.html#ownership">4</a> and <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch05.html#references">5</a>, we’ll describe Rust’s rules for memory safety. <a data-type="xref" href="ch19.html#threads">Chapter 19</a> explains how these rules also ensure proper concurrency hygiene.<a contenteditable="false" data-startref="ix_rust_concurr_ch2" data-type="indexterm" id="id714"/><a contenteditable="false" data-startref="ix_concurr_rust" data-type="indexterm" id="id715"/><a contenteditable="false" data-startref="ix_mandelbrot_ch2" data-type="indexterm" id="id716"/> But for those to make sense, it’s essential to get a grounding in Rust’s fundamental types, which we’ll cover in the next chapter.<a contenteditable="false" data-startref="ix_filesystems_ch2" data-type="indexterm" id="id717"/><a contenteditable="false" data-startref="ix_rust_filesystems_ch2" data-type="indexterm" id="id718"/><a contenteditable="false" data-startref="ix_rust_ch2" data-type="indexterm" id="id719"/></p>
+</div></section>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>

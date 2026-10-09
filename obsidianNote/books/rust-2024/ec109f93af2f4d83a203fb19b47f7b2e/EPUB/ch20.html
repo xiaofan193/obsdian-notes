@@ -1,0 +1,1342 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>ch20.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="chapter" epub:type="chapter" data-pdf-bookmark="Chapter 20. Asynchronous Programming">
+        <div class="chapter" id="asynchronous-programming">
+<h1><span class="label">Chapter 20. </span>Asynchronous Programming</h1>
+
+<aside data-type="sidebar" epub:type="sidebar"><div class="sidebar" id="id2414"><h1>A Note for Early Release Readers</h1>
+<p>With Early Release ebooks, you get books in their earliest form—the author’s raw and unedited content as they write—so you can take advantage of these technologies long before the official release of these titles.</p>
+
+<p>This will be the twentieth chapter of the final book. Please note that the GitHub repo will be made active later on.</p>
+
+<p>If you’d like to be actively involved in reviewing and commenting on this draft, please reach out to the editor at <em>jbleiel@oreilly.com</em>.</p>
+</div></aside>
+
+<p>In the last chapter, we explained how to use threads in Rust to spread compute-intensive work across multiple processor cores, putting the entire machine to work. In this chapter and the next, we’ll present an alternative to threads, offering more efficient concurrency for I/O-bound programs.</p>
+
+<p>For CPU-bound programs, like our Mandelbrot example, the performance hinges entirely on efficient use of the available CPU time. The job requires so much processing that no other resource is under load. Threads are very good at putting CPUs to work.</p>
+
+<p>A network service, though, has very different performance characteristics. If it spawns a thread to handle each incoming request, that thread will spend almost all of its time blocked, waiting for I/O. The amount of CPU needed is so small that a single server can serve thousands or even hundreds of thousands of concurrent requests. Performance then depends on efficient use of memory and efficient task creation and switching. Threads use a lot of memory. Even a thread that’s doing nothing weighs around twenty kilobytes on most platforms (including kernel and user space memory), and once the thread starts doing real work, its call stack can soak up many times that. And creating threads can be slow.</p>
+
+<p>Rust’s <em>asynchronous code</em> is a cooperative multitasking system that offers the expressiveness of threaded code with lower overhead—sometimes much lower. The asynchronous counterpart of a thread is called a <em>task</em>. Asynchronous tasks in Rust are like tasks in C#, “goroutines” in Go, or “virtual threads” in Java. Those languages’ facilities provide a smoother developer experience than Rust’s asynchronous code, but they also require complex support from their language runtimes. Asynchronous Rust, in contrast, works well on servers and microcontrollers alike.</p>
+
+<p>Without asynchronous code, each thread does one thing at a time. For example, consider a single-threaded program that calls <code>reqwest::blocking::get("https://red-bean.com")</code> to make an HTTP request. <a data-type="xref" href="#fig2001">Figure 20-1</a> shows a simplified view of the function call stack as that program runs, from left to right. Each function call is a box, placed atop its caller. Obviously, the <code>get</code> function runs throughout the entire execution. It calls functions from the Rust standard library like <code>TcpStream::connect</code> and <code>TcpStream</code>’s implementations of <code>write_all</code> and <code>read_to_string</code>. These call other functions in turn, but eventually the program makes <em>system calls<a contenteditable="false" data-primary="system calls" data-type="indexterm" id="id2415"/></em>, requests to the operating system to actually get something done, like open a TCP connection, or read or write some data.</p>
+
+<figure><div id="fig2001" class="figure"><img alt="Progress of a synchronous HTTP request" src="assets/pru3_2001.png" width="600" height="208"/>
+<h6><span class="label">Figure 20-1. </span>Progress of a synchronous HTTP request (darker gray areas are waiting for the operating system)</h6>
+</div></figure>
+
+<p>The darker gray backgrounds mark the times when the program is waiting for the operating system to finish the system call. This function spends almost all of its time waiting for the operating system; if we had drawn these times to scale, the execution of the actual Rust code would be narrow slivers of white between the system calls.</p>
+
+<p>While this function is waiting for system calls to return, its single thread is <em>blocked</em>: it can’t do anything else until the system call finishes. It’s not unusual for a thread’s stack to be tens or hundreds of kilobytes in size, so if this were a fragment of some larger system, with many threads working away at similar jobs, the thread overhead alone could become quite expensive.</p>
+
+<p>Asynchronous code lets a single thread do more than one thing. <a data-type="xref" href="#fig2002">Figure 20-2</a> shows three asynchronous tasks, each running its own HTTP request using the asynchronous version of <code>reqwest::get</code>. In the top half of the figure, we see each task’s perspective on its own execution. Each one looks a lot like <a data-type="xref" href="#fig2001">Figure 20-1</a>. However, instead of blocking, asynchronous code is designed to take turns. The resulting interleaved execution pattern is shown at the bottom of the diagram.</p>
+
+<figure><div id="fig2002" class="figure"><img alt="Running three asynchronous tasks on a single thread." src="assets/pru3_2002.png" width="600" height="215"/>
+<h6><span class="label">Figure 20-2. </span>Running three asynchronous tasks on a single thread</h6>
+</div></figure>
+
+<p>Each request takes just as long as it would have in the synchronous version, but the periods during which the thread would simply be waiting for the network in the synchronous version instead get filled in with other work. This diagram still isn’t to scale; you could fit many times more requests in before this thread fully occupied a single CPU core.</p>
+
+<p>If you’re doing compute-intensive work, you’ll need to use threads to exploit your machine’s parallelism. But for a given budget of memory and processor time, asynchronous code can handle many more I/O-bound tasks simultaneously. This is why most popular I/O-related crates in the Rust ecosystem provide asynchronous interfaces. But threads and asynchronous code are often used in combination, to handle workloads that have a mix of interactive and computationally intensive tasks.</p>
+
+<p>This chapter approaches asynchronous code from user’s point of view: how to write it, how to use published crates with asynchronous interfaces, and how to work through common problems. The next chapter explains how asynchronous code works: exactly how it is suspended, scheduled, and resumed. You’ll need those details in order to understand how asynchronous code will perform, and extend the system with your own primitives. But in this chapter, we’re only concerned with making stuff work.</p>
+
+<section data-type="sect1" data-pdf-bookmark="What Asynchronous Code Looks Like"><div class="sect1" id="what-asynchronous-code-looks-like">
+<h1>What Asynchronous Code Looks Like</h1>
+
+<p>Although asynchronous code shows its value best in applications that create many tasks, its essential features are easiest to understand in simpler situations. So while we’ll see highly concurrent code later in the chapter, this section shows an example that offers fewer distractions.</p>
+
+<p>Here’s a program that uses the <code>reqwest</code> crate to fetch a web page:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reqwest-example">
+<code class="k">use</code><code class="w"> </code><code class="n">anyhow</code><code class="p">::</code><code class="nb">Result</code><code class="p">;</code><code class="w"/>
+
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">make_request</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">String</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">url</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"https://rust-lang.org/"</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">response</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reqwest</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="n">url</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="k">await</code><code class="o">?</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">text</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="k">await</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">response</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">runtime</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">runtime</code><code class="p">::</code><code class="n">Runtime</code><code class="p">::</code><code class="n">new</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">response</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">runtime</code><code class="p">.</code><code class="n">block_on</code><code class="p">(</code><code class="n">make_request</code><code class="p">())</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{response}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Here’s our program’s <em>Cargo.toml</em> file:</p>
+
+<pre class="toml" data-code-language="toml" data-type="programlisting">
+<code class="k">[package]</code><code class="w"/>
+<code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"reqwest-example"</code><code class="w"/>
+<code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.1.0"</code><code class="w"/>
+<code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2024"</code><code class="w"/>
+
+<code class="k">[dependencies]</code><code class="w"/>
+<code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.102"</code><code class="w"/>
+<code class="n">reqwest</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.13.4"</code><code class="w"/>
+<code class="n">tokio</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"1.52.3"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"full"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+</pre>
+
+<p>When we run this, it writes the unprocessed HTML of the response to its standard output:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="gp">$ </code>cargo<code class="w"> </code>run<code class="w"> </code>-p<code class="w"> </code>reqwest-example<code class="w"/>
+<code class="go">    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.31s</code>
+<code class="go">     Running `target/debug/reqwest-example`</code>
+<code class="go">&lt;!doctype html&gt;</code>
+<code class="go">&lt;html lang="en-US"&gt;</code>
+<code class="go">  &lt;head&gt;</code>
+<code class="go">    &lt;meta charset="utf-8"&gt;</code>
+<code class="go">    &lt;title&gt;</code>
+<code class="go">            Rust Programming Language</code>
+<code class="go">        &lt;/title&gt;</code>
+<code class="go">...</code>
+</pre>
+
+<p>This program’s code doesn’t look terribly different from ordinary Rust. And that’s the idea: asynchronous code generally resembles classic, synchronous Rust, with a few additions to make the cooperative multi-tasking possible:</p>
+
+<ul>
+	<li>
+	<p>An <em>asynchronous function</em>, defined with <code>async fn</code>, is one whose execution can be suspended while it waits for I/O or other blocking operations to complete. In our program, <code>make_request</code> is an asynchronous function. It calls <code>reqwest::get</code>, an asynchronous function provided by <code>reqwest</code>, a popular HTTP client crate.</p>
+	</li>
+	<li>
+	<p>Within an asynchronous function, we can use <em>await expressions</em> to wait for asynchronous operations to complete. An await expression is written as <code>.await</code>, following the operation we want to wait for. (Although this looks like we’re accessing a struct field named <code>await</code>, <code>.await</code> is actually a postfix operator built into Rust’s grammar.)</p>
+
+	<p>The <code>make_request</code> function uses await expressions to wait for the result from <code>reqwest::get</code>, and then for the result of calling the <code>text</code> method on its success value. The calls to <code>get</code> and <code>text</code> typically need to wait for the network, and when they do, the await expression suspends the execution of <code>make_request</code> itself, to be resumed when it can make progress again.</p>
+	</li>
+	<li>
+	<p>In any program that uses asynchronous code, you must specify the <em>runtime</em> that will run your asynchronous tasks. An async runtime is Rust’s analogue of the operating system’s thread scheduler: it maintains a queue of runnable tasks, and tracks tasks that are blocked on operations like I/O, waiting for a timer, or acquiring a mutex. When an await expression suspends an asynchronous function call, it is the runtime that resumes it later.</p>
+
+	<p>Our program uses the <code>tokio</code> crate’s runtime. We create a <code>Runtime</code> value, and then call its <code>block_on</code> method to start an asynchronous task running the call to <code>make_request</code>. When the task is done, <code>block_on</code> returns <code>make_request</code>’s result, which we then print.</p>
+	</li>
+</ul>
+
+<p>In addition to the <code>Runtime</code> type, the <code>tokio</code> crate provides asynchronous versions of the standard library’s I/O and synchronization primitives, and various frequently needed utilities. Tokio is by far the most widely used asynchronous support crate, so almost any other crate you find will be ready to work with it.</p>
+
+<p>That said, Tokio is just an ordinary third-party crate, not part of the Rust language. There’s nothing about implementing a runtime that entails using internal, unstable, or non-portable Rust features. In fact, the next chapter shows how to implement several of a runtime’s core features yourself.</p>
+
+<p>It’s nearly universal for programs that use asynchronous code to start, as we do here, by creating a runtime and then immediately using it to call some asynchronous function that does all the real work. This gets tedious, so Tokio provides an attribute macro, <code>#[tokio::main]</code>, to package up all the boilerplate:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reqwest-example-tokio-main">
+<code class="cp">#[tokio::main]</code><code class="w"/>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">url</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s">"https://rust-lang.org/"</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">response</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reqwest</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="n">url</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="k">await</code><code class="o">?</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">text</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="k">await</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{response}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This is equivalent to our original code, but the runtime creation has been hidden away, and <code>main</code> itself has become an asynchronous function, so it can use await expressions itself. We don’t need the <code>make_request</code> function any more, since <code>main</code> can now call <code>reqwest::get</code> directly. Tokio’s interface is designed such that you rarely need to refer the runtime explicitly, so using <code>#[tokio::main]</code> is usually fine.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Futures"><div class="sect1" id="futures">
+<h1>Futures</h1>
+
+<p>In the first <code>reqwest</code> example, the call to <code>block_on</code> may look a little strange<a contenteditable="false" data-primary="futures" data-type="indexterm" id="id2416"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reqwest-block-on">
+<code class="n">runtime</code><code class="p">.</code><code class="n">block_on</code><code class="p">(</code><code class="n">make_request</code><code class="p">())</code><code class="w"/>
+</pre>
+
+<p>As we said, calling <code>block_on</code> creates an asynchronous task to run the call to <code>make_request</code>, and waits for it to complete. But hasn’t <code>make_request</code> already returned? If it were an ordinary function, the work would already be done, and there would be nothing left to block on.</p>
+
+<p>But <code>make_request</code> is not an ordinary function: it’s asynchronous. When you call an asynchronous function, its body does not even begin execution. Instead, the function immediately returns a <em>future</em>, a Rust value that represents an asynchronous call in progress. A freshly created future just records the call’s arguments, but it has space for whatever local variables and temporaries the function body will need as it executes. Passing this future to <code>runtime.block_on</code> drives the asynchronous call to completion. Once it’s done, <code>block_on</code> passes along the call’s final return value—in this case, the body of the HTTP response.</p>
+
+<p>Once you know that calling an asynchronous function produces a future, you can make better sense of code like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-reqwest-get-await">
+<code class="n">reqwest</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="n">url</code><code class="p">).</code><code class="k">await</code><code class="o">?</code><code class="w"/>
+</pre>
+
+<p>Here, too, the call to <code>reqwest::get</code> returns a future. The await expression takes ownership of that future and waits for it to produce a value. In this case, that’s a <code>Result</code> to which the <code>?</code> operator is applied to see if the <code>get</code> succeeded.</p>
+
+<p>Futures themselves are passive values; they don’t do anything until you await them or pass them to some sort of task-starting function like <code>block_on</code>. For example, consider the following program:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-futures-passivity">
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">announce</code><code class="p">(</code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{message}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="cp">#[tokio::main]</code><code class="w"/>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">bonnie</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">announce</code><code class="p">(</code><code class="s">"Bonnie"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">clyde</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">announce</code><code class="p">(</code><code class="s">"Clyde"</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Starring:"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">clyde</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"and"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">bonnie</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This produces the output:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">Starring:</code>
+<code class="go">Clyde</code>
+<code class="go">and</code>
+<code class="go">Bonnie</code>
+</pre>
+
+<p>Each call to <code>announce</code> returns a future, without executing the function’s body, so the program’s first output is <code>"Starring:"</code>. Only when we await the futures do the function calls they represent begin execution, so the two calls to <code>announce</code> run in the order we await them, not the order we created them: <code>"Clyde"</code> is printed before <code>"Bonnie"</code>. If, instead of awaiting a future, we simply drop it, the call that it represents never runs. (Rust prints a warning at compile time if you completely ignore the future of an asynchronous function call, so this rarely happens by mistake.)</p>
+
+<p>Concretely, a future is any value that implements the standard library trait <code>Future</code>. The <code>Future</code> trait is generally not used directly, and doing so is tricky, so we’ll put off examining its definition until the next chapter. For now, what matters is that a type that implements <code>Future</code> can be <em>polled</em> to let the computation it represents run for as long as it can without blocking. If the computation finishes, the future provides its final return value. Otherwise, the future saves its current state, and the blocking operation that halted its progress arranges to notify the runtime when it is ready, so that the runtime can poll the future again to let it progress further.</p>
+
+<p>The term “polling” is often associated with inefficient implementation techniques like busy waiting. That is not how asynchronous Rust works. Futures are polled only when there is actual progress to be made.</p>
+
+<p>This is a good time to pin down a bit of terminology. Although calling an asynchronous function returns a future, that future is just an intermediate step towards what we really care about: the final return value produced by running the function’s body to completion. In this book, when we talk about an asynchronous function’s “return value”, we mean this final return value, emphasizing the parallel with ordinary, synchronous functions. When we do need to talk about the future itself, we’ll refer to “the future of the call”, or say something similarly explicit.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Asynchronous Function Future Types"><div class="sect1" id="asynchronous-function-future-types">
+<h1>Asynchronous Function Future Types</h1>
+
+<p>The exact type of the future returned by an asynchronous function is anonymous and unique to that function. All you can say about it is that it implements the <code>Future</code> trait. This is analogous to the way Rust handles closures: each closure has its own anonymous, unique type, implementing some subset of the <code>Fn</code>, <code>FnMut</code>, and <code>FnOnce</code> traits. Like the closure traits, the <code>Future</code> trait has an associated type, <code>Output</code>, indicating the type of the future’s final value.</p>
+
+<p>Since asynchronous functions’ futures’ types are anonymous, if you want to write a function that accepts such a future as an argument, you must give it a generic type, and let type inference supply the details:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-future-arg">
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">credits</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">star</code><code class="p">:</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">costar</code><code class="p">:</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Starring:"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">star</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"and"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">costar</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This function permits <code>star</code> and <code>costar</code> to have any types that implement <code>Future</code>, as long as their return types are <code>()</code>: since <code>credits</code> only awaits them for their side effects, it doesn’t expect them to return an interesting value.</p>
+
+<p>You can return a future from a function like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-future-ret">
+<code class="k">fn</code><code class="w"> </code><code class="nf">star</code><code class="p">(</code><code class="n">star_index</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">star_index</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="mi">0</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="s">"Bonnie"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="mi">1</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="s">"Clyde"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="mi">2</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="s">"Mephistopheles"</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="s">"some minor character"</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="n">announce</code><code class="p">(</code><code class="n">name</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Note that <code>star</code> is not an <code>async fn</code>: it’s an ordinary, synchronous function that just happens to return a future, the one produced by calling the asynchronous function <code>announce</code>. Since we return the future immediately, <code>announce</code>’s body doesn’t run here.</p>
+
+<p>We can use <code>credits</code> and <code>star</code> like so:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-future-arg-ret-usage">
+<code class="cp">#[tokio::main]</code><code class="w"/>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">bonnie</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">star</code><code class="p">(</code><code class="mi">0</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">clyde</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">star</code><code class="p">(</code><code class="mi">1</code><code class="p">);</code><code class="w"/>
+
+<code class="w">    </code><code class="n">credits</code><code class="p">(</code><code class="n">bonnie</code><code class="p">,</code><code class="w"> </code><code class="n">clyde</code><code class="p">).</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="async Blocks"><div class="sect1" id="async-blocks">
+<h1>async Blocks</h1>
+
+<p>In addition to asynchronous functions, Rust also has <code>async</code> blocks. The value of an <code>async</code> block is a future.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-block">
+<code class="kd">let</code><code class="w"> </code><code class="n">my_future</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">async</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Starring:"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">bonnie</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"and"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">clyde</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+</pre>
+
+<p>The code in the body of the <code>async</code> block does not run right away. Instead, the <code>async</code> block produces a future that will run that code when awaited. Like a closure, it can capture variables from the surrounding code. You can even write <code>async move { ... }</code> to force the block to take ownership of the variables it refers to, just like writing <code>move</code> in front of a closure.</p>
+
+<p>This gives us a way to rewrite any asynchronous function into a synchronous function that just happens to return a future:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-fn-block-equivalent">
+<code class="k">fn</code><code class="w"> </code><code class="nf">credits</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">star</code><code class="p">:</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">costar</code><code class="p">:</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">async</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Starring:"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">star</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"and"</code><code class="p">);</code><code class="w"/>
+<code class="w">        </code><code class="n">costar</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This version of <code>credits</code> uses different syntax to get the same effect as the original definition. A caller can’t tell the difference between the two. But this one is a synchronous function that returns the future of an <code>async</code> block. (We could write <code>async move { ... }</code>, but Rust can infer from the await expressions that <code>star</code> and <code>costar</code> must be captured by moving, so it’s not necessary.)</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Future lifetimes"><div class="sect1" id="future-lifetimes">
+<h1>Future lifetimes</h1>
+
+<p>This all looks very neat. But to keep these examples simple, we’ve been avoiding some details that real-world code needs to worry about. Recall the definition of <code>announce</code>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-fn-announce">
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">announce</code><code class="p">(</code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{message}"</code><code class="p">);</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Like any asynchronous function, rather than using its arguments immediately, this returns a future that will use them later. Since that future holds the value of <code>message</code>, it must not outlive the <code>str</code> that <code>message</code> borrows. For example, the following is no good:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-fn-lifetime-err">
+<code class="kd">let</code><code class="w"> </code><code class="n">future</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">credits</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">format!</code><code class="p">(</code><code class="s">"{star} and {costar}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="n">announce</code><code class="p">(</code><code class="o">&amp;</code><code class="n">credits</code><code class="p">)</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+<code class="n">future</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The future produced by <code>announce</code> holds a reference to <code>credits</code>, but <code>credits</code> goes out of scope at the end of the block, so the <code>String</code> it owns gets dropped at that point. When we try to use that future outside the block, Rust has concerns:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: `credits` does not live long enough</code>
+<code class="go">   |</code>
+<code class="go">8  |     let future = {</code>
+<code class="go">   |         ------ borrow later stored here</code>
+<code class="go">9  |         let credits = format!("{star} and {costar}");</code>
+<code class="go">   |             ------- binding `credits` declared here</code>
+<code class="go">10 |         announce(&amp;credits)</code>
+<code class="go">   |                  ^^^^^^^^ borrowed value does not live long enough</code>
+<code class="go">11 |     };</code>
+<code class="go">   |     - `credits` dropped here while still borrowed</code>
+</pre>
+
+<p>As an exercise, if we rewrite <code>announce</code> as a synchronous function with an <code>async</code> block, we can see what’s going on a little better.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-fn-lifetime-implicit">
+<code class="k">fn</code><code class="w"> </code><code class="nf">announce</code><code class="p">(</code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">async</code><code class="w"> </code><code class="k">move</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{message}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This returns a future that contains a copy of the reference <code>message</code> and perforce inherits its lifetime. If we fully wrote out all the lifetimes in the type signature, it would look like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-fn-lifetime-explicit">
+<code class="k">fn</code><code class="w"> </code><code class="nf">announce</code><code class="o">&lt;'</code><code class="na">m</code><code class="o">&gt;</code><code class="p">(</code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="o">'</code><code class="na">m</code><code class="w"> </code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="na">m</code><code class="w"/>
+</pre>
+
+<p>The meaning is unchanged. The extra bound <code>+ 'm</code> on the return type declares that the result can’t outlive the lifetime of <code>message</code>. This is the default in Rust, though. Recall that <code>impl SomeTrait</code> in the return type means “some type implementing <code>SomeTrait</code>, but we’re not saying which one”. This can be a type that depends on the function’s generic parameters, in this case <code>'m</code>.</p>
+
+<p>When Rust’s defaults aren’t what we want, we can spell things out with an explicit lifetime bound. Here’s a variant of <code>announce</code> that makes a copy of its argument so that it can return a <code>'static</code> future:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-fn-lifetime-copying">
+<code class="k">fn</code><code class="w"> </code><code class="nf">copying_announce</code><code class="p">(</code><code class="n">message</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="kt">str</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">impl</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">owned_message</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">message</code><code class="p">.</code><code class="n">to_string</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">async</code><code class="w"> </code><code class="k">move</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{owned_message}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The bound <code>+ 'static</code> declares our goal here: the future’s type “lasts as long as <code>'static</code>“. That is, the type itself doesn’t have a lifetime, so callers may keep the future around as long as they like. We achieve this by using <code>to_string</code> to turn the <code>&amp;str</code> into a <code>String</code>, and then use <code>async move</code> to ensure the future takes ownership of the <code>String</code>.</p>
+
+<p>These examples have been a bit trite, to keep the explanations focused, but in the next section, we’ll look at a more developed, realistic example, and show how asynchronous code helps manage highly concurrent code.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Spawning Asynchronous Tasks"><div class="sect1" id="spawning-asynchronous-tasks">
+<h1>Spawning Asynchronous Tasks</h1>
+
+<p>With the basics out of the way, we’re ready to put asynchronous Rust to work, running highly concurrent code without wasting resources.</p>
+
+<p>In this section, we’ll write another program using <code>reqwest</code>, this time to find all the pages reachable from a given starting page within a given number of links. There are lots of ways to do this, but asynchronous code makes a simple design perfectly feasible: we simply spawn a fresh asynchronous task for every web page we visit. This can easily result in thousands of tasks running simultaneously—but because they’re asynchronous tasks, not threads, our program’s peak resource consumption is reasonable, not much different from a hand-written breadth-first traversal.</p>
+
+<p>Here’s the <em>Cargo.toml</em> file we’ll be using:</p>
+
+<pre class="toml" data-code-language="toml" data-type="programlisting">
+<code class="k">[package]</code><code class="w"/>
+<code class="n">name</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"spider"</code><code class="w"/>
+<code class="n">version</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.1.0"</code><code class="w"/>
+<code class="n">edition</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"2024"</code><code class="w"/>
+
+<code class="k">[dependencies]</code><code class="w"/>
+<code class="n">anyhow</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"1.0.102"</code><code class="w"/>
+<code class="n">reqwest</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.13.4"</code><code class="w"/>
+<code class="n">tokio</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"> </code><code class="n">version</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="s2">"1.52.3"</code><code class="p">,</code><code class="w"> </code><code class="n">features</code><code class="w"> </code><code class="p">=</code><code class="w"> </code><code class="p">[</code><code class="s2">"full"</code><code class="p">]</code><code class="w"> </code><code class="p">}</code><code class="w"/>
+<code class="n">netiquette</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.1"</code><code class="w"/>
+<code class="n">scraper</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="s2">"0.27.0"</code><code class="w"/>
+</pre>
+
+<p>Most of these crates we’ve mentioned before. The error-handling crate <code>anyhow</code> was introduced in <a data-type="xref" href="ch07.html#error-handling">Chapter 7</a>. We’ve been using <code>tokio</code> and the <code>reqwest</code> HTTP client in this chapter. The newcomers are <code>netiquette</code>, which we will use to crawl the web politely, limiting our program to a request per second per domain; and <code>scraper</code> for parsing HTML.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Listing a Web Page’s Outgoing Links"><div class="sect2" id="listing-a-web-pages-outgoing-links">
+<h2>Listing a Web Page’s Outgoing Links</h2>
+
+<p>First, we’ll take care of a bit of supporting code. The following function fetches a web page, finds the links in it, and returns them as vector of absolute <code>Url</code>s:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-page-links">
+<code class="k">use</code><code class="w"> </code><code class="n">reqwest</code><code class="p">::{</code><code class="n">Client</code><code class="p">,</code><code class="w"> </code><code class="nb">Result</code><code class="p">,</code><code class="w"> </code><code class="n">Url</code><code class="p">};</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">scraper</code><code class="p">::{</code><code class="n">Html</code><code class="p">,</code><code class="w"> </code><code class="n">Selector</code><code class="p">};</code><code class="w"/>
+
+<code class="k">pub</code><code class="w"> </code><code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">page_links</code><code class="p">(</code><code class="n">client</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Client</code><code class="p">,</code><code class="w"> </code><code class="n">url</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">Url</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="nb">Vec</code><code class="o">&lt;</code><code class="n">Url</code><code class="o">&gt;&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">body</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">client</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">get</code><code class="p">(</code><code class="n">url</code><code class="p">.</code><code class="n">clone</code><code class="p">())</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">send</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="k">await</code><code class="o">?</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">error_for_status</code><code class="p">()</code><code class="o">?</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">text</code><code class="p">()</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="k">await</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">doc</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Html</code><code class="p">::</code><code class="n">parse_document</code><code class="p">(</code><code class="o">&amp;</code><code class="n">body</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">link_selector</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Selector</code><code class="p">::</code><code class="n">parse</code><code class="p">(</code><code class="s">"a[href]"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="n">doc</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">select</code><code class="p">(</code><code class="o">&amp;</code><code class="n">link_selector</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">flat_map</code><code class="p">(</code><code class="o">|</code><code class="n">a_elem</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="kd">let</code><code class="w"> </code><code class="n">href</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">a_elem</code><code class="p">.</code><code class="n">attr</code><code class="p">(</code><code class="s">"href"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">            </code><code class="n">url</code><code class="p">.</code><code class="n">join</code><code class="p">(</code><code class="n">href</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="p">})</code><code class="w"/>
+<code class="w">        </code><code class="p">.</code><code class="n">collect</code><code class="p">())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The first half of this function uses <code>reqwest</code> to fetch the web page from the given <code>url</code>, returning an error if anything goes wrong. We will not dwell on the details of <code>reqwest</code>’s API, except to say that a <code>reqwest::Client</code> contains a connection pool, so it is better to use a <code>Client</code> than the plain <code>reqwest::get</code> function when you’ll be doing more than one HTTP request.</p>
+
+<p>A successful call to <code>client.get(url.clone()).send()</code> returns a <code>reqwest::Response</code> representing the HTTP response from the server, which may still be in the process of transmission. We check for HTTP error responses by calling <code>error_for_status</code>. If that succeeds, we call <code>text()</code> to fully receive the response body and check that it is valid UTF-8. At each point where an error could occur, we use the <code>?</code> operator to bail out.</p>
+
+<p>The second half of the function uses <code>scraper::Html</code> to parse the response as HTML, finds all <code>&lt;a href=&gt;</code> tags in the document, uses <code>url.join</code> to resolve relative URLs to absolute URLs, and collects the URLs in a vector. A real spider program should honor a few more HTML features, such as the <code>nofollow</code> attribute on links, but this will do for an example.</p>
+
+<p>Note that <code>Html::parse_document</code> does not return a <code>Result</code>. The HTML standard specifies how every possible parse error in an HTML document can be handled (acknowledging the reality that finding botched markup on the web is like finding water in an especially wet ocean). Therefore the only errors that can happen in this code are from <code>url.join(&amp;href)</code>, which returns a <code>Result&lt;Url, url::ParseError&gt;</code>. There is, it turns out, such a thing as a broken URL. Rather than treat them as fatal, we use the <code>flat_map</code> iterator method to keep the <code>Ok</code> results and ignore the errors.</p>
+
+<p>If all goes well, <code>page_links</code> returns a vector of absolute URLs.</p>
+
+<p>In the next section, we’re going to use <code>page_links</code> as the workhorse in a concurrent traversal of the Internet. But if you’d like to try it out in isolation, here’s a possible <code>main</code> function you could use:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-list-links-main">
+<code class="cp">#[tokio::main]</code><code class="w"/>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">anyhow</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">url</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">().</code><code class="n">nth</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">anyhow</code><code class="p">::</code><code class="n">bail</code><code class="o">!</code><code class="p">(</code><code class="s">"Usage: list-links URL"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">url</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Url</code><code class="p">::</code><code class="n">parse</code><code class="p">(</code><code class="o">&amp;</code><code class="n">url</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">link_urls</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">links</code><code class="p">::</code><code class="n">page_links</code><code class="p">(</code><code class="o">&amp;</code><code class="n">Client</code><code class="p">::</code><code class="n">new</code><code class="p">(),</code><code class="w"> </code><code class="o">&amp;</code><code class="n">url</code><code class="p">).</code><code class="k">await</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">link</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">link_urls</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{link}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Spidering the Web Concurrently"><div class="sect2" id="spidering-the-web-concurrently">
+<h2>Spidering the Web Concurrently</h2>
+
+<p>As we mentioned before, we’ll be using the simple strategy of spawning a task per web page. These tasks will share a few resources. Here’s the struct that holds the common state for the traversal:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-traversal">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">collections</code><code class="p">::</code><code class="n">HashSet</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">sync</code><code class="p">::</code><code class="n">Mutex</code><code class="p">;</code><code class="w"/>
+
+<code class="k">use</code><code class="w"> </code><code class="n">netiquette</code><code class="p">::</code><code class="n">Limiter</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">reqwest</code><code class="p">::</code><code class="n">Client</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// A traversal of the Internet, starting from a given page.</code>
+<code class="k">struct</code><code class="w"> </code><code class="nc">Traversal</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="sd">/// HTTP client.</code>
+<code class="w">    </code><code class="n">client</code><code class="p">:</code><code class="w"> </code><code class="nc">Client</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Set of all URLs we have seen so far. Note: `#fragment`s are</code>
+<code class="w">    </code><code class="sd">/// stripped, so that URLs pointing to two sections of the same page</code>
+<code class="w">    </code><code class="sd">/// aren't treated as different pages and fetched twice.</code>
+<code class="w">    </code><code class="n">seen</code><code class="p">:</code><code class="w"> </code><code class="nc">Mutex</code><code class="o">&lt;</code><code class="n">HashSet</code><code class="o">&lt;</code><code class="n">Url</code><code class="o">&gt;&gt;</code><code class="p">,</code><code class="w"/>
+
+<code class="w">    </code><code class="sd">/// Self-imposed rate limiter.</code>
+<code class="w">    </code><code class="n">limiter</code><code class="p">:</code><code class="w"> </code><code class="nc">Limiter</code><code class="p">,</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>We’ll create an instance of this struct when we begin a traversal, and give each asynchronous task its own <code>Arc</code> reference-counted pointer to it. It has three fields:</p>
+
+<ul>
+	<li>
+	<p><code>client</code> is the <code>reqwest</code> connection pool, which we will use every time we want to fetch a web page.</p>
+	</li>
+	<li>
+	<p><code>seen</code> is a set of all the pages we’ve visited so far. If we encounter a link to a page that’s already in <code>seen</code>, we assume that some other task is taking care of enumerating its links, and move on.</p>
+	</li>
+	<li>
+	<p><code>limiter</code> is used to avoid overloading web sites by bombarding them with many requests concurrently or in rapid succession.</p>
+	</li>
+</ul>
+
+<p>Since Tokio uses a thread pool to put all your processor cores to work running asynchronous tasks, we must assume that the fields of <code>Traversal</code> could be accessed by several different threads simultaneously. This means that <code>seen</code> needs to be protected by a <code>Mutex</code>. Although Tokio defines its own <code>Mutex</code> type, we don’t need to use that here; the standard library’s <code>std::sync::Mutex</code> will do fine, and is slightly preferable. We’ll discuss the difference between the two later in this chapter.</p>
+
+<p>To create a fresh <code>Traversal</code> value, we provide a <code>new</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-traversal-new">
+<code class="k">impl</code><code class="w"> </code><code class="n">Traversal</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="k">fn</code><code class="w"> </code><code class="nf">new</code><code class="p">(</code><code class="n">client</code><code class="p">:</code><code class="w"> </code><code class="nc">Client</code><code class="p">,</code><code class="w"> </code><code class="n">user_agent</code><code class="p">:</code><code class="w"> </code><code class="nb">String</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Self</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="bp">Self</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">seen</code><code class="p">:</code><code class="w"> </code><code class="nc">Mutex</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">HashSet</code><code class="p">::</code><code class="n">new</code><code class="p">()),</code><code class="w"/>
+<code class="w">            </code><code class="n">client</code><code class="p">:</code><code class="w"> </code><code class="nc">client</code><code class="p">.</code><code class="n">clone</code><code class="p">(),</code><code class="w"/>
+<code class="w">            </code><code class="n">limiter</code><code class="p">:</code><code class="w"> </code><code class="nc">Limiter</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">client</code><code class="p">,</code><code class="w"> </code><code class="n">user_agent</code><code class="p">),</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>The code for the traversal itself is as follows:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-traversal-visit">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">sync</code><code class="p">::</code><code class="n">Arc</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">task</code><code class="p">::</code><code class="n">JoinSet</code><code class="p">;</code><code class="w"/>
+
+<code class="sd">/// Visits all pages reachable from `page` within `depth` links.</code>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">visit</code><code class="p">(</code><code class="n">traversal</code><code class="p">:</code><code class="w"> </code><code class="nc">Arc</code><code class="o">&lt;</code><code class="n">Traversal</code><code class="o">&gt;</code><code class="p">,</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">url</code><code class="p">:</code><code class="w"> </code><code class="nc">Url</code><code class="p">,</code><code class="w"> </code><code class="n">depth</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">url</code><code class="p">.</code><code class="n">set_fragment</code><code class="p">(</code><code class="nb">None</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="o">!</code><code class="n">traversal</code><code class="p">.</code><code class="n">seen</code><code class="p">.</code><code class="n">lock</code><code class="p">().</code><code class="n">unwrap</code><code class="p">().</code><code class="n">insert</code><code class="p">(</code><code class="n">url</code><code class="p">.</code><code class="n">clone</code><code class="p">())</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="k">if</code><code class="w"> </code><code class="n">depth</code><code class="w"> </code><code class="o">==</code><code class="w"> </code><code class="mi">0</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="k">return</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Rate limiting; and bail out if robots.txt prohibits crawling this URL.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">permit</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">traversal</code><code class="p">.</code><code class="n">limiter</code><code class="p">.</code><code class="n">acquire</code><code class="p">(</code><code class="o">&amp;</code><code class="n">url</code><code class="p">).</code><code class="k">await</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Ok</code><code class="p">(</code><code class="n">permit</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">permit</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"Skipping &lt;{url}&gt;: {err}"</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="k">return</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// Fetch the document and find links.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">links</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">match</code><code class="w"> </code><code class="n">links</code><code class="p">::</code><code class="n">page_links</code><code class="p">(</code><code class="o">&amp;</code><code class="n">traversal</code><code class="p">.</code><code class="n">client</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="n">url</code><code class="p">).</code><code class="k">await</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="nb">Ok</code><code class="p">(</code><code class="n">links</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="n">links</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="nb">Err</code><code class="p">(</code><code class="n">err</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"Error visiting &lt;{url}&gt;: {err}"</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="n">permit</code><code class="p">.</code><code class="n">note_error</code><code class="p">(</code><code class="o">&amp;</code><code class="n">url</code><code class="p">,</code><code class="w"> </code><code class="n">err</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="k">return</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="nb">drop</code><code class="p">(</code><code class="n">permit</code><code class="p">);</code><code class="w"> </code><code class="c1">// done: allow crawling other URLs on this domain</code>
+
+<code class="w">    </code><code class="c1">// Crawl web pages linked from this document, recursively.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">join_set</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">JoinSet</code><code class="p">::</code><code class="n">new</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">link</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">links</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">spawn_visit</code><code class="p">(</code><code class="n">Arc</code><code class="p">::</code><code class="n">clone</code><code class="p">(</code><code class="o">&amp;</code><code class="n">traversal</code><code class="p">),</code><code class="w"> </code><code class="n">link</code><code class="p">,</code><code class="w"> </code><code class="n">depth</code><code class="w"> </code><code class="o">-</code><code class="w"> </code><code class="mi">1</code><code class="p">,</code><code class="w"> </code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">join_set</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">join_set</code><code class="p">.</code><code class="n">join_all</code><code class="p">().</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="k">fn</code><code class="w"> </code><code class="nf">spawn_visit</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">traversal</code><code class="p">:</code><code class="w"> </code><code class="nc">Arc</code><code class="o">&lt;</code><code class="n">Traversal</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">url</code><code class="p">:</code><code class="w"> </code><code class="nc">Url</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">depth</code><code class="p">:</code><code class="w"> </code><code class="kt">usize</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">join_set</code><code class="p">:</code><code class="w"> </code><code class="kp">&amp;</code><code class="nc">mut</code><code class="w"> </code><code class="n">JoinSet</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="p">,</code><code class="w"/>
+<code class="p">)</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">join_set</code><code class="p">.</code><code class="n">spawn</code><code class="p">(</code><code class="n">visit</code><code class="p">(</code><code class="n">traversal</code><code class="p">,</code><code class="w"> </code><code class="n">url</code><code class="p">,</code><code class="w"> </code><code class="n">depth</code><code class="p">));</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>We pass <code>visit</code> a URL and the number of links outwards from that page we would like to explore. First we strip any <code>#fragment</code> from the end of the URL, so that the spider correctly handles links that point to different sections of the same web page. The call to <code>HashSet::insert</code> records that this traversal has seen <code>url</code>. Conveniently, <code>insert</code> returns <code>false</code> if that page was already present in the set, indicating that some other task has already visited this page, so in that case our work is done. If <code>depth</code> is zero, then we are not responsible for exploring any further; again, our work is done.</p>
+
+<p>Otherwise, the calling task is the first to reach this page, and is thus responsible for enumerating its outgoing links. We call <code>page_links</code> to find them, and record an error should one arise.</p>
+
+<p>Now that we have our list of links, we have reached the moment where asynchronous code lets us do something that we cannot (or at least should not) do with threads: we simply spawn off a new asynchronous task for every one. If the page has a thousand outgoing links, this will spawn a thousand new asynchronous tasks.</p>
+
+<p>Remember that an asynchronous task is nothing more than a future that the runtime is driving to completion. The future need only be large enough to save the computation’s state at each await expression, including those in the callees like <code>page_links</code> and <code>reqwest::get</code>. <span data-claim-test="async-spider-future-size">In this case, that’s a little over a kilobyte.</span> The runtime itself adds only a small amount of overhead. And an asynchronous task requires no dedicated kernel resources. This is an order of magnitude less memory than needed for a thread that does nothing—and our asynchronous task does quite a bit more than nothing: it opens an HTTP connection, makes a request, and parses the HTML response body.</p>
+
+<p>The upshot is that it is perfectly feasible to fire off a separate asynchronous task for every web page we want to visit. This frees us to write code that directly reflects the natural structure of the activity we’re trying to carry out.</p>
+
+<p>Of course, the exponential nature of the job eventually poses problems for any implementation approach. The Internet is big. It’s worth thinking about what resource would run out first if we ran our spider with a high depth, and how you might redesign the program to scale up further. That’s beyond the scope of our example, though.</p>
+
+<p>The spawning loop uses a Tokio collection called a <code>JoinSet</code>, which is simply a collection of tasks with a convenient <code>join_all</code> method for waiting for them all to complete. <code>JoinSet::spawn</code> starts a new asynchronous task on the same runtime as the caller, and adds it to the set. We call <code>Arc::clone</code> to give each new task its own <code>Arc</code> pointer to the <code>Traversal</code>.</p>
+
+<p>Ideally, <code>spawn_visit</code> would not need to be a separate function; there’s no good reason that <code>visit</code> should not simply recurse to obtain a future that visits <code>link</code>, and call <code>join_set.spawn</code> itself. However, as of this writing, there is a bug in the Rust compiler that causes it to believe that the future of <code>Traversal::visit</code>’s return value is not safe to move between threads if we do so. Isolating the recursive call to <code>visit</code> in its own synchronous function works around this bug.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Extracting The Traversal’s Results"><div class="sect2" id="extracting-the-traversals-results">
+<h2>Extracting The Traversal’s Results</h2>
+
+<p>Here’s a <code>main</code> function that can set this all in motion:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-traversal-main">
+<code class="cp">#[tokio::main]</code><code class="w"/>
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">main</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">url</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">env</code><code class="p">::</code><code class="n">args</code><code class="p">().</code><code class="n">nth</code><code class="p">(</code><code class="mi">1</code><code class="p">)</code><code class="w"> </code><code class="k">else</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">anyhow</code><code class="p">::</code><code class="n">bail</code><code class="o">!</code><code class="p">(</code><code class="s">"Usage: spider URL"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">start_url</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Url</code><code class="p">::</code><code class="n">parse</code><code class="p">(</code><code class="o">&amp;</code><code class="n">url</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">client</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Client</code><code class="p">::</code><code class="n">builder</code><code class="p">().</code><code class="n">user_agent</code><code class="p">(</code><code class="n">USER_AGENT</code><code class="p">).</code><code class="n">build</code><code class="p">()</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">traversal</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Arc</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">Traversal</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="n">client</code><code class="p">,</code><code class="w"> </code><code class="n">USER_AGENT</code><code class="p">.</code><code class="n">to_string</code><code class="p">()));</code><code class="w"/>
+<code class="w">    </code><code class="n">visit</code><code class="p">(</code><code class="n">Arc</code><code class="p">::</code><code class="n">clone</code><code class="p">(</code><code class="o">&amp;</code><code class="n">traversal</code><code class="p">),</code><code class="w"> </code><code class="n">start_url</code><code class="p">,</code><code class="w"> </code><code class="mi">2</code><code class="p">).</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">traversal</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Arc</code><code class="p">::</code><code class="n">into_inner</code><code class="p">(</code><code class="n">traversal</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">seen</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">traversal</code><code class="p">.</code><code class="n">seen</code><code class="p">.</code><code class="n">into_inner</code><code class="p">().</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">sorted</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Vec</code><code class="p">::</code><code class="n">from_iter</code><code class="p">(</code><code class="n">seen</code><code class="p">.</code><code class="n">into_iter</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="n">sorted</code><code class="p">.</code><code class="n">sort</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="n">page</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="n">sorted</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"{page}"</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(())</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>This creates a fresh <code>Traversal</code>, and prints all URLs reachable within two links from the provided starting URL. (For example, we discovered that starting from Rust’s Wikipedia article, in two clicks you can reach articles for “Urediniospore”, “Cranberry jelly”, or “Hubble Space Telescope”; or any of 150,000 other URLs across 7,000 domains.)</p>
+
+<p>It’s interesting to observe that this function is able to display the contents of the <code>Traversal</code> without locking any <code>Mutex</code>es. This is possible because we know that, since each call to <code>Traversal::visit</code> waits for all the tasks it has spawned to complete, by the time it returns, the <code>Arc</code> owned by <code>traversal</code> is the only <code>Arc</code> referring to that object in the entire program. Since no other thread has a clone of it, its reference count cannot increase without our knowledge. <code>Arc::into_inner</code> takes ownership of an <code>Arc</code>, verifies that its reference count is one, and then returns its referent by value. We effectively “unwrap” the <code>Arc</code> from around the <code>Traversal</code>, and take full ownership of it.</p>
+
+<p>A similar argument follows for <code>Mutex</code>: if one has ownership of a <code>Mutex</code>, not just a reference to it, then there must not be any other thread that can access it, so we can unwrap the <code>Mutex</code> from around the value it protects, giving us full ownership of the <code>seen</code> and <code>errors</code> tables.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Waiting Vs. Blocking"><div class="sect2" id="waiting-vs-blocking">
+<h2>Waiting Vs. Blocking</h2>
+
+<p>As written, our spider program calls <code>Html::parse_document</code> directly from <code>async</code> code. Parsing a web page often takes a few hundred milliseconds, and that’s a problem. To understand why, we must dig a little deeper into how Tokio works.</p>
+
+<p>The spider program can spawn thousands of tasks at once, but Tokio uses only a handful of system threads, by default one per CPU core, to run all asynchronous code. Fortunately, our tasks spend a fraction of their time running on a thread. The rest of the time, they are stopped at an <code>.await</code> point: either in <code>netiquette</code>, waiting for a polite interval before contacting a server, or in <code>reqwest</code>, waiting for network I/O.</p>
+
+<p>When a task reaches an <code>.await</code> point and can’t immediately proceed, it relinquishes control back to the runtime. Tokio sets the waiting task aside. If you could look inside the Tokio runtime while this program runs, you would see a small number of tasks actually running on system threads; a large number of tasks that are set aside, waiting; and possibly some tasks in queue, ready for a worker thread to pick them up and run them. This last set includes tasks for which data has just arrived from the network. (If you’ve ever peeked inside an operating system, this will be a familiar sight. An asynchronous runtime often acts like an operating system in miniature, managing your program’s tasks the way an operating system manages threads and processes.)</p>
+
+<p>This arrangement works smoothly as long as each task is well-behaved. If enough tasks run on a worker thread for long enough without an <code>.await</code>, they will hog all of Tokio’s threads and prevent other tasks from running, degrading the responsiveness of the system.</p>
+
+<p>In an excellent blog post, <a href="https://ryhl.io/blog/async-what-is-blocking/">“Async: What is blocking?”</a>, Tokio maintainer Alice Rhyl wrote:</p>
+
+<blockquote>
+<p>To give a sense of scale of how much time is too much, a good rule of thumb is no more than 10 to 100 microseconds between each <code>.await</code>. That said, this depends on the kind of application you are writing.</p>
+</blockquote>
+
+<p>When <code>Html::parse_document(body)</code> runs for 100 milliseconds, we are exceeding the high end of this rule-of-thumb limit by a factor of 1,000. The program will run, and as written it has no need for Tokio to stay responsive. But if we added, say, a graphical visualization of the spider’s progress, also running in Tokio worker threads, this could cause dropped frames. <span data-claim-test="async-blocking-causes-unresponsive-ui">If we added a terminal-based user interface, it might be slow to respond to keystrokes.</span> In a production network service, the effect on response times would be even worse: a few bad tasks can crowd out thousands of other requests.</p>
+
+<p>One partial fix is to use a <em>blocking task</em><a contenteditable="false" data-primary="blocking tasks" data-type="indexterm" id="id2417"/><a contenteditable="false" data-primary="spawn_blocking" data-type="indexterm" id="id2418"/>, created with <code>tokio::task::spawn_blocking</code>. The second half of <code>page_links</code> can be replaced with this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-spawn-blocking">
+<code class="c1">// Spawn a blocking task (not actually the best fix; see below)</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">url</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">url</code><code class="p">.</code><code class="n">clone</code><code class="p">();</code><code class="w"/>
+<code class="n">tokio</code><code class="p">::</code><code class="n">task</code><code class="p">::</code><code class="n">spawn_blocking</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">doc</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Html</code><code class="p">::</code><code class="n">parse_document</code><code class="p">(</code><code class="o">&amp;</code><code class="n">body</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">link_selector</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Selector</code><code class="p">::</code><code class="n">parse</code><code class="p">(</code><code class="s">"a[href]"</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="w">    </code><code class="nb">Ok</code><code class="p">(</code><code class="o">..</code><code class="p">.)</code><code class="w"/>
+<code class="p">})</code><code class="w"/>
+<code class="p">.</code><code class="k">await</code><code class="w"/>
+<code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"HTML parsing task panicked"</code><code class="p">)</code><code class="w"/>
+</pre>
+
+<p>Note that <code>spawn_blocking</code> takes a non-<code>async</code> closure as its argument. Tokio runs that closure on a separate thread, so it won’t interfere with Tokio’s responsiveness. <code>spawn_blocking</code> returns a future so that the <code>async</code> caller can wait for the blocking work to finish. The return value is an error if the task panicked.</p>
+
+<p>However, there’s a problem with this plan. Tokio spawns a system thread for each blocking task, up to a limit of several hundred by default. This design is meant for code that uses blocking system calls, such as writing to a slow disk. But the work we’re doing here is CPU-intensive; it would be counterproductive to spawn more threads for this work than the number of CPUs in the system.</p>
+
+<p>We should, therefore, use a thread pool designed for CPU-intensive work<a contenteditable="false" data-primary="Rayon library" data-type="indexterm" id="id2419"/>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-rayon-await">
+<code class="k">use</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">sync</code><code class="p">::</code><code class="n">oneshot</code><code class="p">;</code><code class="w"/>
+
+<code class="c1">// Spawn a Rayon task (the correct fix)</code>
+<code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">sender</code><code class="p">,</code><code class="w"> </code><code class="n">receiver</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">oneshot</code><code class="p">::</code><code class="n">channel</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">url</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">url</code><code class="p">.</code><code class="n">clone</code><code class="p">();</code><code class="w"/>
+<code class="n">rayon</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="k">move</code><code class="w"> </code><code class="o">||</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">doc</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Html</code><code class="p">::</code><code class="n">parse_document</code><code class="p">(</code><code class="o">&amp;</code><code class="n">body</code><code class="p">);</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">links</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">..</code><code class="p">.;</code><code class="w"/>
+<code class="w">    </code><code class="n">sender</code><code class="p">.</code><code class="n">send</code><code class="p">(</code><code class="n">links</code><code class="p">).</code><code class="n">unwrap</code><code class="p">();</code><code class="w"/>
+<code class="p">});</code><code class="w"/>
+<code class="nb">Ok</code><code class="p">(</code><code class="n">receiver</code><code class="p">.</code><code class="k">await</code><code class="p">.</code><code class="n">unwrap</code><code class="p">())</code><code class="w"/>
+</pre>
+
+<p>The function <code>rayon::spawn()</code> runs a closure on Rayon’s thread pool. However, this function doesn’t support returning a value to the caller, so we must build that for ourselves, using Tokio’s <code>oneshot</code> channel<a contenteditable="false" data-primary="oneshot channel" data-type="indexterm" id="id2420"/><a contenteditable="false" data-primary="channels" data-secondary="oneshot" data-type="indexterm" id="id2421"/>. Like the <code>std::mpsc::channel</code> and <code>sync_channel</code> functions we used in the previous chapter, <code>tokio::oneshot::channel()</code> returns a sender and a receiver, but a <code>oneshot</code> channel is designed to be used only once. The <code>send</code> method takes <code>self</code> by value, so that the sender value is consumed when used; and instead of calling <code>receiver.recv()</code>, we simply use <code>receiver.await</code> to wait for a value to be delivered, consuming the receiver.</p>
+
+<p>Oneshot channels often solve minor problems like this. Since the receiver is a future, and the sender is a way to directly provide the receiver’s value, <code>oneshot::channel()</code> can be used to turn any computation into a future.</p>
+
+<p>This completes our spider program. The lesson to take away is this: In an asynchronous program, there are several kinds of work, and getting the best performance requires implementing and running these workloads in different ways.</p>
+
+<ul>
+	<li>
+	<p>CPU-light, nonblocking work only needs a fraction of a thread’s time. It is written with <code>async</code> and <code>await</code> and runs on the Tokio worker pool.</p>
+	</li>
+	<li>
+	<p>Code that uses blocking system calls should run in Tokio blocking tasks.</p>
+	</li>
+	<li>
+	<p>CPU-intensive computation should run in a separate thread pool, such as Rayon.</p>
+	</li>
+</ul>
+
+<p><code>spawn_blocking</code>, <code>rayon::spawn</code>, and <code>oneshot</code> channels are the bridges that allow programs to span these different worlds.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Asynchronous Versions of Blocking Tools"><div class="sect1" id="async-versions-of-blocking-tools">
+<h1>Asynchronous Versions of Blocking Tools</h1>
+
+<p>The rule, then, is that asynchronous code must avoid blocking the thread it runs on. That’s easy to say, but the restriction cuts surprisingly deep. Many familiar APIs, such as <code>std::thread::sleep</code> and <code>std::net::TcpStream::connect</code>, block the calling thread. In asynchronous code, you must use the asynchronous equivalents, which are generally designed to work the same, except for needing extra <code>.await</code>s here and there.</p>
+
+<p>For example, pausing for a second in regular blocking code looks like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-sleep-blocking">
+<code class="n">std</code><code class="p">::</code><code class="n">thread</code><code class="p">::</code><code class="n">sleep</code><code class="p">(</code><code class="n">Duration</code><code class="p">::</code><code class="n">from_secs</code><code class="p">(</code><code class="mi">1</code><code class="p">));</code><code class="w"/>
+</pre>
+
+<p>This asks the operating system to suspend the calling thread and wake it up after a second has passed.</p>
+
+<p>Tokio offers a straightforward asynchronous equivalent:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-sleep-nonblocking">
+<code class="n">tokio</code><code class="p">::</code><code class="n">time</code><code class="p">::</code><code class="n">sleep</code><code class="p">(</code><code class="n">Duration</code><code class="p">::</code><code class="n">from_secs</code><code class="p">(</code><code class="mi">1</code><code class="p">)).</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>This asks Tokio to suspend our <code>async</code> code at the <code>.await</code> point and wake it up a second later.</p>
+
+<p><a data-type="xref" href="#async-equivalents">Table 20-1</a> lists common features of the standard library and some other useful crates that have direct equivalents in Rust’s <code>async</code> ecosystem. Tokio provides the <code>async</code> versions, with a few exceptions.</p>
+
+<table id="async-equivalents">
+	<caption><span class="label">Table 20-1. </span>Blocking APIs with Direct Asynchronous Equivalents</caption>
+	<thead>
+		<tr>
+			<th>Topic</th>
+			<th>Blocking API</th>
+			<th>Async API</th>
+		</tr>
+	</thead>
+	<tbody>
+		<tr>
+			<th rowspan="3">Concurrency</th>
+			<td><code>std::thread::spawn</code></td>
+			<td><code>tokio::spawn</code>, <code>tokio::task::spawn_blocking</code></td>
+		</tr>
+		<tr>
+			<td><code>std::thread::scope</code></td>
+			<td><code>tokio::task::JoinSet</code><br/>
+			(a very rough equivalent)</td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>rayon::join</code><br/>
+			(to run two closures in parallel)</td>
+			<td><code>futures::future::join</code><br/>
+			(to await two futures concurrently)</td>
+		</tr>
+		<tr class="border_bottom">
+			<th>Time</th>
+			<td><code>std::thread::sleep</code></td>
+			<td><code>tokio::time::sleep</code></td>
+		</tr>
+		<tr>
+			<th rowspan="5">I/O</th>
+			<td><code>std::net::{TcpStream, ...}</code></td>
+			<td><code>tokio::net::{TcpStream, ...}</code></td>
+		</tr>
+		<tr>
+			<td><code>reqwest::blocking::{get, Client,<br/>
+			  Request, ...}</code></td>
+			<td><code>reqwest::{get, Client,<br/>
+			  Request, ...}</code></td>
+		</tr>
+		<tr>
+			<td><code>std::net::ToSocketAddrs</code><br/>
+			(domain name lookup)</td>
+			<td><code>tokio::net::lookup_host</code></td>
+		</tr>
+		<tr>
+			<td><code>std::io::{Read, Write}</code><br/>
+			(basic I/O traits)</td>
+			<td><code>tokio::io::{AsyncRead, AsyncWrite,<br/>
+			  AsyncReadExt, AsyncWriteExt}</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<td><code>std::fs::{File, ...}</code></td>
+			<td><code>tokio::fs::{File, ...}</code><br/>
+			(but see the text about this)</td>
+		</tr>
+		<tr class="border_bottom">
+			<th>Processes</th>
+			<td><code>std::process::Command</code></td>
+			<td><code>tokio::process::Command</code></td>
+		</tr>
+		<tr class="border_bottom">
+			<th>Locking</th>
+			<td><code>std::sync::{Mutex, RwLock, ...}</code></td>
+			<td><code>tokio::sync::{Mutex, RwLock, ...}</code><br/>
+			(but see the text about this)</td>
+		</tr>
+		<tr>
+			<th rowspan="2">Channels</th>
+			<td><code>std::sync::mpsc::sync_channel</code><br/>
+			(limited queue size)</td>
+			<td><code>tokio::sync::mpsc::channel</code></td>
+		</tr>
+		<tr>
+			<td><code>std::sync::mpsc::channel</code><br/>
+			(unlimited queue size)</td>
+			<td><code>tokio::sync::mpsc::unbounded_channel</code></td>
+		</tr>
+	</tbody>
+</table>
+
+<p>Any of these asynchronous APIs could be implemented in a few lines of code, using <code>spawn_blocking</code> to move the blocking operations off of asynchronous threads. In a default build, <code>tokio::fs</code> actually works that way. But the rest have custom futures-based implementations, because the performance advantage of asynchronous code comes from avoiding thread overhead, and these low-level I/O APIs are where the magic happens. We’ll show how they’re implemented in the next chapter.</p>
+
+<p>Despite all our warnings, in two cases we recommend using blocking APIs instead of the asynchronous APIs listed in <a data-type="xref" href="#async-equivalents">Table 20-1</a>.</p>
+
+<p>First, <code>tokio::fs</code> is not like the other APIs listed in this table. The default implementation actually uses the blocking APIs from <code>std::fs</code>, wrapping each call in <code>spawn_blocking</code>. That imposes overhead on every operation. For large chunks of disk I/O work, you can get better performance by doing a single <code>spawn_blocking</code> of your own and using <code>std::fs</code> in the blocking task. For smaller jobs, like reading a configuration file, it’s not unreasonable to call <code>std::fs</code> directly from <code>async</code> code.</p>
+
+<p>Second, <code>std::sync::Mutex</code> and <code>RwLock</code> are better than their asynchronous equivalents<a contenteditable="false" data-primary="mutexes" data-secondary="async code and" data-type="indexterm" id="id2422"/> for locks that are never held across an <code>.await</code> point, as long as contention is low. This is the case for most locks in practice.</p>
+
+<p>This second recommendation is so counterintuitive that we will take a moment to explain. There are two major differences between <code>std</code> locks and Tokio locks. One is that <code>std</code> locks and the operating system primitives they rely upon have been heroically fine-tuned over the course of decades. They use almost no memory, and the uncontended path through a mutex is a few machine instructions. The other difference is that Tokio’s locks are designed for <code>async</code> code. Tokio’s <code>Mutex::lock</code> method returns a future which the calling task must <code>.await</code>; if someone else is holding the mutex, the task is suspended like any other waiting task, without blocking the worker thread. A <code>std</code> mutex would block the thread. That’s a severe performance hazard if the lock is unobtainable for a long time, and that’s why contention is the deciding factor.</p>
+
+<p>Whatever your use case, holding a <code>std</code> lock across an <code>.await</code> point is usually a mistake, likely to cause other worker threads to block, and even deadlock, when they try to acquire the same lock. (Clippy, the Rust linter, can detect the most common forms of this bug.)</p>
+
+<p>It’s a little odd that <code>tokio::sync</code> is the name of the module that provides an <code>async</code> version of the <code>std::sync</code> toolkit. Both modules are named <code>sync</code> because they provide “synchronization primitives”, tools for coordination and communication across multiple tasks or threads. This use of “synchronization” dates back to the 1970s, if not earlier. Meanwhile “asynchronous I/O”, the basis of <code>async</code> Rust, dates back to the 1980s, so the two similar-sounding but mostly-unrelated terms were on a collision course for some 30 years before they met in <code>tokio::sync</code>! In any case, there’s no contradiction in saying that <code>async</code> tasks need synchronization primitives. They need to coordinate.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Tasks and ’static"><div class="sect1" id="tasks-and-static">
+<h1>Tasks and ’static</h1>
+
+<p>Let’s look at the type signature of Tokio’s <code>spawn</code> function:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-task-spawn-signature">
+<code class="c1">// in tokio::task</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">spawn</code><code class="o">&lt;</code><code class="n">F</code><code class="o">&gt;</code><code class="p">(</code><code class="n">future</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">JoinHandle</code><code class="o">&lt;</code><code class="n">F</code><code class="p">::</code><code class="n">Output</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nc">Future</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">::</code><code class="n">Output</code><code class="p">:</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+</pre>
+
+<p>How does this compare to the standard library’s function for spawning threads?</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-thread-spawn-signature">
+<code class="c1">// in std::thread</code>
+<code class="k">fn</code><code class="w"> </code><code class="nf">spawn</code><code class="o">&lt;</code><code class="n">F</code><code class="p">,</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="p">(</code><code class="n">f</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">JoinHandle</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">FnOnce</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">T</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">T</code><code class="p">:</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+</pre>
+
+<p>The <code>async</code> version takes a future instead of a closure, but otherwise these are very similar. The future or closure must be <code>Send</code> and <code>'static</code>, so that it is safe to run on another thread for as long as it takes to finish. The return type must be <code>Send</code> and <code>'static</code> so that it’s safe to transfer the return value back again when the <code>JoinHandle</code> is joined.</p>
+
+<p>We keep stressing these similarities between <code>async</code> code and threads because it’s easy to forget how similar they are. Again and again, when we have trouble with asynchronous code, we’ve found it illuminating to ask: What if we were using threads? Very often, the answer is that we ⁠’d have the same problem, for the same reasons, and can solve it the same way.</p>
+
+<p>For instance, if you try to <code>spawn</code> a future that borrows a local variable, Rust complains:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-spawn-borrow">
+<code class="kd">let</code><code class="w"> </code><code class="n">hosts</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="fm">vec!</code><code class="p">[</code><code class="s">"example.com"</code><code class="p">,</code><code class="w"> </code><code class="s">"example.org"</code><code class="p">];</code><code class="w"/>
+<code class="n">tokio</code><code class="p">::</code><code class="n">task</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="k">async</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// error: async block may outlive the current function, but it</code>
+<code class="w">    </code><code class="c1">// borrows `hosts`, which is owned by the current function</code>
+<code class="w">    </code><code class="k">for</code><code class="w"> </code><code class="o">&amp;</code><code class="n">host</code><code class="w"> </code><code class="k">in</code><code class="w"> </code><code class="o">&amp;</code><code class="n">hosts</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">result</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reqwest</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="fm">format!</code><code class="p">(</code><code class="s">"https://{host}/"</code><code class="p">)).</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">});</code><code class="w"/>
+</pre>
+
+<p><span data-claim-test="async-thread-spawn-borrow-similar-errors">You’d get similar errors if you tried the same thing with <code>std::thread::spawn</code></span>, and the fix is similar: use an <code>async move</code> block to move the data into the new task instead of borrowing it. Like a thread, a task needs to own its data.</p>
+
+<p>If you can’t <code>move</code> the value, because the parent task still needs it, you must clone it. Then you can <code>move</code> the clone. This is a very common technique; often the few lines of code leading up to an <code>async move</code> are local variables cloning data owned by the parent task. If a full copy is too expensive, wrap it in an <code>Arc&lt;T&gt;</code>, which is cheaply cloneable. (And if that sounds familiar, it’s because you were paying attention in <a data-type="xref" href="ch19.html#sharing-immutable-data-across-threads">“Sharing Immutable Data Across Threads”</a>, where we solved a thread-spawning problem using the same technique.)</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Tasks and Send"><div class="sect1" id="tasks-and-send">
+<h1>Tasks and Send</h1>
+
+<p>In addition to <code>'static</code>, a future spawned with Tokio must implement the <code>Send</code> marker trait.<a contenteditable="false" data-primary="Send marker trait" data-type="indexterm" id="ix_send_marker2"/><a contenteditable="false" data-primary="futures" data-secondary="implementing Send" data-type="indexterm" id="ix_futures_implem_send"/> As we discussed in <a data-type="xref" href="ch19.html#thread-safety-send-and-sync">“Thread Safety: Send and Sync”</a>, types that implement <code>Send</code> can be safely moved from one thread to another. When a single task spawns a few hundred child tasks, Tokio distributes them among its worker threads. The futures must be <code>Send</code> to make this safe. (Tokio workers also practice work-stealing<a contenteditable="false" data-primary="work-stealing" data-type="indexterm" id="id2423"/>, moving tasks from thread to thread to balance load. This too requires <code>Send</code>.)</p>
+
+<p>But how can you tell if your future implements <code>Send</code>? We said in <a data-type="xref" href="ch19.html#threads">Chapter 19</a> that a struct or enum implements <code>Send</code> if all its fields are <code>Send</code>. Closures and futures follow the same intuition, although the “fields” of those types aren’t explicitly written down anywhere in your code. Each closure in your code has its own custom type. This type is <code>Send</code> if all the values the closure captures are <code>Send</code>.</p>
+
+<p>Futures created by <code>async</code> code work the same way. They act as though they have private fields containing all the data they will need to run. A future created by an <code>async move</code> block contains each variable it captured, just like a <code>move</code> closure. Futures created by calling an <code>async fn</code> contain all the function arguments. And all <code>async</code> futures have additional private fields for storing the state of the <code>async</code> code at each <code>.await</code> point: all local variables in scope, and even anonymous temporary values in flight at the <code>.await</code>. If all these values are <code>Send</code>, the future is <code>Send</code>.</p>
+
+<p>This list of types is never spelled out in code, so the <code>Send</code> restriction is easy to trip over by accident. For example, the following code looks innocent enough:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-future-not-send">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">rc</code><code class="p">::</code><code class="n">Rc</code><code class="p">;</code><code class="w"/>
+
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">reluctant</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">String</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">string</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Rc</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"ref-counted string"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+
+<code class="w">    </code><code class="n">some_asynchronous_thing</code><code class="p">().</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="fm">format!</code><code class="p">(</code><code class="s">"Your splendid string: {string}"</code><code class="p">)</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+
+<code class="n">tokio</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="n">reluctant</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>In this case, <code>reluctant</code>’s future must use <code>string</code> after the <code>await</code>, so the future will, at least sometimes, contain an <code>Rc&lt;String&gt;</code> value. Since <code>Rc</code> pointers cannot be safely shared between threads, the future itself cannot be <code>Send</code>. And since <code>spawn</code> only accepts futures that are <code>Send</code>, Rust objects:</p>
+
+<pre class="console" data-code-language="console" data-type="programlisting">
+<code class="go">error: future cannot be sent between threads safely</code>
+<code class="go">    |</code>
+<code class="go">19  |     tokio::spawn(reluctant());</code>
+<code class="go">    |                  ^^^^^^^^^^^ future returned by `reluctant` is not `Send`</code>
+<code class="go">    |</code>
+<code class="go">    = help: within `impl Future&lt;Output = String&gt;`, the trait `Send` is not</code>
+<code class="go">            implemented for `Rc&lt;String&gt;`</code>
+<code class="go">note: future is not `Send` as this value is used across an await</code>
+<code class="go">    |</code>
+<code class="go">14  |         let string = Rc::new("ref-counted string".to_string());</code>
+<code class="go">    |             ------ has type `Rc&lt;String&gt;` which is not `Send`</code>
+<code class="go">...</code>
+<code class="go">16  |         some_asynchronous_thing().await;</code>
+<code class="go">    |                                   ^^^^^ await occurs here, with `string`</code>
+<code class="go">                                              maybe used later</code>
+<code class="go">note: required by a bound in `tokio::spawn`</code>
+<code class="go">    |</code>
+<code class="go">174 |     pub fn spawn&lt;F&gt;(future: F) -&gt; JoinHandle&lt;F::Output&gt;</code>
+<code class="go">    |            ----- required by a bound in this function</code>
+<code class="go">175 |     where</code>
+<code class="go">176 |         F: Future + Send + 'static,</code>
+<code class="go">    |                     ^^^^ required by this bound in `spawn`</code>
+</pre>
+
+<p>This error message is long, but it has a lot of helpful detail:</p>
+
+<ul>
+	<li>
+	<p>It explains why the future needs to be <code>Send</code>: <code>tokio::spawn</code> requires it.</p>
+	</li>
+	<li>
+	<p>It explains which value is not <code>Send</code>: the local variable <code>string</code>, whose type is <code>Rc&lt;String&gt;</code>.</p>
+	</li>
+	<li>
+	<p>It explains why <code>string</code> affects the future: it is in scope across the indicated <code>await</code>.</p>
+	</li>
+</ul>
+
+<p>To fix the error, we just need to avoid holding an <code>Rc&lt;String&gt;</code> across an await point.<sup><a data-type="noteref" id="id2424-marker" href="ch20.html#id2424">1</a></sup></p>
+
+<p>One way to do this is to restrict the scope of the non-<code>Send</code> value so that it doesn’t cover any <code>await</code> expressions and thus doesn’t need to be saved in the function’s future:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-restrict-non-Send-scope">
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">reluctant</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">String</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">return_value</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="kd">let</code><code class="w"> </code><code class="n">string</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">Rc</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="s">"ref-counted string"</code><code class="p">.</code><code class="n">to_string</code><code class="p">());</code><code class="w"/>
+<code class="w">        </code><code class="fm">format!</code><code class="p">(</code><code class="s">"Your splendid string: {string}"</code><code class="p">)</code><code class="w"/>
+<code class="w">        </code><code class="c1">// The `Rc&lt;String&gt;` goes out of scope here...</code>
+<code class="w">    </code><code class="p">};</code><code class="w"/>
+
+<code class="w">    </code><code class="c1">// ... and thus is not around when we suspend here.</code>
+<code class="w">    </code><code class="n">some_asynchronous_thing</code><code class="p">().</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+
+<code class="w">    </code><code class="n">return_value</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Another solution is simply to use <code>std::sync::Arc</code> instead of <code>Rc</code>. <code>Arc</code> uses atomic updates to manage its reference counts, so <code>Arc&lt;String&gt;</code> is <code>Send</code>.</p>
+
+<p>Although eventually you’ll learn to recognize and avoid non-<code>Send</code> types, they can be a bit surprising at first. (At least, your authors were often surprised.) For example, older Rust code sometimes uses generic result types like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-future-not-send-dyn-generic-error">
+<code class="c1">// Not recommended!</code>
+<code class="k">type</code><code class="w"> </code><code class="nc">GenericError</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+<code class="k">type</code><code class="w"> </code><code class="nc">GenericResult</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">GenericError</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>This <code>GenericError</code> type uses a boxed trait object to hold a value of any type that implements <code>std::error::Error</code>. But it doesn’t place any further restrictions on it: if someone had a non-<code>Send</code> type that implemented <code>Error</code>, they could convert a boxed value of that type to a <code>GenericError</code>. Because of this possibility, <code>GenericError</code> is not <code>Send</code>, and a future that holds this kind of error value across an <code>.await</code> point isn’t <code>Send</code> either.</p>
+
+<p>This problem doesn’t come up if you use stricter generic error types, like the ones we suggested in <a data-type="xref" href="ch07.html#working-with-multiple-error-types">“Working with Multiple Error Types”</a>:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-good-generic-error">
+<code class="k">type</code><code class="w"> </code><code class="nc">GenericError</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">error</code><code class="p">::</code><code class="n">Error</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Sync</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+<code class="k">type</code><code class="w"> </code><code class="nc">GenericResult</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Result</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">GenericError</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>This <code>dyn</code> type explicitly requires the underlying error type to implement <code>Send</code>, so it is <code>Send</code> too, and it won’t cause problems in <code>async</code> code.</p>
+
+<p>For your own trait definitions, you can avoid this kind of trouble by writing <code>trait MyTrait: Send { ... }</code>, forcing all types that implement your trait to be <code>Send</code>. Then code using <code>dyn MyTrait</code> won’t need to add <code>+ Send</code>. And, of course, you can extend this to <code>trait MyTrait: Send + Sync + 'static</code>, if needed.</p>
+
+<p>You might be wondering why Rust lets you write non-<code>Send</code> code in the first place, if it isn’t going to let you run it! But it’s Tokio’s multithreaded runtime that imposes the <code>Send</code> requirement, not Rust itself. In fact, Tokio’s <code>Runtime::block_on</code> method does <em>not</em> require a <code>Send</code> future, because it doesn’t use Tokio’s thread pool. In general, though, if you use Tokio, most of your futures will need to be <code>Send</code><a contenteditable="false" data-startref="ix_send_marker2" data-type="indexterm" id="id2425"/><a contenteditable="false" data-startref="ix_futures_implem_send" data-type="indexterm" id="id2426"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Asynchronous Closures"><div class="sect1" id="asynchronous-closures">
+<h1>Asynchronous Closures</h1>
+
+<p><a contenteditable="false" data-primary="async closures" data-type="indexterm" id="ix_async_closures"/>There is not too much to say about <code>async</code> closures. They are just what you’d expect. They look like regular closures, but with an <code>async</code> keyword stuck on the front. Like an <code>async fn</code>, an <code>async</code> closure returns a future.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-closure">
+<code class="c1">// spawn a task per user</code>
+<code class="kd">let</code><code class="w"> </code><code class="n">tasks</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">users</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">into_iter</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">map</code><code class="p">(</code><code class="k">async</code><code class="w"> </code><code class="o">|</code><code class="n">user</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">add_to_group</code><code class="p">(</code><code class="n">user</code><code class="p">,</code><code class="w"> </code><code class="n">group</code><code class="p">).</code><code class="k">await</code><code class="w"/>
+<code class="w">    </code><code class="p">})</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">collect</code><code class="p">::</code><code class="o">&lt;</code><code class="n">JoinSet</code><code class="o">&lt;</code><code class="n">_</code><code class="o">&gt;&gt;</code><code class="p">();</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="n">results</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">tasks</code><code class="p">.</code><code class="n">join_all</code><code class="p">().</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>In this example, we use the iterator <code>.map</code> method to call an <code>async</code> closure for each user in the vector <code>users</code>, producing a sequence of futures. Then we collect those futures into a <code>JoinSet</code>, which spawns one task per future. This is an easy way to run some tasks concurrently.</p>
+
+<p>Just as<a contenteditable="false" data-primary="streams (async iterators)" data-type="indexterm" id="id2427"/> ordinary closures are often used with iterators, asynchronous closures are often used with the asynchronous analogue of iterators: streams. The <code>futures</code> crate provides <code>Stream</code> and <code>StreamExt</code> traits. These traits are similar to <code>Iterator</code>, but they produce items asynchronously: the <code>next</code> method of a stream is an <code>async</code> method. <code>StreamExt</code> offers a smorgasbord of familiar methods (<code>map</code>, <code>filter</code>, <code>fold</code>, <code>collect</code>, and so on), many of which take asynchronous closures as arguments. However, <code>StreamExt</code> also includes a few astonishing features that add an element of concurrency over what regular iterators can do. For example, <code>StreamExt::for_each</code> applies an asynchronous closure to each element of a stream, one at a time; but there’s also <code>StreamExt::for_each_concurrent</code>, which processes multiple elements concurrently, up to a limit, which you specify as an argument.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-streams">
+<code class="c1">// Rolling reboot of a set of servers, 8 at a time</code>
+<code class="n">futures</code><code class="p">::</code><code class="n">stream</code><code class="p">::</code><code class="n">iter</code><code class="p">(</code><code class="o">&amp;</code><code class="n">servers</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">for_each_concurrent</code><code class="p">(</code><code class="mi">8</code><code class="p">,</code><code class="w"> </code><code class="k">async</code><code class="w"> </code><code class="o">|</code><code class="n">server</code><code class="o">|</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">server</code><code class="p">.</code><code class="n">reboot_and_wait_until_started</code><code class="p">().</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="p">})</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>This example creates a stream from an ordinary iterator using <code>futures::stream::iter</code>. Then it uses <code>for_each_concurrent</code> to call an asynchronous closure on each value, with up to 8 closure calls running asynchronously at a time.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="AsyncFn"><div class="sect1" id="asyncfn">
+<h1>AsyncFn</h1>
+
+<p>Analogous to <code>Fn</code>, <code>FnMut</code>, and <code>FnOnce</code>, there are three built-in traits for asynchronous closures: <code>AsyncFn</code><a contenteditable="false" data-primary="AsyncFn trait" data-type="indexterm" id="id2428"/>, <code>AsyncFnMut</code>, and <code>AsyncFnOnce</code>. These traits cover anything callable that returns a future: so, <code>async fn</code>s and <code>async</code> closures, certainly; but also regular closures and functions that return futures, like the <code>announce</code> and <code>copying_announce</code> examples earlier in this chapter.</p>
+
+<p>Unfortunately, the <code>AsyncFn</code> traits do not promise to return a <code>Send + 'static</code> future. This means they can cause problems when you want to use a closure with <code>tokio::spawn</code> in generic code:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-fn-non-send">
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">kick_off_task</code><code class="o">&lt;</code><code class="n">F</code><code class="o">&gt;</code><code class="p">(</code><code class="n">closure</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nc">AsyncFn</code><code class="p">()</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">tokio</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="k">async</code><code class="w"> </code><code class="k">move</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">closure</code><code class="p">().</code><code class="k">await</code><code class="p">;</code><code class="w">  </code><code class="c1">// error: awaits a future which is not Send</code>
+<code class="w">        </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">    </code><code class="p">});</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>How can we work around this? We need to require the future type—not only the closure type <code>F</code>, but the type of future it returns—to be <code>Send + 'static</code>.</p>
+
+<p>It’s possible to write a function signature that does this, but not by using <code>AsyncFn()</code>. Use the trait <code>Fn() -&gt; Fut</code> instead. This makes the future type explicit:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-spawn-generic-closure">
+<code class="k">fn</code><code class="w"> </code><code class="nf">kick_off_task</code><code class="o">&lt;</code><code class="n">F</code><code class="p">,</code><code class="w"> </code><code class="n">Fut</code><code class="o">&gt;</code><code class="p">(</code><code class="n">closure</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">)</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nb">Fn</code><code class="p">()</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">Fut</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="w">    </code><code class="n">Fut</code><code class="p">:</code><code class="w"> </code><code class="nc">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+</pre>
+
+<p>Once we’ve given the future’s type a name in our code, <code>Fut</code>, we can easily spell out the requirements that will satisfy <code>tokio::spawn</code> in our function’s <code>where</code> clause<a contenteditable="false" data-startref="ix_async_closures" data-type="indexterm" id="id2429"/>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Asynchronous Functions In Traits"><div class="sect1" id="asynchronous-functions-in-traits">
+<h1>Asynchronous Functions In Traits</h1>
+
+<p>Traits can include <code>async</code> functions, but by default those functions can’t be run in Tokio’s multithreaded runtime. There isn’t an idiomatic way to declare an <code>async fn</code> type signature that says “this must return a future that is <code>Send</code>“.</p>
+
+<p>Two crates offer fixes for this problem:</p>
+
+<ul>
+	<li>
+	<p>The <code>trait-variant</code> crate provides an attribute, <code>#[trait_variant::make]</code>, that you can use on a trait to declare a <code>Send</code> “variant” of that trait. The variant is like the original, but with its <code>async fn</code>s rewritten to return <code>Send</code> futures.</p>
+	</li>
+	<li>
+	<p>The <code>async-trait</code> crate provides its own attribute, <code>#[async_trait::async_trait]</code>. This also rewrites your <code>async fn</code> signatures, but in a way that additionally makes your trait <code>dyn</code>-compatible.</p>
+	</li>
+</ul>
+
+<p>The <code>Future</code> trait itself is <code>dyn</code>-compatible, so you can declare boxed <code>dyn</code> future types, similar to what we’ve seen earlier for closures and errors:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-any-future">
+<code class="k">type</code><code class="w"> </code><code class="nc">BoxedFuture</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="nb">Box</code><code class="o">&lt;</code><code class="k">dyn</code><code class="w"> </code><code class="n">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="o">&gt;</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>The <code>async-trait</code> crate works by transforming all your <code>async</code> methods’ type signatures to return boxed futures like this. This imposes virtual method call overhead when the futures are polled, but that’s necessary in order to make <code>async</code> methods <code>dyn</code>-compatible.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Cancellation"><div class="sect1" id="cancellation">
+<h1>Cancellation</h1>
+
+<p><a contenteditable="false" data-primary="cancellation" data-type="indexterm" id="ix_async_cancellation"/>There is no safe way to kill a single thread of a process. Safe cleanup is simply impossible, given that there’s no way to tell precisely what the thread is doing. It might be holding locks, panicking, in the midst of dropping a large data structure, or even running non-Rust code, such as a system library. But <code>async</code> code is designed to yield frequently, at <code>.await</code> points, and every time it does so, all its variables and local state are neatly stored in the future. As a consequence, <code>async</code> code can be safely cancelled.</p>
+
+<p>This capability has several uses:</p>
+
+<ul>
+	<li>
+	<p>Killing a single running task (<code>tokio::task::JoinHandle::abort</code> and <code>JoinSet::abort_all</code>);</p>
+	</li>
+	<li>
+	<p>Applying a timeout to an any future at all (<code>tokio::time::timeout</code>);</p>
+	</li>
+	<li>
+	<p>Running any number of futures until we decide to cancel them (<code>tokio_util::sync::CancellationToken::run_until_cancelled</code>);</p>
+	</li>
+	<li>
+	<p>Letting multiple futures race and handling whichever is ready first, cancelling the others (<code>tokio::select!</code>).</p>
+	</li>
+</ul>
+
+<p>In the remaining pages of this chapter, we’ll touch on each of these features. To begin with, here is what a timeout looks like in Rust:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-timeout">
+<code class="kd">let</code><code class="w"> </code><code class="n">result</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">time</code><code class="p">::</code><code class="n">timeout</code><code class="p">(</code><code class="w"/>
+<code class="w">    </code><code class="n">Duration</code><code class="p">::</code><code class="n">from_secs</code><code class="p">(</code><code class="mi">5</code><code class="p">),</code><code class="w"/>
+<code class="w">    </code><code class="n">reqwest</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="s">"https://example.com/"</code><code class="p">),</code><code class="w"/>
+<code class="p">).</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+</pre>
+
+<p>This snippet runs the <code>reqwest::get</code> future for up to 5 seconds. If the request finishes in time, the <code>result</code> will be an <code>Ok</code> wrapping the <code>reqwest::Result</code> produced by <code>get</code>, a nested <code>Result</code>. If time runs out, <code>result</code> will be <code>Err(Elapsed)</code>, a Tokio error type just for expired timeouts.</p>
+
+<p>When you <code>tokio::spawn</code> or <code>await</code> a future, or pass it by value to <code>tokio::time::timeout</code>, you’re handing over ownership of that future. Later, if the Tokio runtime needs to cancel that future, it simply drops it. This in turn drops any local variables or other values wrapped up in the future, so any memory or resources it was using are cleaned up, a bit like panic unwinding.</p>
+
+<p>This cleanup scheme is good and bad. Aborting a task is safe and won’t normally leak memory. In the case of <code>reqwest::get</code>, <code>drop</code> methods inside <code>reqwest</code> will make sure the network connection is appropriately closed or returned to its connection pool. But in other cases, stopping your code at a random <code>.await</code> point can leave work half-done, and that can cause bugs. In general, you shouldn’t cancel asynchronous code unless you have some sense of what it’s doing.</p>
+
+<p>For example, if you abort a network server task, it won’t gracefully stop accepting new requests, finish up serving the few in-flight requests, and then exit. Clients will get errors: their network connections will be closed with no response.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Cancel safety"><div class="sect2" id="cancel-safety">
+<h2>Cancel safety</h2>
+
+<p>Cancellation<a contenteditable="false" data-primary="invariants" data-secondary="cancellation and" data-type="indexterm" id="id2430"/><a contenteditable="false" data-primary="invariants" data-secondary="panic and" data-type="indexterm" id="id2431"/> is like panic unwinding in another regard: if you’re not careful, it can cause your code to break its invariants. Consider a function that reads a message from a channel, then updates a data structure. The code is naturally expected to maintain the invariant that the data structure reflects all messages received so far. Now, between the moment a message is received and the moment the update is complete, the invariant does not quite hold. One message is in flight. This momentary discrepancy is unavoidable, and harmless as it’s only for the duration of the function. Since <code>mut</code> access to the data structure is exclusive, Rust can even guarantee that no other code can observe the discrepancy. But if the task panics or is cancelled at an await point before the update is complete, the invariant stays broken permanently.</p>
+
+<p>The term for proper behavior in case of cancellation is “cancel safety”.<a contenteditable="false" data-primary="cancel safety" data-type="indexterm" id="id2432"/> Making sure your code’s invariants are intact at each <code>.await</code> point is the first step in making it cancel safe. But ultimately cancel safety is not a precisely defined term. The questions it poses are: If someone cancels this code, are they in for an unpleasant surprise? Have I treated not only <code>?</code> but every <code>.await</code> as a possible early exit point, throughout this code?</p>
+
+<p>If that sounds like too much work, don’t do it. Plenty of asynchronous code makes no claim to be cancel safe. Just don’t use <code>abort</code>, <code>timeout</code>, and so on to cancel that code. Don’t leave the code running when you exit the program, either: the Tokio runtime cancels all remaining asynchronous tasks when it shuts down.</p>
+
+<p>As with panic safety, enforcing cancel safety is beyond what Rust’s type system can do for you. We therefore resort to documentation. Many asynchronous methods in Tokio have documentation with an explicit “Cancel safety” section. For example, <code>AsyncReadExt::read</code> promises not to consume any bytes in case of cancellation. Canceling code with no documented cancel safety guarantees is risky<a contenteditable="false" data-startref="ix_async_cancellation" data-type="indexterm" id="id2433"/>.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Racing futures with tokio::select!"><div class="sect2" id="racing-with-select">
+<h2>Racing futures with tokio::select!</h2>
+
+<p>So far, we’ve seen futures combined in sequence with <code>.await</code> and in parallel with <code>JoinSet</code>. There’s one more common way to combine futures: <em>racing</em><a contenteditable="false" data-primary="futures" data-secondary="racing" data-type="indexterm" id="id2434"/> them. This is not as scary as the name’s association with data races and race conditions might make it sound, but it does capture the same idea: racing futures means running several at once and responding only to the first one that completes. This pattern pops up all over the place. Any operation that can be cancelled by sending a message to a oneshot channel or a timeout is racing two futures against each other, and a server handling incoming connections on different ports or different protocols can be expressed as racing futures from each one.</p>
+
+<p>Despite being a common pattern, writing code that actually drives futures this way by hand is pretty complicated, so Tokio provides a macro to help out, called <code>select!</code><a contenteditable="false" data-primary="select! macro" data-type="indexterm" id="id2435"/>. A <code>select!</code> invocation looks similar to a <code>match</code> statement:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-racing-mirrors">
+<code class="n">tokio</code><code class="p">::</code><code class="n">select</code><code class="o">!</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">response</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reqwest</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="s">"http://ftp.se.debian.org/debian/ls-lR.gz"</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Sweden was faster. (Status {})"</code><code class="p">,</code><code class="w"> </code><code class="n">response</code><code class="o">?</code><code class="p">.</code><code class="n">status</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">response</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">reqwest</code><code class="p">::</code><code class="n">get</code><code class="p">(</code><code class="s">"http://ftp.ca.debian.org/debian/ls-lR.gz"</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Canada was faster. (Status {})"</code><code class="p">,</code><code class="w"> </code><code class="n">response</code><code class="o">?</code><code class="p">.</code><code class="n">status</code><code class="p">());</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>Each arm of the <code>select!</code> consists of a variable name (<code>response</code>), a future, and then some code. All of the futures are polled until one of them completes; then, the code associated with that future is run, with the future’s output bound to the provided name. The other futures are simply dropped, and thus cancelled.</p>
+
+<p>The futures in each arm of a <code>select!</code> invocation can have different <code>Output</code> types. This makes it possible to wait on all kinds of things at the same time. For instance, an asynchronous <code>timeout</code> function could be implemented like this:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-timeout-impl">
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">timeout</code><code class="o">&lt;</code><code class="n">T</code><code class="p">,</code><code class="w"> </code><code class="n">F</code><code class="o">&gt;</code><code class="p">(</code><code class="n">future</code><code class="p">:</code><code class="w"> </code><code class="nc">F</code><code class="p">,</code><code class="w"> </code><code class="n">t</code><code class="p">:</code><code class="w"> </code><code class="nc">Duration</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nb">Option</code><code class="o">&lt;</code><code class="n">T</code><code class="o">&gt;</code><code class="w"/>
+<code class="k">where</code><code class="w"/>
+<code class="w">    </code><code class="n">F</code><code class="p">:</code><code class="w"> </code><code class="nc">Future</code><code class="o">&lt;</code><code class="n">Output</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">T</code><code class="o">&gt;</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="nb">Send</code><code class="w"> </code><code class="o">+</code><code class="w"> </code><code class="o">'</code><code class="nb">static</code><code class="p">,</code><code class="w"/>
+<code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">tokio</code><code class="p">::</code><code class="n">select</code><code class="o">!</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">time</code><code class="p">::</code><code class="n">sleep</code><code class="p">(</code><code class="n">t</code><code class="p">)</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">None</code><code class="p">,</code><code class="w"/>
+<code class="w">        </code><code class="n">value</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">future</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="nb">Some</code><code class="p">(</code><code class="n">value</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>If the sleep duration elapses before the provided future completes, the function returns <code>None</code>, and the future the user passed in is cancelled.</p>
+
+<p>Racing futures can be useful at a higher level, too. Many servers are essentially a single loop that spawns a task to deal each request and then goes back to listening for incoming connections. As long as all the futures involved are cancel-safe, <code>select!</code> makes this pattern simple to write:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-select-server-loop">
+<code class="k">use</code><code class="w"> </code><code class="n">std</code><code class="p">::</code><code class="n">io</code><code class="p">;</code><code class="w"/>
+
+<code class="k">use</code><code class="w"> </code><code class="n">futures</code><code class="p">::</code><code class="n">channel</code><code class="p">::</code><code class="n">oneshot</code><code class="p">;</code><code class="w"/>
+<code class="k">use</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">net</code><code class="p">::{</code><code class="n">TcpListener</code><code class="p">,</code><code class="w"> </code><code class="n">TcpStream</code><code class="p">,</code><code class="w"> </code><code class="n">UnixListener</code><code class="p">,</code><code class="w"> </code><code class="n">UnixStream</code><code class="p">};</code><code class="w"/>
+
+<code class="k">async</code><code class="w"> </code><code class="k">fn</code><code class="w"> </code><code class="nf">serve</code><code class="p">(</code><code class="k">mut</code><code class="w"> </code><code class="n">shutdown</code><code class="p">:</code><code class="w"> </code><code class="nc">oneshot</code><code class="p">::</code><code class="n">Receiver</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="p">)</code><code class="w"> </code><code class="p">-&gt;</code><code class="w"> </code><code class="nc">io</code><code class="p">::</code><code class="nb">Result</code><code class="o">&lt;</code><code class="p">()</code><code class="o">&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">tcp_listener</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">TcpListener</code><code class="p">::</code><code class="n">bind</code><code class="p">(</code><code class="s">"127.0.0.1:9889"</code><code class="p">).</code><code class="k">await</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">unix_listener</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">UnixListener</code><code class="p">::</code><code class="n">bind</code><code class="p">(</code><code class="s">"/tmp/mysocket.sock"</code><code class="p">)</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">    </code><code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="n">tokio</code><code class="p">::</code><code class="n">select</code><code class="o">!</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="n">tcp_result</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">tcp_listener</code><code class="p">.</code><code class="n">accept</code><code class="p">()</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">stream</code><code class="p">,</code><code class="w"> </code><code class="n">addr</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">tcp_result</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">                </code><code class="fm">println!</code><code class="p">(</code><code class="s">"TCP connection from {addr:?}"</code><code class="p">);</code><code class="w"/>
+<code class="w">                </code><code class="n">tokio</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="n">handle_tcp</code><code class="p">(</code><code class="n">stream</code><code class="p">));</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">            </code><code class="n">unix_result</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">unix_listener</code><code class="p">.</code><code class="n">accept</code><code class="p">()</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="kd">let</code><code class="w"> </code><code class="p">(</code><code class="n">stream</code><code class="p">,</code><code class="w"> </code><code class="n">addr</code><code class="p">)</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">unix_result</code><code class="o">?</code><code class="p">;</code><code class="w"/>
+<code class="w">                </code><code class="fm">println!</code><code class="p">(</code><code class="s">"Unix domain socket connection from {addr:?}"</code><code class="p">);</code><code class="w"/>
+<code class="w">                </code><code class="n">tokio</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="n">handle_unix</code><code class="p">(</code><code class="n">stream</code><code class="p">));</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">            </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="o">&amp;</code><code class="k">mut</code><code class="w"> </code><code class="n">shutdown</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">                </code><code class="k">break</code><code class="p">;</code><code class="w"/>
+<code class="w">            </code><code class="p">}</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="n">handle_shutdown</code><code class="p">().</code><code class="k">await</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+
+<p>When the <code>select!</code> is reached, the <code>accept()</code> futures from each listener and the shutdown future are all run concurrently. <code>select!</code> picks which branch to poll first at random, to prevent a branch with a future that often completes immediately from hogging the available CPU time.</p>
+
+<p>If one of the listeners receives a new connection, the other’s future is cancelled. The winning branch spawns a new task to handle the incoming connection, and the loop starts over, calling <code>accept()</code> again to produce a new future for each listener. The shutdown channel, on the other hand, is passed to <code>select!</code> by mutable reference. The reference is dropped at the end of the loop, but the shutdown receiver itself is still available to be awaited again in the next iteration.</p>
+
+<p>Each of the futures used in this <code>select!</code> loop explicitly documents its cancel safety. Without a guarantee that each one is designed with cancellation in mind, messages could be lost when the other branches’ futures are dropped. This is a classic mistake in asynchronous code that is very likely to lead to frustrating and difficult to diagnose problems.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Shutdown"><div class="sect1" id="shutdown">
+<h1>Shutdown</h1>
+
+<p>To close out this chapter, a few words on the subject of winding things down.</p>
+
+<p>In general, programs that use threads should shut them down before exiting. Otherwise, when the program exits, every thread is instantly terminated, likely leaving some work half-finished.</p>
+
+<p>The same goes for asynchronous programs. We won’t fully describe Tokio shutdown here, but Tokio does cancel all tasks when you drop a <code>tokio::Runtime</code> or return from a <code>main</code> function marked <code>#[tokio::main]</code>. It drops those futures in an unspecified order. If a task tries to spawn more tasks while Tokio is trying to shut down, it panics. If any blocking tasks don’t finish promptly, Tokio leaves them running. So there are plenty of things that could go somewhat wrong if you don’t shut down all tasks before exiting.</p>
+
+<p>Calling <code>tokio::spawn</code> and ignoring the <code>JoinHandle</code> makes correct shutdown difficult. It’s better to use <code>tokio::task::JoinSet</code> and call <code>.join_all().await</code> before exiting.</p>
+
+<p>That alone is sufficient for programs like our spider, which has a finite amount of work to do and shuts down only when it’s done. Other programs need to shut down on demand. In the remaining pages of this chapter, we’ll cover a few ways to do this: aborting tasks, shutdown signals, and cancellation tokens.</p>
+
+<section data-type="sect2" data-pdf-bookmark="Aborting Tasks"><div class="sect2" id="aborting-tasks">
+<h2>Aborting Tasks</h2>
+
+<p>The simplest way<a contenteditable="false" data-primary="aborting" data-secondary="async tasks" data-type="indexterm" id="id2436"/> to stop a task is to call the <code>abort</code> method on the handle that <code>spawn</code> returns.</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-abort">
+<code class="kd">let</code><code class="w"> </code><code class="n">handle</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">spawn</code><code class="p">(</code><code class="n">play_fugazi_forever</code><code class="p">());</code><code class="w"/>
+<code class="n">tokio</code><code class="p">::</code><code class="n">time</code><code class="p">::</code><code class="n">sleep</code><code class="p">(</code><code class="n">ONE_HOUR</code><code class="p">).</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="c1">// ...that's enough of that</code>
+<code class="n">handle</code><code class="p">.</code><code class="n">abort</code><code class="p">();</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">result</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">handle</code><code class="p">.</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="fm">assert!</code><code class="p">(</code><code class="n">result</code><code class="p">.</code><code class="n">unwrap_err</code><code class="p">().</code><code class="n">is_cancelled</code><code class="p">());</code><code class="w"/>
+</pre>
+
+<p>When this code calls <code>handle.abort()</code>, Tokio stops the spawned task and drops the future.</p>
+
+<p>There are a few caveats to keep in mind:</p>
+
+<ul>
+	<li>
+	<p>Consider the cancel safety of the code being aborted. If <code>play_fugazi_forever()</code> is implemented via an audio library with <code>drop</code> methods that stop playback and leave the system in a reasonable state, this will behave as desired. Otherwise, you may be left listening to post-hardcore punk rock for some time.</p>
+	</li>
+	<li>
+	<p>If the task is running on another CPU at the moment you abort it, Tokio will let it run until it yields before dropping it. This means the task may still be running when <code>abort()</code> returns! To ensure the task has been fully cleaned up, we use <code>handle.await</code> on the next line.</p>
+	</li>
+	<li>
+	<p>Aborting a task does not automatically abort any child tasks it spawns. However, when a <code>JoinSet</code> is dropped, any remaining tasks in the set are aborted. If you consistently use local <code>JoinSet</code>s for spawning child tasks, then aborting one task will recursively tear down its descendants as well. However, all the tasks had better be cancel safe, since you’re arranging for them to be automatically cancelled!</p>
+	</li>
+	<li>
+	<p>Blocking tasks<a contenteditable="false" data-primary="blocking tasks" data-type="indexterm" id="id2437"/><a contenteditable="false" data-primary="spawn_blocking" data-type="indexterm" id="id2438"/> created with <code>tokio::task::spawn_blocking</code> are basically threads. They can’t be aborted.</p>
+	</li>
+</ul>
+
+<p>If we need to cancel a blocking task, or we have any task at all that wants to run some code other than <code>drop</code> methods during shutdown, we need another plan.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Shutdown Signals"><div class="sect2" id="shutdown-signals">
+<h2>Shutdown Signals</h2>
+
+<p>Back in <a data-type="xref" href="ch02.html#a-tour-of-rust">Chapter 2</a>, we created an HTTP server using the <code>actix-web</code> crate:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-shutdown-signal-before">
+<code class="kd">let</code><code class="w"> </code><code class="n">server</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">HttpServer</code><code class="p">::</code><code class="n">new</code><code class="p">(</code><code class="o">..</code><code class="p">.);</code><code class="w"/>
+
+<code class="fm">println!</code><code class="p">(</code><code class="s">"Serving on http://localhost:3000..."</code><code class="p">);</code><code class="w"/>
+<code class="n">server</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">bind</code><code class="p">(</code><code class="s">"127.0.0.1:3000"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error binding server to address"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">run</code><code class="p">()</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="k">await</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error running server"</code><code class="p">);</code><code class="w"/>
+</pre>
+
+<p>This server runs forever. The only way to stop it is to kill the process, which we did during development by running it in our terminal and hitting Ctrl+C.</p>
+
+<p>A real web service should shut down gracefully when the operating system tells it to. Actix offers a couple of methods for configuring server shutdown:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-shutdown-signal-after">
+<code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="n">server</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">shutdown_signal</code><code class="p">(</code><code class="n">shutdown_signal</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">shutdown_timeout</code><code class="p">(</code><code class="mi">5</code><code class="p">)</code><code class="w">  </code><code class="c1">// seconds</code>
+<code class="w">    </code><code class="p">.</code><code class="n">bind</code><code class="p">(</code><code class="s">"127.0.0.1:3000"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>The <code>shutdown_signal</code> method specifies that in addition to serving requests, Actix should await the given argument, which must be a future satisfying <code>Future&lt;Output = ()&gt; + Send + 'static</code>. When the shutdown signal resolves, the server begins to shut down. Any requests in flight are allowed to run for a time, specified by <code>shutdown_timeout</code>, so they have a chance to finish normally. Requests that don’t finish in time are aborted. (Methods like <code>shutdown_timeout</code> should take <code>std::time::Duration</code> arguments. Actix’s use of an integer here is a minor API botch.)</p>
+
+<p>For example, if we were to run this service in production, we might want it to react to the <code>SIGTERM</code> signal, the standard way for a Unix system to tell a service to shut down. Tokio provides a Unix-only <code>Signal</code> type that supports this use case:</p>
+
+<pre data-code-language="rust" data-type="programlisting" id="test-async-shutdown-signal-sigterm">
+<code class="k">use</code><code class="w"> </code><code class="n">tokio</code><code class="p">::</code><code class="n">signal</code><code class="p">::</code><code class="n">unix</code><code class="p">::{</code><code class="bp">self</code><code class="p">,</code><code class="w"> </code><code class="n">SignalKind</code><code class="p">};</code><code class="w"/>
+
+<code class="kd">let</code><code class="w"> </code><code class="k">mut</code><code class="w"> </code><code class="n">sigterm</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">unix</code><code class="p">::</code><code class="n">signal</code><code class="p">(</code><code class="n">SignalKind</code><code class="p">::</code><code class="n">terminate</code><code class="p">())</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">expect</code><code class="p">(</code><code class="s">"error installing signal handler"</code><code class="p">);</code><code class="w"/>
+<code class="kd">let</code><code class="w"> </code><code class="n">shutdown_signal</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="k">async</code><code class="w"> </code><code class="k">move</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="c1">// Wait for the first SIGTERM to be delivered.</code>
+<code class="w">    </code><code class="kd">let</code><code class="w"> </code><code class="n">_</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">sigterm</code><code class="p">.</code><code class="n">recv</code><code class="p">().</code><code class="k">await</code><code class="p">;</code><code class="w"/>
+<code class="p">};</code><code class="w"/>
+
+<code class="fm">println!</code><code class="p">(</code><code class="s">"Serving on http://localhost:3000..."</code><code class="p">);</code><code class="w"/>
+<code class="n">server</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">shutdown_signal</code><code class="p">(</code><code class="n">shutdown_signal</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">shutdown_timeout</code><code class="p">(</code><code class="mi">5</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="p">.</code><code class="n">bind</code><code class="p">(</code><code class="s">"127.0.0.1:3000"</code><code class="p">)</code><code class="w"/>
+<code class="w">    </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+</pre>
+
+<p>Shutdown signals don’t necessarily have anything to do with Unix signals, though. Any future that waits for the desired shutdown-triggering event will do.</p>
+
+<p>Other Rust server implementations, such as Axum and Tonic, also provide APIs that follow this pattern. It’s sometimes called “graceful shutdown”.</p>
+</div></section>
+
+<section data-type="sect2" data-pdf-bookmark="Cancellation tokens"><div class="sect2" id="cancellation-tokens">
+<h2>Cancellation tokens</h2>
+
+<p>Now we have dispensed with all the easy shutdown cases. Cancellation tokens are for the more complicated ones.</p>
+
+<p>In <a data-type="xref" href="ch19.html#atomics">“Atomics”</a>, we showed how an <code>Arc&lt;AtomicBool&gt;</code> can be used to request cancellation across threads. Any thread can set the shared boolean value to true, and other threads can periodically check the value and exit if it’s set. The <code>CancellationToken</code> type, supplied by <code>tokio-util</code> crate, is the deluxe version of <code>Arc&lt;AtomicBool&gt;</code>, with extra features for cancelling all kinds of code.</p>
+
+<p>A cancellation token is like a boolean variable: it either is or isn’t cancelled. <code>CancellationToken::new()</code> creates a new token. Cloning a <code>CancellationToken</code>, like cloning an <code>Arc&lt;AtomicBool&gt;</code>, creates another reference to the same boolean. Anyone holding one clone of a token can mark them all as cancelled by calling <code>token.cancel()</code>. This doesn’t invasively stop any code from running; the idea is that you’ll pass clones of a cancellation token to all your code that needs to shut down on demand. Different kinds of code will use the token to implement shutdown in different ways:</p>
+
+<ul>
+	<li>
+	<p>Blocking or CPU-intensive code can periodically call <code>token.is_cancelled()</code> and exit when it returns true.</p>
+	</li>
+	<li>
+	<p>A cancel-safe future <code>f</code> can be run using <code>token.run_until_cancelled(f).await</code>, which returns an <code>Option</code>. If the token is cancelled before the future completes, it returns <code>None</code>.</p>
+	</li>
+	<li>
+	<p>Code that needs a shutdown signal can use <code>token.cancelled_owned()</code>. This returns a future that resolves to <code>()</code> when the token is cancelled.</p>
+	</li>
+	<li>
+	<p>Other asynchronous code can wait for cancellation by calling <code>token.cancelled().await</code>. A task might use <code>select!</code> in its main loop to wait for a cancellation as one of several possible events:</p>
+
+	<pre data-code-language="rust" data-type="programlisting" id="test-async-cancellation-token-select">
+<code class="k">loop</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">    </code><code class="n">tokio</code><code class="p">::</code><code class="n">select</code><code class="o">!</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">        </code><code class="c1">// handle other events...</code>
+<code class="w">        </code><code class="n">tcp_result</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">tcp_listener</code><code class="p">.</code><code class="n">accept</code><code class="p">()</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+<code class="w">        </code><code class="n">unix_result</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">unix_listener</code><code class="p">.</code><code class="n">accept</code><code class="p">()</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="o">..</code><code class="p">.</code><code class="w"/>
+
+<code class="w">        </code><code class="c1">// handle cancellation</code>
+<code class="w">        </code><code class="p">()</code><code class="w"> </code><code class="o">=</code><code class="w"> </code><code class="n">token</code><code class="p">.</code><code class="n">cancelled</code><code class="p">()</code><code class="w"> </code><code class="o">=&gt;</code><code class="w"> </code><code class="p">{</code><code class="w"/>
+<code class="w">            </code><code class="fm">eprintln!</code><code class="p">(</code><code class="s">"canceled, exiting"</code><code class="p">);</code><code class="w"/>
+<code class="w">            </code><code class="k">break</code><code class="p">;</code><code class="w"/>
+<code class="w">        </code><code class="p">}</code><code class="w"/>
+<code class="w">    </code><code class="p">}</code><code class="w"/>
+<code class="p">}</code><code class="w"/>
+</pre>
+	</li>
+</ul>
+
+<p>In addition, <code>CancellationToken</code> supports a hierarchy of “child tokens” to represent a hierarchy of chunks of work to be cancelled. The variety of features here makes cancellation tokens especially useful for adding cancellation to an existing codebase that already has a lot going on.</p>
+</div></section>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Conclusion"><div class="sect1" id="conclusion">
+<h1>Conclusion</h1>
+
+<p>Asynchronous code is ubiquitous in the Rust ecosystem; it’s pretty much the way Rustaceans write servers or I/O-heavy code of any kind. To that end, we’ve built this chapter around Rust’s asynchronous language features, the crates that work with them, and the tricks of the trade to make it all work. We’ve left the matter of how any of this is actually implemented completely untouched. In the next chapter, we’ll look under the hood and see how asynchronous Rust actually works.</p>
+</div></section>
+<div data-type="footnotes"><p data-type="footnote" id="id2424"><sup><a href="ch20.html#id2424-marker">1</a></sup> Oddly, we don’t need to change <code>reluctant</code>’s type signature. Auto traits, including <code>Send</code> and <code>Sync</code>, are inferred for all abstract return types, such as <code>-&gt; impl Future&lt;Output = String&gt;</code>. An <code>async fn</code> is shorthand for that. So we need only fix the code inside <code>reluctant</code>, and Rust will know that <code>reluctant()</code> is now <code>Send</code>. This rule sits awkwardly with the rest of the language, since it means a function’s type signature does not fully describe the types it produces. You can’t tell from an <code>async fn</code>’s documentation whether it produces a <code>Send</code> future or not.</p></div></div>
+      </section>
+    </div>
+  </body>
+</html>

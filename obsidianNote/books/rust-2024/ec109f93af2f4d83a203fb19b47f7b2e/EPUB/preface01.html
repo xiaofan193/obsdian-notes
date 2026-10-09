@@ -1,0 +1,188 @@
+<?xml version='1.0' encoding='utf-8'?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" epub:prefix="z3998: http://www.daisy.org/z3998/2012/vocab/structure/#" lang="en" xml:lang="en">
+  <head>
+    <title>preface01.html</title>
+  </head>
+  <body>
+    <div id="sbo-rt-content">
+      <section data-type="preface" epub:type="preface" data-pdf-bookmark="Preface">
+        <div class="preface" id="preface">
+<h1>Preface</h1>
+
+<p>Rust is a language for systems programming.</p>
+
+<p>This bears some explanation these days, as systems programming is unfamiliar to most working programmers. Yet it underlies everything we do.</p>
+
+<p>You close your laptop. The operating system detects this, suspends all the running programs, turns off the screen, and puts the computer to sleep. Later, you open the laptop: the screen and other components are powered up again, and each program is able to pick up where it left off. We take this for granted. But systems programmers wrote a lot of code to make that happen.</p>
+
+<p>Systems programming<a contenteditable="false" data-primary="systems programming" data-type="indexterm" id="id572"/> is for:</p>
+
+<ul>
+	<li>
+	<p>Operating systems</p>
+	</li>
+	<li>
+	<p>Device drivers of all kinds</p>
+	</li>
+	<li>
+	<p>Filesystems</p>
+	</li>
+	<li>
+	<p>Databases</p>
+	</li>
+	<li>
+	<p>Code that runs in very cheap devices, or devices that must be extremely reliable</p>
+	</li>
+	<li>
+	<p>Cryptography</p>
+	</li>
+	<li>
+	<p>Media codecs (software for reading and writing audio, video, and image files)</p>
+	</li>
+	<li>
+	<p>Media processing (for example, speech recognition or photo editing software)</p>
+	</li>
+	<li>
+	<p>Memory management (for example, implementing a garbage collector)</p>
+	</li>
+	<li>
+	<p>Text rendering (the conversion of text and fonts into pixels)</p>
+	</li>
+	<li>
+	<p>Implementing higher-level programming languages (like JavaScript and Python)</p>
+	</li>
+	<li>
+	<p>Networking</p>
+	</li>
+	<li>
+	<p>Virtualization and software containers</p>
+	</li>
+</ul>
+
+<ul>
+	<li>
+	<p>Scientific simulations</p>
+	</li>
+	<li>
+	<p>Games</p>
+	</li>
+</ul>
+
+<p>In short, systems programming is <em>resource-constrained<a contenteditable="false" data-primary="resource-constrained programming" data-type="indexterm" id="id573"/></em> programming. It is programming when every byte and every CPU cycle counts.</p>
+
+<p>The amount of systems code involved in supporting a basic app is staggering.</p>
+
+<p>This book will not teach you systems programming. In fact, this book covers many details of memory management that might seem unnecessarily abstruse at first, if you haven’t already done some systems programming on your own. But if you are a seasoned systems programmer, you’ll find that Rust is something exceptional: a new tool that eliminates major, well-understood problems that have plagued a whole industry for decades.</p>
+
+<section data-type="sect1" data-pdf-bookmark="Who Should Read This Book"><div class="sect1" id="who-should-read-this-book">
+<h1>Who Should Read This Book</h1>
+
+<p>If you’re already a systems programmer and you’re ready for an alternative to C‍++, this book is for you. If you’re an experienced developer in any programming language, whether that’s C#, Java, Python, JavaScript, or something else, this book is for you too.</p>
+
+<p>However, you don’t just need to learn Rust. To get the most out of the language, you also need to gain some experience with systems programming. We recommend reading this book while also implementing some systems programming side projects in Rust. Build something you’ve never built before, something that takes advantage of Rust’s speed, concurrency, and safety. The list of topics at the beginning of this preface should give you some ideas.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Why We Wrote This Book"><div class="sect1" id="why-we-wrote-this-book">
+<h1>Why We Wrote This Book</h1>
+
+<p>We set out to write the book we wished we had when we started learning Rust. Our goal was to tackle the big, new concepts in Rust up front and head-on, presenting them clearly and in depth so as to minimize learning by trial and error.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Navigating This Book"><div class="sect1" id="navigating-this-book">
+<h1>Navigating This Book</h1>
+
+<p>The first two chapters of this book introduce Rust and provide a brief tour before we move on to the fundamental data types in <a data-type="xref" href="ch03.html#fundamental-types">Chapter 3</a>. Chapters <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch04.html#ownership">4</a> and <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch05.html#references">5</a> address the core concepts of ownership and references. We recommend reading these first five chapters through in order.</p>
+
+<p>Chapters <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch06.html#expressions">6</a> through <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch10.html#enums-and-patterns">10</a> cover the basics of the language: expressions (<a data-type="xref" href="ch06.html#expressions">Chapter 6</a>), error handling (<a data-type="xref" href="ch07.html#error-handling">Chapter 7</a>), crates and modules (<a data-type="xref" href="ch08.html#crates-and-modules">Chapter 8</a>), structs (<a data-type="xref" href="ch09.html#structs">Chapter 9</a>), and enums and patterns (<a data-type="xref" href="ch10.html#enums-and-patterns">Chapter 10</a>). It’s all right to skim a little here, but don’t skip the chapter on error handling. Trust us.</p>
+
+<p><a data-type="xref" href="ch11.html#traits-and-generics">Chapter 11</a> covers traits and generics, the last two big concepts you need to know. Traits are like interfaces in Java or C#. They’re also the main way Rust supports integrating your types into the language itself. <a data-type="xref" href="ch12.html#operator-overloading">Chapter 12</a> shows how traits support operator overloading, and <a data-type="xref" href="ch13.html#utility-traits">Chapter 13</a> covers many more utility traits.</p>
+
+<p>Understanding traits and generics unlocks the rest of the book. Closures and iterators, two key power tools that you won’t want to miss, are covered in Chapters <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch14.html#closures">14</a> and <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch15.html#iterators">15</a>, respectively. You can read the remaining chapters in any order, or just dip into them as needed. They cover the rest of the language: collections (<a data-type="xref" href="ch16.html#collections">Chapter 16</a>), strings and text (<a data-type="xref" href="ch17.html#strings-and-text">Chapter 17</a>), input and output (<a data-type="xref" href="ch18.html#input-and-output">Chapter 18</a>), threads (<a data-type="xref" href="ch19.html#threads">Chapter 19</a>), asynchronous programming (Chapters <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch20.html#asynchronous-programming">20</a> and <a data-type="xref" data-xrefstyle="select:labelnumber" href="ch21.html#futures-chapter">21</a>), macros (<a data-type="xref" href="ch22.html#macros">Chapter 22</a>), unsafe code (<a data-type="xref" href="ch23.html#unsafe-code">Chapter 23</a>), and calling functions in other <span class="keep-together">languages</span> (<a data-type="xref" href="ch24.html#foreign-functions">Chapter 24</a>).</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Conventions Used in This Book"><div class="sect1" id="conventions-used-in-this-book">
+<h1>Conventions Used in This Book</h1>
+
+<p>The following typographical conventions are used in this book:</p>
+
+<dl>
+	<dt><em>Italic</em></dt>
+	<dd>
+	<p>Indicates new terms, URLs, and filenames.</p>
+	</dd>
+	<dt><code>Constant width</code></dt>
+	<dd>
+	<p>Used for program listings, as well as within paragraphs to refer to program elements such as variable or function names, databases, data types, environment variables, statements, and keywords.</p>
+	</dd>
+</dl>
+
+<div data-type="note" epub:type="note"><h6>Note</h6>
+<p>This icon signifies a general note.</p>
+</div>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="Using Code Examples"><div class="sect1" id="using-code-examples">
+<h1>Using Code Examples</h1>
+
+<p>Supplemental material (code examples, exercises, etc.) is available for download at <a class="uri" href="https://github.com/ProgrammingRust"><em>https://github.com/ProgrammingRust</em></a>.</p>
+
+<p>This book is here to help you get your job done. In general, if example code is offered with this book, you may use it in your programs and documentation. You do not need to contact us for permission unless you’re reproducing a significant portion of the code. For example, writing a program that uses several chunks of code from this book does not require permission. Selling or distributing examples from O’Reilly books does require permission. Answering a question by citing this book and quoting example code does not require permission. Incorporating a significant amount of example code from this book into your product’s documentation does require permission.</p>
+
+<p>We appreciate, but do not require, attribution. An attribution usually includes the title, author, publisher, and ISBN. For example: “<em>Programming Rust, Second Edition</em> by Jim Blandy, Jason Orendorff, and Leonora F. S. Tindall (O’Reilly). Copyright 2021 Jim Blandy, Leonora F. S. Tindall, and Jason Orendorff, 978-1-492-05259-3.”</p>
+
+<p>If you feel your use of code examples falls outside fair use or the permission given above, feel free to contact us at <a href="mailto:permissions@oreilly.com"><em>permissions@oreilly.com</em></a>.</p>
+</div></section>
+
+<section data-type="sect1" data-pdf-bookmark="O’Reilly Online Learning"><div class="sect1" id="_safari_books_online">
+<h1>O’Reilly Online Learning</h1>
+
+<div class="ormenabled" data-type="note" epub:type="note"><h6>Note</h6>
+<p>For more than 40 years, <a class="orm:hideurl" href="http://oreilly.com"><em class="hyperlink">O’Reilly Media</em></a> has provided technology and business training, knowledge, and insight to help companies succeed.</p>
+</div>
+
+<p>Our unique network of experts and innovators share their knowledge and expertise through books, articles, conferences, and our online learning platform. O’Reilly’s online learning platform gives you on-demand access to live training courses, in-depth learning paths, interactive coding environments, and a vast collection of text and video from O’Reilly and 200+ other publishers. For more information, please visit <a class="orm:hideurl" href="http://www.oreilly.com"><em>http://oreilly.com</em></a>.</p>
+</div></section>
+
+
+<section data-type="sect1" data-pdf-bookmark="How to Contact Us"><div class="sect1" id="_how_to_contact_us">
+<h1>How to Contact Us</h1>
+<p>Please address comments and questions concerning this book to the publisher:</p>
+<ul class="simplelist">
+  <li>O’Reilly Media, Inc.</li>
+  <li>141 Stony Circle, Suite 195</li>
+  <li>Santa Rosa, CA 95401</li>
+  <li>800-889-8969 (in the United States or Canada)</li>
+  <li>707-827-7019 (international or local)</li>
+  <li>707-829-0104 (fax)</li>
+  <li><a class="email" href="mailto:support@oreilly.com"><em>support@oreilly.com</em></a></li>
+  <li><a href="https://oreilly.com/about/contact.html"><em>https://oreilly.com/about/contact.html</em></a></li>
+</ul>
+
+<p>We have a web page for this book, where we list errata, examples, and any additional information. You can access this page at <a href="https://oreil.ly/programming-rust-2e"><em>https://oreil.ly/programming-rust-2e</em></a>.</p>
+<!--Don't forget to update the link above.-->
+
+<p>For news and information about our books and courses, visit <a href="https://oreilly.com"><em class="hyperlink">https://oreilly.com</em></a>.</p>
+<p>Find us on LinkedIn: <a href="https://linkedin.com/company/oreilly"><em class="hyperlink">https://linkedin.com/company/oreilly</em></a>.</p>
+<p>Watch us on YouTube: <a href="https://youtube.com/oreillymedia"><em class="hyperlink">https://youtube.com/oreillymedia</em></a>.</p>
+</div></section>
+
+
+<section data-type="sect1" data-pdf-bookmark="Acknowledgments"><div class="sect1" id="acknowledgments">
+<h1>Acknowledgments</h1>
+
+<p>The book you are holding has benefited greatly from the attention of our official technical reviewers: Brian Anderson, Matt Brubeck, Nathan Do, J. David Eisenberg, Julian Ellehauge, Michael Glaviano, Aykhan Hagverdili, Ryan Levick, Jack Moffitt, Carol Nichols, and Erik Nordin; and our translators: Hidemoto Nakada (中田 秀基) (Japanese), Mr. Songfeng Li (Simplified Chinese), and Adam Bochenek and Krzysztof Sawka (Polish).</p>
+
+<p>Many other unofficial reviewers read early drafts and provided invaluable feedback. We would like to thank Eddy Bruel, Nick Fitzgerald, Graydon Hoare, Michael Kelly, Jeffrey Lim, Dave Lorenzetti, Jakob Olesen, Gian-Carlo Pascutto, Larry Rabinowitz, Jaroslav Šnajdr, Joe Walker, and Yoshua Wuyts for their thoughtful comments. Jeff Walden and Nicolas Pierron were especially generous with their time, reviewing almost the entire book. Julian Rosse thoroughly reviewed the second edition. Like any programming venture, a programming book thrives on quality bug reports. Thank you.</p>
+
+<p>Mozilla was extremely accommodating of Jim’s and Jason’s work on this project, even though it fell outside their official responsibilities. We are grateful to Jim’s and Jason’s managers: Dave Camp, Naveed <span class="keep-together">Ihsanullah,</span> Tom Tromey, and Joe Walker, for their support. They take a long view of what Mozilla is about; we hope these results justify the faith they placed in us.</p>
+
+<p>We would also like to express our appreciation for everyone at O’Reilly who helped bring this project to fruition, especially our astonishingly patient editors Jeff Bleiel and Brian MacDonald, and our acquisitions editor Brian Guerin.</p>
+
+<p>Most of all, our heartfelt thanks to our families for their unwavering love, enthusiasm, and patience.</p>
+</div></section>
+</div>
+      </section>
+    </div>
+  </body>
+</html>
