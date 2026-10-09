@@ -4,18 +4,18 @@
     "type": "split",
     "children": [
       {
-        "id": "487987cffbeeb155",
+        "id": "236c7c0d74c62767",
         "type": "tabs",
         "children": [
           {
-            "id": "dced16532806936f",
+            "id": "f7456c903697bc01",
             "type": "leaf",
             "state": {
               "type": "markdown",
               "state": {
                 "file": "Agent-驾驭工程之美.md",
                 "mode": "source",
-                "source": false
+                "source": true
               },
               "icon": "lucide-file",
               "title": "Agent-驾驭工程之美"
@@ -188,15 +188,22 @@
       "bases:新建数据库": false
     }
   },
-  "active": "dced16532806936f",
+  "active": "f7456c903697bc01",
   "lastOpenFiles": [
+    "2026-10-09-145700.png",
+    "Agent-驾驭工程之美.md",
+    "未确认 156167.crdownload",
+    "2026-10-09-145400.png",
+    "未确认 713385.crdownload",
+    "2026-10-09-142400.png",
+    "2026-10-09-115028.png",
+    "agent-harness/2026-10-09-142400.png",
+    "agent-harness/未确认 964869.crdownload",
     "04.png.webp",
     "README.md",
     "README.md.tmp.36468.7866f022a82f",
     "Agent-驾驭工程之美.md.tmp.36468.65264c65db8f",
     "Agent-驾驭工程之美.md.tmp.36468.56360057fb2d",
-    "2026-10-09-115028.png",
-    "Agent-驾驭工程之美.md",
     "agent-harness/未确认 346801.crdownload",
     "欢迎.md",
     "agent-harness"
